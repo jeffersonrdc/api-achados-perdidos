@@ -1,0 +1,6 @@
+spring.datasource.url=jdbc:mysql://localhost:3306/achados_perdidos?useSSL=false&serverTimezone=UTC
+spring.datasource.username=root
+spring.datasource.password=
+
+app.jwt.secret=troque-por-uma-chave-com-pelo-menos-32-caracteres
+app.resource-id.secret=troque-por-outro-segredo-com-pelo-menos-32-caracteres
