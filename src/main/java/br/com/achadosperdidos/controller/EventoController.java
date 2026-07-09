@@ -1,7 +1,10 @@
 package br.com.achadosperdidos.controller;
 
 import br.com.achadosperdidos.controller.dto.EventoCreateRequest;
+import br.com.achadosperdidos.controller.dto.EventoConfiguracaoResponse;
+import br.com.achadosperdidos.controller.dto.EventoConfiguracaoUpdateRequest;
 import br.com.achadosperdidos.controller.dto.EventoResponse;
+import br.com.achadosperdidos.service.EventoConfiguracaoService;
 import br.com.achadosperdidos.service.EventoService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -18,7 +21,11 @@ import java.util.List;
 @SecurityRequirement(name = "bearerAuth")
 public class EventoController {
     private final EventoService eventoService;
-    public EventoController(EventoService eventoService) { this.eventoService = eventoService; }
+    private final EventoConfiguracaoService eventoConfiguracaoService;
+    public EventoController(EventoService eventoService, EventoConfiguracaoService eventoConfiguracaoService) {
+        this.eventoService = eventoService;
+        this.eventoConfiguracaoService = eventoConfiguracaoService;
+    }
 
     @PostMapping @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<EventoResponse> create(@Valid @RequestBody EventoCreateRequest request) {
@@ -32,4 +39,14 @@ public class EventoController {
     public EventoResponse findById(@PathVariable String id) { return eventoService.findById(id); }
     @DeleteMapping("/{id}") @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> delete(@PathVariable String id) { eventoService.softDelete(id); return ResponseEntity.noContent().build(); }
+
+    @GetMapping("/{id}/configuracao") @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    public EventoConfiguracaoResponse getConfiguracao(@PathVariable String id) {
+        return eventoConfiguracaoService.findByEvento(id);
+    }
+
+    @PutMapping("/{id}/configuracao") @PreAuthorize("hasAnyRole('ADMIN','OPERADOR')")
+    public EventoConfiguracaoResponse updateConfiguracao(@PathVariable String id, @RequestBody EventoConfiguracaoUpdateRequest request) {
+        return eventoConfiguracaoService.upsert(id, request);
+    }
 }

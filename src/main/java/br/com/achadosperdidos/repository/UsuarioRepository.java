@@ -13,4 +13,6 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
     @EntityGraph(attributePaths = {"perfil", "empresa"})
     Optional<Usuario> findWithPerfilByNmLogin(String nmLogin);
     Optional<Usuario> findByNmEmail(String nmEmail);
+    Optional<Usuario> findByNmLoginAndFgExcluidoFalse(String nmLogin);
+    org.springframework.data.domain.Page<Usuario> findByFgExcluidoFalse(org.springframework.data.domain.Pageable pageable);
 }

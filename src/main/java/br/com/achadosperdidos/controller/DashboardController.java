@@ -1,6 +1,8 @@
 package br.com.achadosperdidos.controller;
 
 import br.com.achadosperdidos.controller.dto.DashboardEventoResponse;
+import br.com.achadosperdidos.controller.dto.DashboardSlaPendenteResponse;
+import br.com.achadosperdidos.controller.dto.DashboardSlaResumoResponse;
 import br.com.achadosperdidos.service.DashboardService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -17,4 +19,10 @@ public class DashboardController {
     public DashboardController(DashboardService dashboardService) { this.dashboardService = dashboardService; }
     @GetMapping("/eventos") @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
     public List<DashboardEventoResponse> resumoEventos() { return dashboardService.listarResumoEventos(); }
+
+    @GetMapping("/sla/pendentes") @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    public List<DashboardSlaPendenteResponse> slaPendentes() { return dashboardService.listarSlaPendentes(); }
+
+    @GetMapping("/sla/resumo") @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    public List<DashboardSlaResumoResponse> slaResumo() { return dashboardService.listarSlaResumo(); }
 }

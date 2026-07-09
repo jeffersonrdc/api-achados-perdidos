@@ -1,5 +1,7 @@
 package br.com.achadosperdidos.config;
 
+import br.com.achadosperdidos.exception.EmailEmUsoException;
+import br.com.achadosperdidos.exception.PortalIndisponivelException;
 import br.com.achadosperdidos.exception.RecursoNaoEncontradoException;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
@@ -76,6 +78,22 @@ public class GlobalExceptionHandler {
         log.debug("Violação de integridade", ex);
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Operação conflita com dados existentes.");
         detail.setTitle("Conflito de dados");
+        return detail;
+    }
+
+    @ExceptionHandler(EmailEmUsoException.class)
+    public ProblemDetail handleEmailEmUso(EmailEmUsoException ex) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        detail.setTitle("Conflito de e-mail");
+        detail.setType(URI.create("https://api.achadosperdidos.com/errors/email-in-use"));
+        return detail;
+    }
+
+    @ExceptionHandler(PortalIndisponivelException.class)
+    public ProblemDetail handlePortalIndisponivel(PortalIndisponivelException ex) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+        detail.setTitle("Portal indisponível");
+        detail.setType(URI.create("https://api.achadosperdidos.com/errors/portal-unavailable"));
         return detail;
     }
 }

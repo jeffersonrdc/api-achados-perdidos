@@ -13,4 +13,7 @@ public interface ClaimRepository extends JpaRepository<Claim, Long> {
     Page<Claim> findByFgExcluidoFalse(Pageable pageable);
     @EntityGraph(attributePaths = {"evento", "categoria", "status"})
     Page<Claim> findByEvento_IdAndFgExcluidoFalse(Long eventoId, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"evento", "categoria", "status"})
+    java.util.List<Claim> findByNmEmailIgnoreCaseAndEvento_IdAndFgExcluidoFalseOrderByDtCadastroDesc(String nmEmail, Long eventoId);
 }

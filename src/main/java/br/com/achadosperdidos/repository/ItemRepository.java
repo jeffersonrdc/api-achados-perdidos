@@ -13,4 +13,7 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
     Page<Item> findByFgExcluidoFalse(Pageable pageable);
     @EntityGraph(attributePaths = {"evento", "categoria", "status"})
     Page<Item> findByEvento_IdAndFgExcluidoFalse(Long eventoId, Pageable pageable);
+    @EntityGraph(attributePaths = {"evento", "categoria", "status"})
+    Page<Item> findByEvento_IdAndFgExcluidoFalseAndFgAtivoTrueAndFgEntregueFalseAndFgDescartadoFalse(
+            Long eventoId, Pageable pageable);
 }
