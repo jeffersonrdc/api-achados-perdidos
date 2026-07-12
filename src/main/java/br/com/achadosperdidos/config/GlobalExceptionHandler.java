@@ -3,6 +3,7 @@ package br.com.achadosperdidos.config;
 import br.com.achadosperdidos.exception.EmailEmUsoException;
 import br.com.achadosperdidos.exception.PortalIndisponivelException;
 import br.com.achadosperdidos.exception.RecursoNaoEncontradoException;
+import br.com.achadosperdidos.exception.TransicaoInvalidaException;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
 import org.slf4j.Logger;
@@ -70,6 +71,14 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleIllegalArgument(IllegalArgumentException ex) {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         detail.setTitle("Requisição inválida");
+        return detail;
+    }
+
+    @ExceptionHandler(TransicaoInvalidaException.class)
+    public ProblemDetail handleTransicaoInvalida(TransicaoInvalidaException ex) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        detail.setTitle("Transição de status inválida");
+        detail.setType(URI.create("https://api.achadosperdidos.com/errors/invalid-transition"));
         return detail;
     }
 

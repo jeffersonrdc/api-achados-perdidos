@@ -11,6 +11,7 @@ public class ItemHistorico {
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "IDR_Item", nullable = false) private Item item;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "IDR_StatusAnterior") private StatusItem statusAnterior;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "IDR_StatusNovo", nullable = false) private StatusItem statusNovo;
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "IDR_Usuario") private Usuario usuario;
     @Column(name = "DS_Historico", columnDefinition = "TEXT") private String dsHistorico;
     @Column(name = "DT_Historico", nullable = false) private LocalDateTime dtHistorico;
     @Column(name = "DT_Cadastro", nullable = false) private LocalDateTime dtCadastro;
@@ -19,6 +20,7 @@ public class ItemHistorico {
     public Item getItem() { return item; } public void setItem(Item v) { this.item = v; }
     public StatusItem getStatusAnterior() { return statusAnterior; } public void setStatusAnterior(StatusItem v) { this.statusAnterior = v; }
     public StatusItem getStatusNovo() { return statusNovo; } public void setStatusNovo(StatusItem v) { this.statusNovo = v; }
+    public Usuario getUsuario() { return usuario; } public void setUsuario(Usuario v) { this.usuario = v; }
     public String getDsHistorico() { return dsHistorico; } public void setDsHistorico(String v) { this.dsHistorico = v; }
     public LocalDateTime getDtHistorico() { return dtHistorico; } public void setDtHistorico(LocalDateTime v) { this.dtHistorico = v; }
     public LocalDateTime getDtCadastro() { return dtCadastro; } public void setDtCadastro(LocalDateTime v) { this.dtCadastro = v; }

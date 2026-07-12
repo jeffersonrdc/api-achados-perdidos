@@ -20,12 +20,15 @@ public class DevolucaoService {
     private final DevolucaoRepository devolucaoRepository;
     private final ItemRepository itemRepository;
     private final ClaimRepository claimRepository;
+    private final WorkflowService workflowService;
     private final SignedResourceIdCodec idCodec;
 
-    public DevolucaoService(DevolucaoRepository devolucaoRepository, ItemRepository itemRepository, ClaimRepository claimRepository, SignedResourceIdCodec idCodec) {
+    public DevolucaoService(DevolucaoRepository devolucaoRepository, ItemRepository itemRepository, ClaimRepository claimRepository,
+                            WorkflowService workflowService, SignedResourceIdCodec idCodec) {
         this.devolucaoRepository = devolucaoRepository;
         this.itemRepository = itemRepository;
         this.claimRepository = claimRepository;
+        this.workflowService = workflowService;
         this.idCodec = idCodec;
     }
 
@@ -53,6 +56,8 @@ public class DevolucaoService {
             item.setFgEntregue(true);
             item.setDtAlteracao(LocalDateTime.now());
             itemRepository.save(item);
+            // Fecha o ciclo: se o status atual permitir, marca o item como Devolvido.
+            workflowService.transitarSePermitido(request.idItem(), "Devolvido", "Devolução concluída ao responsável.");
         }
         return toResponse(devolucaoRepository.save(d));
     }

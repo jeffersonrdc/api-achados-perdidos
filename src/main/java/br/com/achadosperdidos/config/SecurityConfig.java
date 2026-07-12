@@ -81,6 +81,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/claims/validacoes").hasAnyRole("ADMIN", "ATENDENTE")
                         .requestMatchers("/api/v1/contatos", "/api/v1/contatos/**").hasAnyRole("ADMIN", "ATENDENTE", "CONSULTA")
                         .requestMatchers("/api/v1/lacres", "/api/v1/lacres/**").hasAnyRole("ADMIN", "OPERADOR", "ATENDENTE", "CONSULTA")
+                        .requestMatchers("/api/v1/locais", "/api/v1/locais/**").hasAnyRole("ADMIN", "OPERADOR", "ATENDENTE", "CONSULTA")
+                        .requestMatchers("/api/v1/equipes", "/api/v1/equipes/**").hasAnyRole("ADMIN", "OPERADOR", "ATENDENTE", "CONSULTA")
+                        .requestMatchers("/api/v1/triagem", "/api/v1/triagem/**").hasAnyRole("ADMIN", "OPERADOR", "ATENDENTE", "CONSULTA")
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();

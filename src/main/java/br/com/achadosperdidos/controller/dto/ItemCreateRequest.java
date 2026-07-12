@@ -9,6 +9,7 @@ import java.time.LocalTime;
 public record ItemCreateRequest(
         @NotBlank String idEvento,
         @NotBlank String idCategoria,
+        String idSubcategoria,
         String idStatus,
         @NotBlank String nmTitulo,
         String dsItem,
@@ -18,5 +19,7 @@ public record ItemCreateRequest(
         @NotNull LocalDate dtEncontrado,
         LocalTime hrEncontrado,
         String nmLocalEncontrado,
-        BigDecimal vlEstimado
+        BigDecimal vlEstimado,
+        String tpPrioridade,
+        Boolean fgSensivel
 ) {}

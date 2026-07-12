@@ -16,6 +16,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -24,14 +25,19 @@ public class ItemService {
     private final EventoRepository eventoRepository;
     private final CategoriaService categoriaService;
     private final StatusItemService statusItemService;
+    private final WorkflowService workflowService;
     private final SignedResourceIdCodec idCodec;
     private final UsuarioContextService usuarioContextService;
 
+    private static final Set<String> PRIORIDADES = Set.of("ALTA", "MEDIA", "BAIXA");
+
     public ItemService(ItemRepository itemRepository, EventoRepository eventoRepository,
                        CategoriaService categoriaService, StatusItemService statusItemService,
+                       WorkflowService workflowService,
                        SignedResourceIdCodec idCodec, UsuarioContextService usuarioContextService) {
         this.itemRepository = itemRepository; this.eventoRepository = eventoRepository;
         this.categoriaService = categoriaService; this.statusItemService = statusItemService;
+        this.workflowService = workflowService;
         this.idCodec = idCodec; this.usuarioContextService = usuarioContextService;
     }
 
@@ -43,9 +49,12 @@ public class ItemService {
         Item item = new Item();
         item.setEvento(evento);
         item.setCategoria(categoriaService.findEntity(idCodec.decodeCategoriaId(request.idCategoria())));
+        if (request.idSubcategoria() != null && !request.idSubcategoria().isBlank()) {
+            item.setSubcategoria(categoriaService.findEntity(idCodec.decodeCategoriaId(request.idSubcategoria())));
+        }
         item.setStatus(request.idStatus() != null && !request.idStatus().isBlank()
                 ? statusItemService.findEntity(idCodec.decodeStatusId(request.idStatus()))
-                : statusItemService.findByNomeOrDefault(null, "Recebido"));
+                : statusItemService.findByNomeOrDefault(null, "Coletado"));
         item.setCdItem(gerarCodigoItem());
         item.setNmTitulo(request.nmTitulo().trim());
         item.setDsItem(request.dsItem());
@@ -56,10 +65,24 @@ public class ItemService {
         item.setHrEncontrado(request.hrEncontrado());
         item.setNmLocalEncontrado(request.nmLocalEncontrado());
         item.setVlEstimado(request.vlEstimado());
+        item.setTpPrioridade(normalizarPrioridade(request.tpPrioridade()));
+        item.setFgSensivel(Boolean.TRUE.equals(request.fgSensivel()));
         item.setDtCadastro(LocalDateTime.now());
         item.setFgAtivo(true);
         item.setFgExcluido(false);
-        return toResponse(itemRepository.save(item));
+        Item salvo = itemRepository.save(item);
+        // Inicia a linha do tempo de status do item (secao 11 do documento).
+        workflowService.registrarHistorico(salvo, null, salvo.getStatus(), null);
+        return toResponse(salvo);
+    }
+
+    private String normalizarPrioridade(String prioridade) {
+        if (prioridade == null || prioridade.isBlank()) return "MEDIA";
+        String p = prioridade.trim().toUpperCase();
+        if (!PRIORIDADES.contains(p)) {
+            throw new IllegalArgumentException("Prioridade inválida: " + prioridade + ". Use ALTA, MEDIA ou BAIXA.");
+        }
+        return p;
     }
 
     @Transactional(readOnly = true)
@@ -102,7 +125,9 @@ public class ItemService {
         return new ItemResponse(
                 idCodec.encodeItemId(i.getId()), i.getCdItem(), i.getNmTitulo(), i.getDsItem(),
                 i.getNmMarca(), i.getNmModelo(), i.getNmCor(), i.getDtEncontrado(), i.getVlEstimado(),
-                i.getStatus().getNmStatus(), i.getCategoria().getNmCategoria(), i.getEvento().getNmEvento(),
+                i.getStatus().getNmStatus(), i.getCategoria().getNmCategoria(),
+                i.getSubcategoria() != null ? i.getSubcategoria().getNmCategoria() : null,
+                i.getEvento().getNmEvento(), i.getTpPrioridade(), i.getFgSensivel(),
                 i.getFgEntregue(), i.getFgDescartado(), i.getDtCadastro());
     }
 }

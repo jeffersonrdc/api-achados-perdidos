@@ -7,8 +7,15 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
+import java.util.List;
+
 @Repository
 public interface ItemRepository extends JpaRepository<Item, Long> {
+    @EntityGraph(attributePaths = {"evento", "categoria", "status"})
+    List<Item> findByEvento_IdAndStatus_NmStatusInAndFgExcluidoFalseOrderByDtCadastroAsc(
+            Long eventoId, Collection<String> statuses);
+
     @EntityGraph(attributePaths = {"evento", "categoria", "status"})
     Page<Item> findByFgExcluidoFalse(Pageable pageable);
     @EntityGraph(attributePaths = {"evento", "categoria", "status"})

@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 
 public record ItemResponse(
         String id, String cdItem, String nmTitulo, String dsItem, String nmMarca, String nmModelo, String nmCor,
-        LocalDate dtEncontrado, BigDecimal vlEstimado, String nmStatus, String nmCategoria, String nmEvento,
+        LocalDate dtEncontrado, BigDecimal vlEstimado, String nmStatus, String nmCategoria, String nmSubcategoria,
+        String nmEvento, String tpPrioridade, Boolean fgSensivel,
         Boolean fgEntregue, Boolean fgDescartado, LocalDateTime dtCadastro
 ) {}

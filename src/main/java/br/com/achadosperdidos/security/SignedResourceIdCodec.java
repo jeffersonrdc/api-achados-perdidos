@@ -79,6 +79,16 @@ public class SignedResourceIdCodec {
     public long decodeSlaRegraId(String token) { return decode(Kind.SLG, token); }
     public String encodeItemHistoricoId(long id) { return encode(Kind.IHI, id); }
     public long decodeItemHistoricoId(String token) { return decode(Kind.IHI, token); }
+    public String encodeLocalId(long id) { return encode(Kind.LCL, id); }
+    public long decodeLocalId(String token) { return decode(Kind.LCL, token); }
+    public String encodeEquipeId(long id) { return encode(Kind.EQP, id); }
+    public long decodeEquipeId(String token) { return decode(Kind.EQP, token); }
+    public String encodeEquipeUsuarioId(long id) { return encode(Kind.EQM, id); }
+    public long decodeEquipeUsuarioId(String token) { return decode(Kind.EQM, token); }
+    public String encodeTriagemId(long id) { return encode(Kind.TRG, id); }
+    public long decodeTriagemId(String token) { return decode(Kind.TRG, token); }
+    public String encodeEtiquetaId(long id) { return encode(Kind.ETQ, id); }
+    public long decodeEtiquetaId(String token) { return decode(Kind.ETQ, token); }
 
     public long decodeEntidadeId(String tpEntidade, String token) {
         return switch (tpEntidade.trim().toUpperCase()) {
@@ -152,5 +162,5 @@ public class SignedResourceIdCodec {
         }
     }
 
-    public enum Kind { EMP, USR, EVT, CAT, ITM, CLM, DEP, STA, LOC, DEV, CRI, CRR, ARQ, MOV, SLA, CAC, ICC, AUD, CLV, CTO, LCR, SLG, IHI }
+    public enum Kind { EMP, USR, EVT, CAT, ITM, CLM, DEP, STA, LOC, DEV, CRI, CRR, ARQ, MOV, SLA, CAC, ICC, AUD, CLV, CTO, LCR, SLG, IHI, LCL, EQP, EQM, TRG, ETQ }
 }

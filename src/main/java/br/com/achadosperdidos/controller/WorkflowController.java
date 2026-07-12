@@ -3,6 +3,8 @@ package br.com.achadosperdidos.controller;
 import br.com.achadosperdidos.controller.dto.ItemHistoricoResponse;
 import br.com.achadosperdidos.controller.dto.ItemMovimentacaoCreateRequest;
 import br.com.achadosperdidos.controller.dto.ItemMovimentacaoResponse;
+import br.com.achadosperdidos.controller.dto.ItemTransicaoRequest;
+import br.com.achadosperdidos.controller.dto.ItemTransicaoResponse;
 import br.com.achadosperdidos.service.WorkflowService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -42,5 +44,18 @@ public class WorkflowController {
     @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
     public List<ItemHistoricoResponse> historicoStatusItem(@PathVariable String idItem) {
         return workflowService.historicoStatusItem(idItem);
+    }
+
+    @PostMapping("/itens/{idItem}/transicoes")
+    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE')")
+    public ItemTransicaoResponse transitar(@PathVariable String idItem,
+                                           @Valid @RequestBody ItemTransicaoRequest request) {
+        return workflowService.transitar(idItem, request);
+    }
+
+    @GetMapping("/itens/{idItem}/transicoes-permitidas")
+    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    public List<String> transicoesPermitidas(@PathVariable String idItem) {
+        return workflowService.transicoesPermitidas(idItem);
     }
 }
