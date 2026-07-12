@@ -25,13 +25,13 @@ public class ContatoController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN','ATENDENTE')")
+    @PreAuthorize("@authz.pode('contato.gerenciar')")
     public ResponseEntity<ContatoResponse> create(@Valid @RequestBody ContatoCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(contatoService.create(request));
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','ATENDENTE','CONSULTA')")
+    @PreAuthorize("@authz.pode('contato.listar')")
     public List<ContatoResponse> findAll() {
         return contatoService.findAll();
     }

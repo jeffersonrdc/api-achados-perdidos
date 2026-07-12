@@ -25,13 +25,13 @@ public class LocalizacaoController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR')")
+    @PreAuthorize("@authz.pode('localizacao.gerenciar')")
     public ResponseEntity<LocalizacaoResponse> create(@Valid @RequestBody LocalizacaoCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(localizacaoService.create(request));
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @PreAuthorize("@authz.pode('localizacao.listar')")
     public List<LocalizacaoResponse> findByDeposito(@RequestParam String idDeposito) {
         return localizacaoService.findByDeposito(idDeposito);
     }

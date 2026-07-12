@@ -15,8 +15,8 @@ import java.util.List;
 public class CategoriaController {
     private final CategoriaService categoriaService;
     public CategoriaController(CategoriaService categoriaService) { this.categoriaService = categoriaService; }
-    @GetMapping @PreAuthorize("isAuthenticated()")
+    @GetMapping @PreAuthorize("@authz.pode('categoria.listar')")
     public List<CategoriaResponse> findAll() { return categoriaService.findAll(); }
-    @GetMapping("/{id}") @PreAuthorize("isAuthenticated()")
+    @GetMapping("/{id}") @PreAuthorize("@authz.pode('categoria.listar')")
     public CategoriaResponse findById(@PathVariable String id) { return categoriaService.findById(id); }
 }

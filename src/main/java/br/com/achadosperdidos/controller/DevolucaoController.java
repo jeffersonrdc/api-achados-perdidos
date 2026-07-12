@@ -25,13 +25,13 @@ public class DevolucaoController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE')")
+    @PreAuthorize("@authz.pode('devolucao.realizar')")
     public ResponseEntity<DevolucaoResponse> create(@Valid @RequestBody DevolucaoCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(devolucaoService.create(request));
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @PreAuthorize("@authz.pode('devolucao.listar')")
     public List<DevolucaoResponse> findAll() {
         return devolucaoService.findAll();
     }

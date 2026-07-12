@@ -27,25 +27,25 @@ public class EventoController {
         this.eventoConfiguracaoService = eventoConfiguracaoService;
     }
 
-    @PostMapping @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping @PreAuthorize("@authz.pode('evento.criar')")
     public ResponseEntity<EventoResponse> create(@Valid @RequestBody EventoCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(eventoService.create(request));
     }
-    @GetMapping @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @GetMapping @PreAuthorize("@authz.pode('evento.listar')")
     public List<EventoResponse> findAll(@RequestParam(defaultValue = "false") boolean incluirInativos) {
         return eventoService.findAll(incluirInativos);
     }
-    @GetMapping("/{id}") @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @GetMapping("/{id}") @PreAuthorize("@authz.pode('evento.listar')")
     public EventoResponse findById(@PathVariable String id) { return eventoService.findById(id); }
-    @DeleteMapping("/{id}") @PreAuthorize("hasRole('ADMIN')")
+    @DeleteMapping("/{id}") @PreAuthorize("@authz.pode('evento.excluir')")
     public ResponseEntity<Void> delete(@PathVariable String id) { eventoService.softDelete(id); return ResponseEntity.noContent().build(); }
 
-    @GetMapping("/{id}/configuracao") @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @GetMapping("/{id}/configuracao") @PreAuthorize("@authz.pode('evento.listar')")
     public EventoConfiguracaoResponse getConfiguracao(@PathVariable String id) {
         return eventoConfiguracaoService.findByEvento(id);
     }
 
-    @PutMapping("/{id}/configuracao") @PreAuthorize("hasAnyRole('ADMIN','OPERADOR')")
+    @PutMapping("/{id}/configuracao") @PreAuthorize("@authz.pode('configuracao.gerenciar')")
     public EventoConfiguracaoResponse updateConfiguracao(@PathVariable String id, @RequestBody EventoConfiguracaoUpdateRequest request) {
         return eventoConfiguracaoService.upsert(id, request);
     }

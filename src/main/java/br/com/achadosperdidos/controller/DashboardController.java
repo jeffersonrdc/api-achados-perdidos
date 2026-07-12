@@ -17,12 +17,12 @@ import java.util.List;
 public class DashboardController {
     private final DashboardService dashboardService;
     public DashboardController(DashboardService dashboardService) { this.dashboardService = dashboardService; }
-    @GetMapping("/eventos") @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @GetMapping("/eventos") @PreAuthorize("@authz.pode('dashboard.visualizar')")
     public List<DashboardEventoResponse> resumoEventos() { return dashboardService.listarResumoEventos(); }
 
-    @GetMapping("/sla/pendentes") @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @GetMapping("/sla/pendentes") @PreAuthorize("@authz.pode('dashboard.visualizar')")
     public List<DashboardSlaPendenteResponse> slaPendentes() { return dashboardService.listarSlaPendentes(); }
 
-    @GetMapping("/sla/resumo") @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @GetMapping("/sla/resumo") @PreAuthorize("@authz.pode('dashboard.visualizar')")
     public List<DashboardSlaResumoResponse> slaResumo() { return dashboardService.listarSlaResumo(); }
 }

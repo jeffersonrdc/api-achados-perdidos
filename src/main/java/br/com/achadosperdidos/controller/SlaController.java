@@ -31,19 +31,19 @@ public class SlaController {
     }
 
     @GetMapping("/pendentes")
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @PreAuthorize("@authz.pode('sla.listar')")
     public List<SlaRegistroResponse> listarPendentes() {
         return slaService.listarPendentes();
     }
 
     @PostMapping("/regras")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("@authz.pode('sla.gerenciar')")
     public ResponseEntity<SlaRegraResponse> createRegra(@Valid @RequestBody SlaRegraCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(slaService.createRegra(request));
     }
 
     @GetMapping("/regras")
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @PreAuthorize("@authz.pode('sla.listar')")
     public List<SlaRegraResponse> listarRegras(@RequestParam(required = false) String idEvento) {
         return slaService.listarRegras(idEvento);
     }

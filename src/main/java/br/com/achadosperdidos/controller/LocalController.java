@@ -26,31 +26,31 @@ public class LocalController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR')")
+    @PreAuthorize("@authz.pode('local.criar')")
     public ResponseEntity<LocalResponse> create(@Valid @RequestBody LocalCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(localService.create(request));
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @PreAuthorize("@authz.pode('local.listar')")
     public List<LocalResponse> findByEvento(@RequestParam String idEvento) {
         return localService.findByEvento(idEvento);
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @PreAuthorize("@authz.pode('local.listar')")
     public LocalResponse findById(@PathVariable String id) {
         return localService.findById(id);
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR')")
+    @PreAuthorize("@authz.pode('local.editar')")
     public LocalResponse update(@PathVariable String id, @Valid @RequestBody LocalUpdateRequest request) {
         return localService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR')")
+    @PreAuthorize("@authz.pode('local.excluir')")
     public ResponseEntity<Void> delete(@PathVariable String id) {
         localService.softDelete(id);
         return ResponseEntity.noContent().build();

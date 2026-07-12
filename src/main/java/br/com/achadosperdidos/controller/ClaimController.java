@@ -19,18 +19,18 @@ import org.springframework.web.bind.annotation.*;
 public class ClaimController {
     private final ClaimService claimService;
     public ClaimController(ClaimService claimService) { this.claimService = claimService; }
-    @PostMapping @PreAuthorize("hasAnyRole('ADMIN','ATENDENTE')")
+    @PostMapping @PreAuthorize("@authz.pode('claim.criar')")
     public ResponseEntity<ClaimResponse> create(@Valid @RequestBody ClaimCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(claimService.create(request));
     }
-    @GetMapping @PreAuthorize("hasAnyRole('ADMIN','ATENDENTE','CONSULTA')")
+    @GetMapping @PreAuthorize("@authz.pode('claim.listar')")
     public ApiPage<ClaimResponse> findAll(@RequestParam(required = false) Integer page,
                                           @RequestParam(required = false) Integer limit,
                                           @RequestParam(required = false) String idEvento) {
         return claimService.findAll(page, limit, idEvento);
     }
-    @GetMapping("/{id}") @PreAuthorize("hasAnyRole('ADMIN','ATENDENTE','CONSULTA')")
+    @GetMapping("/{id}") @PreAuthorize("@authz.pode('claim.listar')")
     public ClaimResponse findById(@PathVariable String id) { return claimService.findById(id); }
-    @DeleteMapping("/{id}") @PreAuthorize("hasAnyRole('ADMIN','ATENDENTE')")
+    @DeleteMapping("/{id}") @PreAuthorize("@authz.pode('claim.excluir')")
     public ResponseEntity<Void> delete(@PathVariable String id) { claimService.softDelete(id); return ResponseEntity.noContent().build(); }
 }

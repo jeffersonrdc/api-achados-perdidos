@@ -25,13 +25,13 @@ public class ArquivoController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE')")
+    @PreAuthorize("@authz.pode('arquivo.gerenciar')")
     public ResponseEntity<ArquivoResponse> create(@Valid @RequestBody ArquivoCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(arquivoService.create(request));
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @PreAuthorize("@authz.pode('arquivo.listar')")
     public List<ArquivoResponse> findByEntidade(
             @RequestParam String tpEntidade,
             @RequestParam String idEntidade) {

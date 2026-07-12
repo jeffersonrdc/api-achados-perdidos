@@ -23,13 +23,13 @@ public class LacreController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR')")
+    @PreAuthorize("@authz.pode('lacre.gerenciar')")
     public ResponseEntity<LacreResponse> create(@Valid @RequestBody LacreCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(lacreService.create(request));
     }
 
     @GetMapping("/{nrLacre}")
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @PreAuthorize("@authz.pode('lacre.listar')")
     public LacreResponse findByNumero(@PathVariable String nrLacre) {
         return lacreService.findByNumero(nrLacre);
     }

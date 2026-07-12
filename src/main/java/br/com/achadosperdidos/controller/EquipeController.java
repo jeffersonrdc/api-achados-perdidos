@@ -28,45 +28,45 @@ public class EquipeController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR')")
+    @PreAuthorize("@authz.pode('equipe.criar')")
     public ResponseEntity<EquipeResponse> create(@Valid @RequestBody EquipeCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(equipeService.create(request));
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @PreAuthorize("@authz.pode('equipe.listar')")
     public List<EquipeResponse> findByEvento(@RequestParam String idEvento) {
         return equipeService.findByEvento(idEvento);
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @PreAuthorize("@authz.pode('equipe.listar')")
     public EquipeResponse findById(@PathVariable String id) {
         return equipeService.findById(id);
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR')")
+    @PreAuthorize("@authz.pode('equipe.editar')")
     public EquipeResponse update(@PathVariable String id, @Valid @RequestBody EquipeUpdateRequest request) {
         return equipeService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR')")
+    @PreAuthorize("@authz.pode('equipe.excluir')")
     public ResponseEntity<Void> delete(@PathVariable String id) {
         equipeService.softDelete(id);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/membros")
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR')")
+    @PreAuthorize("@authz.pode('equipe.membros')")
     public ResponseEntity<EquipeMembroResponse> adicionarMembro(@PathVariable String id,
                                                                 @Valid @RequestBody EquipeMembroRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(equipeService.adicionarMembro(id, request));
     }
 
     @DeleteMapping("/{id}/membros/{idUsuario}")
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR')")
+    @PreAuthorize("@authz.pode('equipe.membros')")
     public ResponseEntity<Void> removerMembro(@PathVariable String id, @PathVariable String idUsuario) {
         equipeService.removerMembro(id, idUsuario);
         return ResponseEntity.noContent().build();

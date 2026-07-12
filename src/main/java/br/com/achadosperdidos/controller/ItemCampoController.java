@@ -25,13 +25,13 @@ public class ItemCampoController {
     }
 
     @PutMapping
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR')")
+    @PreAuthorize("@authz.pode('item.campos')")
     public ResponseEntity<ItemCampoResponse> upsert(@Valid @RequestBody ItemCampoUpsertRequest request) {
         return ResponseEntity.ok(itemCampoService.upsert(request));
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @PreAuthorize("@authz.pode('item.listar')")
     public List<ItemCampoResponse> findByItem(@RequestParam String idItem) {
         return itemCampoService.findByItem(idItem);
     }

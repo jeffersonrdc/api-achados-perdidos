@@ -27,19 +27,19 @@ public class CriancaController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE')")
+    @PreAuthorize("@authz.pode('crianca.gerenciar')")
     public ResponseEntity<CriancaResponse> create(@Valid @RequestBody CriancaCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(criancaService.create(request));
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @PreAuthorize("@authz.pode('crianca.listar')")
     public List<CriancaResponse> findByEvento(@RequestParam String idEvento) {
         return criancaService.findByEvento(idEvento);
     }
 
     @PostMapping("/{id}/responsaveis")
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE')")
+    @PreAuthorize("@authz.pode('crianca.gerenciar')")
     public ResponseEntity<CriancaResponsavelResponse> addResponsavel(
             @PathVariable String id,
             @Valid @RequestBody CriancaResponsavelCreateRequest request) {
@@ -56,7 +56,7 @@ public class CriancaController {
     }
 
     @GetMapping("/{id}/responsaveis")
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @PreAuthorize("@authz.pode('crianca.listar')")
     public List<CriancaResponsavelResponse> findResponsaveis(@PathVariable String id) {
         return criancaService.findResponsaveis(id);
     }

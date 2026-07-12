@@ -19,18 +19,18 @@ import org.springframework.web.bind.annotation.*;
 public class ItemController {
     private final ItemService itemService;
     public ItemController(ItemService itemService) { this.itemService = itemService; }
-    @PostMapping @PreAuthorize("hasAnyRole('ADMIN','OPERADOR')")
+    @PostMapping @PreAuthorize("@authz.pode('item.criar')")
     public ResponseEntity<ItemResponse> create(@Valid @RequestBody ItemCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(itemService.create(request));
     }
-    @GetMapping @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @GetMapping @PreAuthorize("@authz.pode('item.listar')")
     public ApiPage<ItemResponse> findAll(@RequestParam(required = false) Integer page,
                                          @RequestParam(required = false) Integer limit,
                                          @RequestParam(required = false) String idEvento) {
         return itemService.findAll(page, limit, idEvento);
     }
-    @GetMapping("/{id}") @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @GetMapping("/{id}") @PreAuthorize("@authz.pode('item.listar')")
     public ItemResponse findById(@PathVariable String id) { return itemService.findById(id); }
-    @DeleteMapping("/{id}") @PreAuthorize("hasAnyRole('ADMIN','OPERADOR')")
+    @DeleteMapping("/{id}") @PreAuthorize("@authz.pode('item.excluir')")
     public ResponseEntity<Void> delete(@PathVariable String id) { itemService.softDelete(id); return ResponseEntity.noContent().build(); }
 }

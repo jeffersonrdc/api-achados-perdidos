@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/auditoria")
 @Tag(name = "Auditoria")
 @SecurityRequirement(name = "bearerAuth")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("@authz.pode('auditoria.consultar')")
 public class AuditoriaController {
     private final AuditoriaService auditoriaService;
 

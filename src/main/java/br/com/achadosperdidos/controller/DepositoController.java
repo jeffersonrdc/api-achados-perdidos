@@ -25,13 +25,13 @@ public class DepositoController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR')")
+    @PreAuthorize("@authz.pode('deposito.gerenciar')")
     public ResponseEntity<DepositoResponse> create(@Valid @RequestBody DepositoCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(depositoService.create(request));
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @PreAuthorize("@authz.pode('deposito.listar')")
     public List<DepositoResponse> findByEvento(@RequestParam String idEvento) {
         return depositoService.findByEvento(idEvento);
     }

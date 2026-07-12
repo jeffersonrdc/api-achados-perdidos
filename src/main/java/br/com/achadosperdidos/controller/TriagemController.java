@@ -25,37 +25,37 @@ public class TriagemController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @PreAuthorize("@authz.pode('triagem.listar')")
     public List<TriagemFilaResponse> fila(@RequestParam String idEvento) {
         return triagemService.fila(idEvento);
     }
 
     @GetMapping("/itens/{idItem}")
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @PreAuthorize("@authz.pode('triagem.listar')")
     public TriagemResponse detalhe(@PathVariable String idItem) {
         return triagemService.detalhe(idItem);
     }
 
     @GetMapping("/itens/{idItem}/sugestao-ia")
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE')")
+    @PreAuthorize("@authz.pode('triagem.listar')")
     public TriagemIaResponse sugestaoIa(@PathVariable String idItem) {
         return triagemService.sugestaoIa(idItem);
     }
 
     @PostMapping("/itens/{idItem}/iniciar")
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR')")
+    @PreAuthorize("@authz.pode('triagem.iniciar')")
     public TriagemResponse iniciar(@PathVariable String idItem) {
         return triagemService.iniciar(idItem);
     }
 
     @PutMapping("/itens/{idItem}")
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR')")
+    @PreAuthorize("@authz.pode('triagem.salvar')")
     public TriagemResponse salvar(@PathVariable String idItem, @Valid @RequestBody TriagemSalvarRequest request) {
         return triagemService.salvar(idItem, request);
     }
 
     @PostMapping("/itens/{idItem}/concluir")
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR')")
+    @PreAuthorize("@authz.pode('triagem.concluir')")
     public TriagemResponse concluir(@PathVariable String idItem, @Valid @RequestBody TriagemSalvarRequest request) {
         return triagemService.concluir(idItem, request);
     }

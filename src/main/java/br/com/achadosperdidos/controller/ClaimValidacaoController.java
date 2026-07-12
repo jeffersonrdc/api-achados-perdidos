@@ -25,13 +25,13 @@ public class ClaimValidacaoController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN','ATENDENTE')")
+    @PreAuthorize("@authz.pode('claim.validar')")
     public ResponseEntity<ClaimValidacaoResponse> create(@Valid @RequestBody ClaimValidacaoCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(claimValidacaoService.create(request));
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','ATENDENTE','CONSULTA')")
+    @PreAuthorize("@authz.pode('claim.listar')")
     public List<ClaimValidacaoResponse> findByClaim(@RequestParam String idClaim) {
         return claimValidacaoService.findByClaim(idClaim);
     }

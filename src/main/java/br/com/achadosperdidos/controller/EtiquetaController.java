@@ -26,20 +26,20 @@ public class EtiquetaController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE')")
+    @PreAuthorize("@authz.pode('etiqueta.visualizar')")
     public EtiquetaConteudoResponse conteudo(@PathVariable String idItem) {
         return etiquetaService.conteudo(idItem);
     }
 
     @PostMapping("/imprimir")
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR')")
+    @PreAuthorize("@authz.pode('etiqueta.imprimir')")
     public ResponseEntity<EtiquetaImpressaoResponse> imprimir(@PathVariable String idItem,
                                                               @Valid @RequestBody EtiquetaImprimirRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(etiquetaService.imprimir(idItem, request));
     }
 
     @GetMapping("/impressoes")
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE')")
+    @PreAuthorize("@authz.pode('etiqueta.visualizar')")
     public List<EtiquetaImpressaoResponse> historico(@PathVariable String idItem) {
         return etiquetaService.historico(idItem);
     }

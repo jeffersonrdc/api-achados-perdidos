@@ -25,13 +25,13 @@ public class CategoriaCampoController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("@authz.pode('categoria.campos')")
     public ResponseEntity<CategoriaCampoResponse> create(@Valid @RequestBody CategoriaCampoCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(categoriaCampoService.create(request));
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','OPERADOR','ATENDENTE','CONSULTA')")
+    @PreAuthorize("@authz.pode('categoria.listar')")
     public List<CategoriaCampoResponse> findByCategoria(@RequestParam String idCategoria) {
         return categoriaCampoService.findByCategoria(idCategoria);
     }
