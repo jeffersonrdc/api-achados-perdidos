@@ -2,6 +2,7 @@ package br.com.achadosperdidos.service;
 
 import br.com.achadosperdidos.controller.dto.EventoCreateRequest;
 import br.com.achadosperdidos.controller.dto.EventoResponse;
+import br.com.achadosperdidos.controller.dto.EventoUpdateRequest;
 import br.com.achadosperdidos.entity.Empresa;
 import br.com.achadosperdidos.entity.Evento;
 import br.com.achadosperdidos.exception.RecursoNaoEncontradoException;
@@ -60,6 +61,22 @@ public class EventoService {
     @Transactional(readOnly = true)
     public EventoResponse findById(String idToken) {
         return toResponse(findEntity(idCodec.decodeEventoId(idToken)));
+    }
+
+    @Transactional
+    public EventoResponse update(String idToken, EventoUpdateRequest request) {
+        Evento evento = findEntity(idCodec.decodeEventoId(idToken));
+        if (request.nmEvento() != null && !request.nmEvento().isBlank()) evento.setNmEvento(request.nmEvento().trim());
+        if (request.dsEvento() != null) evento.setDsEvento(request.dsEvento());
+        if (request.dtInicio() != null) evento.setDtInicio(request.dtInicio());
+        if (request.dtFim() != null) evento.setDtFim(request.dtFim());
+        if (request.nmLocal() != null) evento.setNmLocal(request.nmLocal());
+        if (request.nmCidade() != null) evento.setNmCidade(request.nmCidade());
+        if (request.sgUf() != null) evento.setSgUf(request.sgUf());
+        if (request.qtDiasRetencao() != null) evento.setQtDiasRetencao(request.qtDiasRetencao());
+        if (request.fgAtivo() != null) evento.setFgAtivo(request.fgAtivo());
+        evento.setDtAlteracao(LocalDateTime.now());
+        return toResponse(eventoRepository.save(evento));
     }
 
     @Transactional

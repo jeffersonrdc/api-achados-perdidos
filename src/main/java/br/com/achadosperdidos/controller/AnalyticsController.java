@@ -1,7 +1,10 @@
 package br.com.achadosperdidos.controller;
 
+import br.com.achadosperdidos.controller.dto.EvolucaoPontoResponse;
 import br.com.achadosperdidos.controller.dto.ResumoOperacionalResponse;
 import br.com.achadosperdidos.service.AnalyticsService;
+
+import java.util.List;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -22,5 +25,11 @@ public class AnalyticsController {
     @GetMapping("/eventos/{idEvento}/resumo")
     public ResumoOperacionalResponse resumoOperacional(@PathVariable String idEvento) {
         return analyticsService.resumoOperacional(idEvento);
+    }
+
+    @GetMapping("/eventos/{idEvento}/evolucao")
+    public List<EvolucaoPontoResponse> evolucao(@PathVariable String idEvento,
+                                                @RequestParam(defaultValue = "14") int dias) {
+        return analyticsService.evolucao(idEvento, dias);
     }
 }

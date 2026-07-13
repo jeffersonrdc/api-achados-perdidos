@@ -2,6 +2,7 @@ package br.com.achadosperdidos.controller;
 
 import br.com.achadosperdidos.controller.dto.DevolucaoCreateRequest;
 import br.com.achadosperdidos.controller.dto.DevolucaoResponse;
+import br.com.achadosperdidos.controller.dto.DevolucaoStatusRequest;
 import br.com.achadosperdidos.service.DevolucaoService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -34,5 +35,11 @@ public class DevolucaoController {
     @PreAuthorize("@authz.pode('devolucao.listar')")
     public List<DevolucaoResponse> findAll() {
         return devolucaoService.findAll();
+    }
+
+    @PutMapping("/{id}/status")
+    @PreAuthorize("@authz.pode('devolucao.realizar')")
+    public DevolucaoResponse atualizarStatus(@PathVariable String id, @Valid @RequestBody DevolucaoStatusRequest request) {
+        return devolucaoService.atualizarStatus(id, request);
     }
 }

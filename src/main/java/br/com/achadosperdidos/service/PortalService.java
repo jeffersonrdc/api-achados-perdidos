@@ -28,6 +28,7 @@ public class PortalService {
     private final ClaimRepository claimRepository;
     private final ClaimValidacaoRepository claimValidacaoRepository;
     private final CategoriaService categoriaService;
+    private final LocalService localService;
     private final StatusItemService statusItemService;
     private final CriancaService criancaService;
     private final PerfilRepository perfilRepository;
@@ -42,6 +43,7 @@ public class PortalService {
                          ClaimRepository claimRepository,
                          ClaimValidacaoRepository claimValidacaoRepository,
                          CategoriaService categoriaService,
+                         LocalService localService,
                          StatusItemService statusItemService,
                          CriancaService criancaService,
                          PerfilRepository perfilRepository,
@@ -55,6 +57,7 @@ public class PortalService {
         this.claimRepository = claimRepository;
         this.claimValidacaoRepository = claimValidacaoRepository;
         this.categoriaService = categoriaService;
+        this.localService = localService;
         this.statusItemService = statusItemService;
         this.criancaService = criancaService;
         this.perfilRepository = perfilRepository;
@@ -75,6 +78,20 @@ public class PortalService {
     @Transactional(readOnly = true)
     public PortalEventoResumoResponse detalharEvento(String idEvento) {
         return toEventoResumo(findEvento(idCodec.decodeEventoId(idEvento)));
+    }
+
+    /** Categorias para os formulários públicos (registro de objeto perdido). */
+    @Transactional(readOnly = true)
+    public List<br.com.achadosperdidos.controller.dto.CategoriaResponse> listarCategorias() {
+        return categoriaService.findAll();
+    }
+
+    /** Locais do evento para os selects de localização (slim, público). */
+    @Transactional(readOnly = true)
+    public List<br.com.achadosperdidos.controller.dto.PortalLocalResponse> listarLocais(String idEvento) {
+        return localService.findByEvento(idEvento).stream()
+                .map(l -> new br.com.achadosperdidos.controller.dto.PortalLocalResponse(l.id(), l.nmLocal(), l.tpLocal()))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -309,6 +326,11 @@ public class PortalService {
                 c.getStatus().getNmStatus(),
                 c.getCategoria().getNmCategoria(),
                 c.getEvento().getNmEvento(),
-                c.getDtCadastro());
+                c.getDtCadastro(),
+                c.getNrCpf(),
+                c.getNmEmail(),
+                c.getNrTelefone(),
+                c.getNmLocal(),
+                c.getDsObjeto());
     }
 }

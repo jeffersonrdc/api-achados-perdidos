@@ -95,6 +95,7 @@ public class ClaimService {
     private ClaimResponse toResponse(Claim c) {
         return new ClaimResponse(
                 idCodec.encodeClaimId(c.getId()), c.getNmNome(), c.getNmObjeto(), c.getNmMarca(), c.getNmModelo(), c.getNmCor(),
-                c.getDtPerdeu(), c.getStatus().getNmStatus(), c.getCategoria().getNmCategoria(), c.getEvento().getNmEvento(), c.getDtCadastro());
+                c.getDtPerdeu(), c.getStatus().getNmStatus(), c.getCategoria().getNmCategoria(), c.getEvento().getNmEvento(), c.getDtCadastro(),
+                c.getNrCpf(), c.getNmEmail(), c.getNrTelefone(), c.getNmLocal(), c.getDsObjeto());
     }
 }

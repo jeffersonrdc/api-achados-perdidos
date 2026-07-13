@@ -49,7 +49,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/v1/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/portal/eventos/*/meus-claims").hasRole("PARTICIPANTE")
-                        .requestMatchers(HttpMethod.GET, "/api/v1/portal/eventos", "/api/v1/portal/eventos/*/itens").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/portal/eventos", "/api/v1/portal/eventos/*/itens", "/api/v1/portal/eventos/*/locais", "/api/v1/portal/categorias").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/portal/eventos/*").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/portal/eventos/*/claims", "/api/v1/portal/eventos/*/claims/item",
                                 "/api/v1/portal/eventos/*/criancas", "/api/v1/portal/eventos/*/criancas/responsaveis",

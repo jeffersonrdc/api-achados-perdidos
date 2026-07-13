@@ -29,6 +29,10 @@ public class ItemController {
                                          @RequestParam(required = false) String idEvento) {
         return itemService.findAll(page, limit, idEvento);
     }
+    @GetMapping("/estoque") @PreAuthorize("@authz.pode('item.listar')")
+    public java.util.List<br.com.achadosperdidos.controller.dto.EstoqueItemResponse> estoque(@RequestParam String idEvento) {
+        return itemService.listarEstoque(idEvento);
+    }
     @GetMapping("/{id}") @PreAuthorize("@authz.pode('item.listar')")
     public ItemResponse findById(@PathVariable String id) { return itemService.findById(id); }
     @DeleteMapping("/{id}") @PreAuthorize("@authz.pode('item.excluir')")

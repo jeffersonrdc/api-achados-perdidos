@@ -64,9 +64,17 @@ Perfis → roles Spring: `Administrador` → `ROLE_ADMIN`, `Operador` → `ROLE_
 | Devoluções | `/api/v1/devolucoes` |
 | Crianças | `/api/v1/criancas` |
 | Arquivos | `/api/v1/arquivos` |
-| Workflow | `/api/v1/workflow` |
+| Workflow | `/api/v1/workflow` (transições, movimentações, timeline) |
+| Triagem | `/api/v1/triagem` |
+| Etiqueta | `/api/v1/itens/{id}/etiqueta` (conteúdo, imprimir, impressões) |
+| Locais | `/api/v1/locais` |
+| Equipes | `/api/v1/equipes` (+ `/{id}/membros`) |
 | SLA | `/api/v1/sla` |
-| Usuários | `/api/v1/usuarios` |
+| Usuários | `/api/v1/usuarios` (+ `/{id}/permissoes`, `/permissoes-efetivas`) |
+| Perfis | `/api/v1/perfis` (+ `/{id}/permissoes`) |
+| Permissões | `/api/v1/permissoes` |
+| Relatórios | `/api/v1/relatorios/*` |
+| Analytics | `/api/v1/analytics/eventos/{id}/resumo` |
 | Campos dinâmicos | `/api/v1/categorias/campos`, `/api/v1/itens/campos` |
 | Auditoria | `/api/v1/auditoria` |
 | Validação claims | `/api/v1/claims/validacoes` |
@@ -75,6 +83,12 @@ Perfis → roles Spring: `Administrador` → `ROLE_ADMIN`, `Operador` → `ROLE_
 | Config. evento | `/api/v1/eventos/{id}/configuracao` |
 | Dashboard | `/api/v1/dashboard/eventos`, `/api/v1/dashboard/sla/*` |
 | **Portal participante** | `/api/v1/portal/**` (ver `docs/ARQUITETURA_PORTAL.md`) |
+
+> Detalhes completos da implementação (workflow, triagem, locais/equipes, etiqueta, relatórios/analytics e **permissionamento por módulo+ação**) em **[docs/IMPLEMENTACAO.md](docs/IMPLEMENTACAO.md)**.
+
+### Permissionamento
+
+Segurança por **permissão `modulo.acao`** (ex.: `item.criar`). Perfil agrupa permissões; usuário pode ter extras. Enforcement via `@PreAuthorize("@authz.pode('modulo.acao')")` — `ROLE_ADMIN` tem override. Ver `docs/IMPLEMENTACAO.md` §8.
 
 ## Portal do participante
 

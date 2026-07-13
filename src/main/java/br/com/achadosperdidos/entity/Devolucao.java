@@ -19,6 +19,7 @@ public class Devolucao {
     @Column(name = "DS_Observacao", columnDefinition = "TEXT") private String dsObservacao;
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Assinado", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgAssinado = false;
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Concluido", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgConcluido = false;
+    @Column(name = "TP_Status", nullable = false, length = 30) private String tpStatus = "AGUARDANDO_RETIRADA";
     @Column(name = "DT_Cadastro", nullable = false) private LocalDateTime dtCadastro;
     @Column(name = "DT_Alteracao") private LocalDateTime dtAlteracao;
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Ativo", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgAtivo = true;
@@ -33,6 +34,7 @@ public class Devolucao {
     public String getDsObservacao(){return dsObservacao;} public void setDsObservacao(String dsObservacao){this.dsObservacao=dsObservacao;}
     public Boolean getFgAssinado(){return fgAssinado;} public void setFgAssinado(Boolean fgAssinado){this.fgAssinado=fgAssinado;}
     public Boolean getFgConcluido(){return fgConcluido;} public void setFgConcluido(Boolean fgConcluido){this.fgConcluido=fgConcluido;}
+    public String getTpStatus(){return tpStatus;} public void setTpStatus(String tpStatus){this.tpStatus=tpStatus;}
     public LocalDateTime getDtCadastro(){return dtCadastro;} public void setDtCadastro(LocalDateTime dtCadastro){this.dtCadastro=dtCadastro;}
     public LocalDateTime getDtAlteracao(){return dtAlteracao;} public void setDtAlteracao(LocalDateTime dtAlteracao){this.dtAlteracao=dtAlteracao;}
     public Boolean getFgAtivo(){return fgAtivo;} public void setFgAtivo(Boolean fgAtivo){this.fgAtivo=fgAtivo;}

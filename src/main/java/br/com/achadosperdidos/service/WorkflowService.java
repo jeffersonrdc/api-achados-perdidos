@@ -220,6 +220,34 @@ public class WorkflowService {
                 h.getDtHistorico());
     }
 
+    @Transactional(readOnly = true)
+    public List<br.com.achadosperdidos.controller.dto.MovimentacaoEventoResponse> listarMovimentacoesPorEvento(String idEvento) {
+        return itemMovimentacaoRepository
+                .findByItem_Evento_IdAndFgExcluidoFalseOrderByDtMovimentoDesc(idCodec.decodeEventoId(idEvento))
+                .stream()
+                .map(m -> new br.com.achadosperdidos.controller.dto.MovimentacaoEventoResponse(
+                        idCodec.encodeMovimentacaoId(m.getId()),
+                        idCodec.encodeItemId(m.getItem().getId()),
+                        m.getItem().getCdItem(),
+                        m.getItem().getNmTitulo(),
+                        m.getTpMovimento(),
+                        m.getDsMotivo(),
+                        localizacaoLabel(m.getLocalizacaoOrigem()),
+                        localizacaoLabel(m.getLocalizacaoDestino()),
+                        m.getDtMovimento()))
+                .toList();
+    }
+
+    private String localizacaoLabel(br.com.achadosperdidos.entity.Localizacao loc) {
+        if (loc == null) return null;
+        var partes = new java.util.ArrayList<String>();
+        if (loc.getDeposito() != null) partes.add(loc.getDeposito().getNmDeposito());
+        for (String p : new String[]{loc.getNmSetor(), loc.getNmEstante(), loc.getNmPrateleira(), loc.getNmCaixa(), loc.getNmPosicao()}) {
+            if (p != null && !p.isBlank()) partes.add(p);
+        }
+        return String.join(" · ", partes);
+    }
+
     private ItemMovimentacaoResponse toResponse(ItemMovimentacao m) {
         return new ItemMovimentacaoResponse(
                 idCodec.encodeMovimentacaoId(m.getId()),

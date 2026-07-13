@@ -34,6 +34,16 @@ public class PortalController {
         return portalService.detalharEvento(idEvento);
     }
 
+    @GetMapping("/categorias")
+    public List<CategoriaResponse> listarCategorias() {
+        return portalService.listarCategorias();
+    }
+
+    @GetMapping("/eventos/{idEvento}/locais")
+    public List<PortalLocalResponse> listarLocais(@PathVariable String idEvento) {
+        return portalService.listarLocais(idEvento);
+    }
+
     @GetMapping("/eventos/{idEvento}/itens")
     public ApiPage<PortalItemCatalogoResponse> catalogoItens(
             @PathVariable String idEvento,

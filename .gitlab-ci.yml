@@ -1,0 +1,92 @@
+# GitLab CI/CD — rockinrio/backend
+# Runners: use a tag `deploy` no(s) runner(s) responsáveis pelo build/deploy.
+# Branches: `develop` → ambiente de desenvolvimento | `main` → produção.
+
+default:
+  image:
+    name: docker:24-cli
+    pull_policy: if-not-present
+
+stages:
+  - build
+  - test
+  - deploy
+
+variables:
+  DEPLOY_DIR: "/opt/rockinrio-backend"
+  COMPOSE_PROJECT_NAME: "rockinrio-backend"
+  IMAGE_CI: "rockinrio-backend:ci-${CI_COMMIT_SHORT_SHA}"
+
+.branch_main_develop: &branch_main_develop
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+build:
+  stage: build
+  tags:
+    - deploy
+  <<: *branch_main_develop
+  script:
+    - docker build -t "${IMAGE_CI}" .
+
+test:
+  stage: test
+  tags:
+    - deploy
+  needs:
+    - build
+  <<: *branch_main_develop
+  script:
+    - docker build --target test -t "rockinrio-backend-test:${CI_COMMIT_SHORT_SHA}" .
+
+.deploy_template: &deploy_template
+  stage: deploy
+  before_script:
+    - |
+      if ! command -v rsync >/dev/null 2>&1; then
+        if command -v apk >/dev/null 2>&1; then
+          apk add --no-cache rsync
+        elif command -v apt-get >/dev/null 2>&1; then
+          apt-get update -qq && apt-get install -y -qq rsync
+        else
+          echo "ERRO - rsync não encontrado" && exit 1
+        fi
+      fi
+  script:
+    - echo "Publicando commit ${CI_COMMIT_SHORT_SHA} em ${DEPLOY_DIR}"
+    - mkdir -p "${DEPLOY_DIR}"
+    - rsync -a --delete --no-owner --no-group --exclude .env --exclude .git --exclude target --exclude arquivos --exclude paineladmin --exclude portalpublico ./ "${DEPLOY_DIR}/"
+    - cd "${DEPLOY_DIR}"
+    - test -f .env || (echo "ERRO - crie .env em ${DEPLOY_DIR} antes do primeiro deploy" && exit 1)
+    - docker compose down --remove-orphans --timeout 30 || true
+    - docker rm -f rockinrio-backend 2>/dev/null || true
+    - docker compose up -d --build --remove-orphans --force-recreate
+    - docker compose ps
+    - chmod +x scripts/ci-docker-cleanup.sh
+    - IMAGE_CI="${IMAGE_CI}" sh scripts/ci-docker-cleanup.sh
+
+deploy_development:
+  <<: *deploy_template
+  resource_group: rockinrio-backend-dev
+  tags:
+    - deploy
+  needs:
+    - test
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+  environment:
+    name: development
+    url: https://rockinrio-backend.mastersdevs.com.br/swagger-ui.html
+
+deploy_production:
+  <<: *deploy_template
+  resource_group: rockinrio-backend-prod
+  tags:
+    - deploy
+  needs:
+    - test
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  environment:
+    name: production

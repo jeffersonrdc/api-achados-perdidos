@@ -102,6 +102,32 @@ public class ItemService {
         return toResponse(findEntity(idCodec.decodeItemId(idToken)));
     }
 
+    @Transactional(readOnly = true)
+    public java.util.List<br.com.achadosperdidos.controller.dto.EstoqueItemResponse> listarEstoque(String idEvento) {
+        return itemRepository
+                .findByEvento_IdAndStatus_NmStatusAndFgExcluidoFalseOrderByDtEncontradoDesc(
+                        idCodec.decodeEventoId(idEvento), "Em estoque")
+                .stream().map(this::toEstoqueResponse).toList();
+    }
+
+    private br.com.achadosperdidos.controller.dto.EstoqueItemResponse toEstoqueResponse(Item i) {
+        var loc = i.getLocalizacao();
+        return new br.com.achadosperdidos.controller.dto.EstoqueItemResponse(
+                idCodec.encodeItemId(i.getId()), i.getCdItem(), i.getNmTitulo(),
+                i.getCategoria() != null ? i.getCategoria().getNmCategoria() : null,
+                i.getSubcategoria() != null ? i.getSubcategoria().getNmCategoria() : null,
+                i.getNmMarca(), i.getNmModelo(), i.getNmCor(), i.getTpPrioridade(), i.getFgSensivel(),
+                i.getDtEncontrado(), i.getNmLocalEncontrado(),
+                i.getStatus() != null ? i.getStatus().getNmStatus() : null,
+                loc != null && loc.getDeposito() != null ? loc.getDeposito().getNmDeposito() : null,
+                loc != null ? loc.getNmSetor() : null,
+                loc != null ? loc.getNmCorredor() : null,
+                loc != null ? loc.getNmEstante() : null,
+                loc != null ? loc.getNmPrateleira() : null,
+                loc != null ? loc.getNmCaixa() : null,
+                loc != null ? loc.getNmPosicao() : null);
+    }
+
     @Transactional
     public void softDelete(String idToken) {
         Item item = findEntity(idCodec.decodeItemId(idToken));

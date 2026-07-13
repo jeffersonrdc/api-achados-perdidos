@@ -1,0 +1,25 @@
+.git
+.gitignore
+
+target
+.mvn/wrapper/maven-wrapper.jar
+
+.env
+.env.*
+
+arquivos
+
+# Frontends (não fazem parte da imagem do backend)
+paineladmin
+portalpublico
+
+**/application-local.properties
+**/application-dev.properties
+**/application-prod.properties
+
+.idea
+.vscode
+*.iml
+
+Dockerfile
+docker-compose.yml

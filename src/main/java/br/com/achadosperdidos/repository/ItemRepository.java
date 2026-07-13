@@ -16,6 +16,10 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
     List<Item> findByEvento_IdAndStatus_NmStatusInAndFgExcluidoFalseOrderByDtCadastroAsc(
             Long eventoId, Collection<String> statuses);
 
+    @EntityGraph(attributePaths = {"categoria", "subcategoria", "status", "localizacao", "localizacao.deposito"})
+    List<Item> findByEvento_IdAndStatus_NmStatusAndFgExcluidoFalseOrderByDtEncontradoDesc(
+            Long eventoId, String status);
+
     @EntityGraph(attributePaths = {"evento", "categoria", "status"})
     Page<Item> findByFgExcluidoFalse(Pageable pageable);
     @EntityGraph(attributePaths = {"evento", "categoria", "status"})

@@ -11,4 +11,8 @@ import java.util.List;
 public interface ItemMovimentacaoRepository extends JpaRepository<ItemMovimentacao, Long> {
     @EntityGraph(attributePaths = {"item", "localizacaoOrigem", "localizacaoDestino"})
     List<ItemMovimentacao> findByItem_IdAndFgExcluidoFalseOrderByDtMovimentoDesc(Long itemId);
+
+    @EntityGraph(attributePaths = {"item", "localizacaoOrigem", "localizacaoOrigem.deposito",
+            "localizacaoDestino", "localizacaoDestino.deposito"})
+    List<ItemMovimentacao> findByItem_Evento_IdAndFgExcluidoFalseOrderByDtMovimentoDesc(Long eventoId);
 }

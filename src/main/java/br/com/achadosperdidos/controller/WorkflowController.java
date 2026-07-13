@@ -34,6 +34,13 @@ public class WorkflowController {
         return ResponseEntity.status(HttpStatus.CREATED).body(workflowService.registrarMovimentacao(request));
     }
 
+    @GetMapping("/movimentacoes")
+    @PreAuthorize("@authz.pode('item.listar')")
+    public List<br.com.achadosperdidos.controller.dto.MovimentacaoEventoResponse> movimentacoesPorEvento(
+            @RequestParam String idEvento) {
+        return workflowService.listarMovimentacoesPorEvento(idEvento);
+    }
+
     @GetMapping("/itens/{idItem}/movimentacoes")
     @PreAuthorize("@authz.pode('item.listar')")
     public List<ItemMovimentacaoResponse> historicoItem(@PathVariable String idItem) {

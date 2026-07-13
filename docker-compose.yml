@@ -1,11 +1,21 @@
+name: rockinrio-backend
+
 services:
-  api:
+  backend:
     build: .
+    image: rockinrio-backend:latest
+    container_name: rockinrio-backend
+    restart: unless-stopped
     ports:
-      - "${SERVER_PORT:-8080}:8080"
+      # Nginx → 127.0.0.1:${HOST_PORT} (DEV: 8080; PROD: conferir porta livre na VPS)
+      - "${HOST_PORT:-8080}:8080"
     env_file:
       - .env
     environment:
+      SERVER_PORT: "8080"
       DB_HOST: host.docker.internal
+      APP_ARQUIVOS_DIR: /app/arquivos
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./arquivos:/app/arquivos

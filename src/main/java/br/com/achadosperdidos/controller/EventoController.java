@@ -4,6 +4,7 @@ import br.com.achadosperdidos.controller.dto.EventoCreateRequest;
 import br.com.achadosperdidos.controller.dto.EventoConfiguracaoResponse;
 import br.com.achadosperdidos.controller.dto.EventoConfiguracaoUpdateRequest;
 import br.com.achadosperdidos.controller.dto.EventoResponse;
+import br.com.achadosperdidos.controller.dto.EventoUpdateRequest;
 import br.com.achadosperdidos.service.EventoConfiguracaoService;
 import br.com.achadosperdidos.service.EventoService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -37,6 +38,10 @@ public class EventoController {
     }
     @GetMapping("/{id}") @PreAuthorize("@authz.pode('evento.listar')")
     public EventoResponse findById(@PathVariable String id) { return eventoService.findById(id); }
+    @PutMapping("/{id}") @PreAuthorize("@authz.pode('evento.editar')")
+    public EventoResponse update(@PathVariable String id, @RequestBody EventoUpdateRequest request) {
+        return eventoService.update(id, request);
+    }
     @DeleteMapping("/{id}") @PreAuthorize("@authz.pode('evento.excluir')")
     public ResponseEntity<Void> delete(@PathVariable String id) { eventoService.softDelete(id); return ResponseEntity.noContent().build(); }
 

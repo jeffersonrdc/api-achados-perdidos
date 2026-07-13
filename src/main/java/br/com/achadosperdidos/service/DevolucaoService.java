@@ -2,6 +2,7 @@ package br.com.achadosperdidos.service;
 
 import br.com.achadosperdidos.controller.dto.DevolucaoCreateRequest;
 import br.com.achadosperdidos.controller.dto.DevolucaoResponse;
+import br.com.achadosperdidos.controller.dto.DevolucaoStatusRequest;
 import br.com.achadosperdidos.entity.Devolucao;
 import br.com.achadosperdidos.entity.Item;
 import br.com.achadosperdidos.exception.RecursoNaoEncontradoException;
@@ -48,6 +49,8 @@ public class DevolucaoService {
         d.setDsObservacao(request.dsObservacao());
         d.setFgAssinado(Boolean.TRUE.equals(request.fgAssinado()));
         d.setFgConcluido(Boolean.TRUE.equals(request.fgConcluido()));
+        d.setTpStatus(Boolean.TRUE.equals(request.fgConcluido()) ? "CONCLUIDO"
+                : Boolean.TRUE.equals(request.fgAssinado()) ? "ASSINADO" : "AGUARDANDO_RETIRADA");
         d.setDtDevolucao(LocalDateTime.now());
         d.setDtCadastro(LocalDateTime.now());
         d.setFgAtivo(true);
@@ -67,11 +70,49 @@ public class DevolucaoService {
         return devolucaoRepository.findByFgExcluidoFalseOrderByDtDevolucaoDesc().stream().map(this::toResponse).toList();
     }
 
+    private static final java.util.Set<String> STATUS = java.util.Set.of(
+            "AGUARDANDO_RETIRADA", "EM_CONFERENCIA", "AGUARDANDO_ASSINATURA", "ASSINADO", "CONCLUIDO");
+
+    /** Avança o status da devolução; ao concluir, marca o item como Devolvido. */
+    @Transactional
+    public DevolucaoResponse atualizarStatus(String idToken, DevolucaoStatusRequest request) {
+        Devolucao d = devolucaoRepository.findById(idCodec.decodeDevolucaoId(idToken))
+                .filter(x -> !Boolean.TRUE.equals(x.getFgExcluido()))
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Devolução não encontrada."));
+        String destino = request.tpStatus().trim().toUpperCase();
+        if (!STATUS.contains(destino)) {
+            throw new IllegalArgumentException("Status de devolução inválido: " + request.tpStatus());
+        }
+        d.setTpStatus(destino);
+        if (request.dsObservacao() != null && !request.dsObservacao().isBlank()) {
+            d.setDsObservacao(request.dsObservacao());
+        }
+        if ("ASSINADO".equals(destino) || "CONCLUIDO".equals(destino)) {
+            d.setFgAssinado(true);
+        }
+        if ("CONCLUIDO".equals(destino)) {
+            d.setFgConcluido(true);
+            Item item = d.getItem();
+            item.setFgEntregue(true);
+            item.setDtAlteracao(LocalDateTime.now());
+            itemRepository.save(item);
+            workflowService.transitarSePermitido(idCodec.encodeItemId(item.getId()), "Devolvido",
+                    "Devolução concluída ao responsável.");
+        }
+        d.setDtAlteracao(LocalDateTime.now());
+        return toResponse(devolucaoRepository.save(d));
+    }
+
     private DevolucaoResponse toResponse(Devolucao d) {
+        Item item = d.getItem();
         return new DevolucaoResponse(
                 idCodec.encodeDevolucaoId(d.getId()),
-                idCodec.encodeItemId(d.getItem().getId()),
+                idCodec.encodeItemId(item.getId()),
                 d.getClaim() != null ? idCodec.encodeClaimId(d.getClaim().getId()) : null,
-                d.getTpDevolucao(), d.getNmRecebedor(), d.getFgAssinado(), d.getFgConcluido(), d.getDtDevolucao());
+                item.getCdItem(),
+                item.getNmTitulo(),
+                item.getCategoria() != null ? item.getCategoria().getNmCategoria() : null,
+                item.getNmLocalEncontrado(),
+                d.getTpDevolucao(), d.getNmRecebedor(), d.getTpStatus(), d.getFgAssinado(), d.getFgConcluido(), d.getDtDevolucao());
     }
 }
