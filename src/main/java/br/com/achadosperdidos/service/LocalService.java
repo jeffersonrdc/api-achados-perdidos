@@ -25,17 +25,21 @@ public class LocalService {
     private final EventoRepository eventoRepository;
     private final UsuarioRepository usuarioRepository;
     private final SignedResourceIdCodec idCodec;
+    private final AuditoriaContextService auditoriaContext;
 
     public LocalService(LocalRepository localRepository, EventoRepository eventoRepository,
-                        UsuarioRepository usuarioRepository, SignedResourceIdCodec idCodec) {
+                        UsuarioRepository usuarioRepository, SignedResourceIdCodec idCodec,
+                        AuditoriaContextService auditoriaContext) {
         this.localRepository = localRepository;
         this.eventoRepository = eventoRepository;
         this.usuarioRepository = usuarioRepository;
         this.idCodec = idCodec;
+        this.auditoriaContext = auditoriaContext;
     }
 
     @Transactional
     public LocalResponse create(LocalCreateRequest request) {
+        auditoriaContext.marcarContexto();
         Evento evento = eventoRepository.findById(idCodec.decodeEventoId(request.idEvento()))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Evento não encontrado."));
         Local l = new Local();
@@ -69,6 +73,7 @@ public class LocalService {
 
     @Transactional
     public LocalResponse update(String id, LocalUpdateRequest request) {
+        auditoriaContext.marcarContexto();
         Local l = findEntity(idCodec.decodeLocalId(id));
         if (request.nmLocal() != null) l.setNmLocal(request.nmLocal().trim());
         if (request.tpLocal() != null) l.setTpLocal(validarTipo(request.tpLocal()));
@@ -88,6 +93,7 @@ public class LocalService {
 
     @Transactional
     public void softDelete(String id) {
+        auditoriaContext.marcarContexto();
         Local l = findEntity(idCodec.decodeLocalId(id));
         l.setFgExcluido(true);
         l.setFgAtivo(false);

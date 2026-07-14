@@ -8,4 +8,7 @@ import java.util.List;
 @Repository
 public interface CategoriaRepository extends JpaRepository<Categoria, Long> {
     List<Categoria> findByFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc();
+    List<Categoria> findByFgExcluidoFalseOrderByOrOrdemAsc();
+    boolean existsByNmCategoriaIgnoreCaseAndFgExcluidoFalse(String nmCategoria);
+    boolean existsByNmCategoriaIgnoreCaseAndIdNotAndFgExcluidoFalse(String nmCategoria, Long id);
 }

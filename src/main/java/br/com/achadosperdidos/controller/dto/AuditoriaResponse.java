@@ -10,6 +10,7 @@ public record AuditoriaResponse(
         String dsAntes,
         String dsDepois,
         String idUsuario,
+        String nmUsuario,
         LocalDateTime dtAuditoria,
         String nrIp
 ) {}

@@ -33,20 +33,24 @@ public class EquipeService {
     private final UsuarioRepository usuarioRepository;
     private final LocalService localService;
     private final SignedResourceIdCodec idCodec;
+    private final AuditoriaContextService auditoriaContext;
 
     public EquipeService(EquipeRepository equipeRepository, EquipeUsuarioRepository equipeUsuarioRepository,
                          EventoRepository eventoRepository, UsuarioRepository usuarioRepository,
-                         LocalService localService, SignedResourceIdCodec idCodec) {
+                         LocalService localService, SignedResourceIdCodec idCodec,
+                         AuditoriaContextService auditoriaContext) {
         this.equipeRepository = equipeRepository;
         this.equipeUsuarioRepository = equipeUsuarioRepository;
         this.eventoRepository = eventoRepository;
         this.usuarioRepository = usuarioRepository;
         this.localService = localService;
         this.idCodec = idCodec;
+        this.auditoriaContext = auditoriaContext;
     }
 
     @Transactional
     public EquipeResponse create(EquipeCreateRequest request) {
+        auditoriaContext.marcarContexto();
         Evento evento = eventoRepository.findById(idCodec.decodeEventoId(request.idEvento()))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Evento não encontrado."));
         Equipe e = new Equipe();
@@ -76,6 +80,7 @@ public class EquipeService {
 
     @Transactional
     public EquipeResponse update(String id, EquipeUpdateRequest request) {
+        auditoriaContext.marcarContexto();
         Equipe e = findEntity(idCodec.decodeEquipeId(id));
         if (request.nmEquipe() != null) e.setNmEquipe(request.nmEquipe().trim());
         if (request.tpEquipe() != null) e.setTpEquipe(validarTipo(request.tpEquipe()));
@@ -91,6 +96,7 @@ public class EquipeService {
 
     @Transactional
     public void softDelete(String id) {
+        auditoriaContext.marcarContexto();
         Equipe e = findEntity(idCodec.decodeEquipeId(id));
         e.setFgExcluido(true);
         e.setFgAtivo(false);
@@ -100,6 +106,7 @@ public class EquipeService {
 
     @Transactional
     public EquipeMembroResponse adicionarMembro(String idEquipe, EquipeMembroRequest request) {
+        auditoriaContext.marcarContexto();
         Equipe equipe = findEntity(idCodec.decodeEquipeId(idEquipe));
         Usuario usuario = usuarioRepository.findById(idCodec.decodeUsuarioId(request.idUsuario()))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Usuário não encontrado."));
@@ -121,6 +128,7 @@ public class EquipeService {
 
     @Transactional
     public void removerMembro(String idEquipe, String idUsuario) {
+        auditoriaContext.marcarContexto();
         Long equipeId = idCodec.decodeEquipeId(idEquipe);
         Long usuarioId = idCodec.decodeUsuarioId(idUsuario);
         EquipeUsuario vinculo = equipeUsuarioRepository

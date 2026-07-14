@@ -26,19 +26,23 @@ public class UsuarioService {
     private final SignedResourceIdCodec idCodec;
     private final PasswordEncoder passwordEncoder;
     private final UsuarioContextService usuarioContextService;
+    private final AuditoriaContextService auditoriaContext;
 
     public UsuarioService(UsuarioRepository usuarioRepository, PerfilRepository perfilRepository,
                           SignedResourceIdCodec idCodec, PasswordEncoder passwordEncoder,
-                          UsuarioContextService usuarioContextService) {
+                          UsuarioContextService usuarioContextService,
+                          AuditoriaContextService auditoriaContext) {
         this.usuarioRepository = usuarioRepository;
         this.perfilRepository = perfilRepository;
         this.idCodec = idCodec;
         this.passwordEncoder = passwordEncoder;
         this.usuarioContextService = usuarioContextService;
+        this.auditoriaContext = auditoriaContext;
     }
 
     @Transactional
     public UsuarioResponse create(UsuarioCreateRequest request) {
+        auditoriaContext.marcarContexto();
         if (usuarioRepository.findByNmEmail(request.nmEmail().trim()).isPresent()) {
             throw new EmailEmUsoException("E-mail já cadastrado.");
         }
@@ -74,6 +78,7 @@ public class UsuarioService {
 
     @Transactional
     public UsuarioResponse update(String id, UsuarioUpdateRequest request) {
+        auditoriaContext.marcarContexto();
         Usuario u = findEntity(idCodec.decodeUsuarioId(id));
         if (request.nmUsuario() != null) u.setNmUsuario(request.nmUsuario().trim());
         if (request.nmEmail() != null && !request.nmEmail().equalsIgnoreCase(u.getNmEmail())) {
@@ -93,6 +98,7 @@ public class UsuarioService {
 
     @Transactional
     public void softDelete(String id) {
+        auditoriaContext.marcarContexto();
         Usuario u = findEntity(idCodec.decodeUsuarioId(id));
         u.setFgExcluido(true);
         u.setFgAtivo(false);
