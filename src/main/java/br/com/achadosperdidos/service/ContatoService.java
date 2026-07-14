@@ -2,7 +2,10 @@ package br.com.achadosperdidos.service;
 
 import br.com.achadosperdidos.controller.dto.ContatoCreateRequest;
 import br.com.achadosperdidos.controller.dto.ContatoResponse;
+import br.com.achadosperdidos.entity.Claim;
 import br.com.achadosperdidos.entity.Contato;
+import br.com.achadosperdidos.entity.Evento;
+import br.com.achadosperdidos.entity.Item;
 import br.com.achadosperdidos.exception.RecursoNaoEncontradoException;
 import br.com.achadosperdidos.repository.ClaimRepository;
 import br.com.achadosperdidos.repository.ContatoRepository;
@@ -35,14 +38,23 @@ public class ContatoService {
             throw new IllegalArgumentException("Informe idItem ou idClaim.");
         }
         Contato c = new Contato();
+        Evento evento = null;
         if (request.idItem() != null && !request.idItem().isBlank()) {
-            c.setItem(itemRepository.findById(idCodec.decodeItemId(request.idItem()))
-                    .orElseThrow(() -> new RecursoNaoEncontradoException("Item não encontrado.")));
+            Item item = itemRepository.findById(idCodec.decodeItemId(request.idItem()))
+                    .orElseThrow(() -> new RecursoNaoEncontradoException("Item não encontrado."));
+            c.setItem(item);
+            evento = item.getEvento();
         }
         if (request.idClaim() != null && !request.idClaim().isBlank()) {
-            c.setClaim(claimRepository.findById(idCodec.decodeClaimId(request.idClaim()))
-                    .orElseThrow(() -> new RecursoNaoEncontradoException("Claim não encontrado.")));
+            Claim claim = claimRepository.findById(idCodec.decodeClaimId(request.idClaim()))
+                    .orElseThrow(() -> new RecursoNaoEncontradoException("Claim não encontrado."));
+            if (evento != null && !claim.getEvento().getId().equals(evento.getId())) {
+                throw new IllegalArgumentException("Item e claim pertencem a eventos diferentes — contato não permitido.");
+            }
+            c.setClaim(claim);
+            if (evento == null) evento = claim.getEvento();
         }
+        c.setEvento(evento);
         c.setTpContato(request.tpContato().trim().toUpperCase());
         c.setNmContato(request.nmContato().trim());
         c.setNrTelefone(request.nrTelefone());

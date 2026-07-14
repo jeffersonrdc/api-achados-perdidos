@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 @Entity @Table(name = "lacre")
 public class Lacre {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) @Column(name = "ID_Lacre") private Long id;
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "IDR_Evento", nullable = false) private Evento evento;
     @Column(name = "NR_Lacre", nullable = false, length = 50) private String nrLacre;
     @Column(name = "NR_CodigoBarra", length = 100) private String nrCodigoBarra;
     @Column(name = "NR_QRCode", length = 200) private String nrQrCode;
@@ -18,6 +19,7 @@ public class Lacre {
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Ativo", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgAtivo = true;
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Excluido", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgExcluido = false;
     public Long getId() { return id; } public void setId(Long id) { this.id = id; }
+    public Evento getEvento() { return evento; } public void setEvento(Evento v) { this.evento = v; }
     public String getNrLacre() { return nrLacre; } public void setNrLacre(String v) { this.nrLacre = v; }
     public String getNrCodigoBarra() { return nrCodigoBarra; } public void setNrCodigoBarra(String v) { this.nrCodigoBarra = v; }
     public String getNrQrCode() { return nrQrCode; } public void setNrQrCode(String v) { this.nrQrCode = v; }

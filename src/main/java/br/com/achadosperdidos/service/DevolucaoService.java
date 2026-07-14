@@ -3,6 +3,7 @@ package br.com.achadosperdidos.service;
 import br.com.achadosperdidos.controller.dto.DevolucaoCreateRequest;
 import br.com.achadosperdidos.controller.dto.DevolucaoResponse;
 import br.com.achadosperdidos.controller.dto.DevolucaoStatusRequest;
+import br.com.achadosperdidos.entity.Claim;
 import br.com.achadosperdidos.entity.Devolucao;
 import br.com.achadosperdidos.entity.Item;
 import br.com.achadosperdidos.exception.RecursoNaoEncontradoException;
@@ -22,26 +23,34 @@ public class DevolucaoService {
     private final ItemRepository itemRepository;
     private final ClaimRepository claimRepository;
     private final WorkflowService workflowService;
+    private final AuditoriaContextService auditoriaContext;
     private final SignedResourceIdCodec idCodec;
 
     public DevolucaoService(DevolucaoRepository devolucaoRepository, ItemRepository itemRepository, ClaimRepository claimRepository,
-                            WorkflowService workflowService, SignedResourceIdCodec idCodec) {
+                            WorkflowService workflowService, AuditoriaContextService auditoriaContext, SignedResourceIdCodec idCodec) {
         this.devolucaoRepository = devolucaoRepository;
         this.itemRepository = itemRepository;
         this.claimRepository = claimRepository;
         this.workflowService = workflowService;
+        this.auditoriaContext = auditoriaContext;
         this.idCodec = idCodec;
     }
 
     @Transactional
     public DevolucaoResponse create(DevolucaoCreateRequest request) {
+        auditoriaContext.marcarContexto();
         Item item = itemRepository.findById(idCodec.decodeItemId(request.idItem()))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Item não encontrado."));
         Devolucao d = new Devolucao();
+        d.setEvento(item.getEvento());
         d.setItem(item);
         if (request.idClaim() != null && !request.idClaim().isBlank()) {
-            d.setClaim(claimRepository.findById(idCodec.decodeClaimId(request.idClaim()))
-                    .orElseThrow(() -> new RecursoNaoEncontradoException("Claim não encontrado.")));
+            Claim claim = claimRepository.findById(idCodec.decodeClaimId(request.idClaim()))
+                    .orElseThrow(() -> new RecursoNaoEncontradoException("Claim não encontrado."));
+            if (!claim.getEvento().getId().equals(item.getEvento().getId())) {
+                throw new IllegalArgumentException("Claim e item pertencem a eventos diferentes — devolução não permitida.");
+            }
+            d.setClaim(claim);
         }
         d.setTpDevolucao(request.tpDevolucao());
         d.setNmRecebedor(request.nmRecebedor());
@@ -76,6 +85,7 @@ public class DevolucaoService {
     /** Avança o status da devolução; ao concluir, marca o item como Devolvido. */
     @Transactional
     public DevolucaoResponse atualizarStatus(String idToken, DevolucaoStatusRequest request) {
+        auditoriaContext.marcarContexto();
         Devolucao d = devolucaoRepository.findById(idCodec.decodeDevolucaoId(idToken))
                 .filter(x -> !Boolean.TRUE.equals(x.getFgExcluido()))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Devolução não encontrada."));

@@ -1,31 +1,45 @@
 package br.com.achadosperdidos.service;
 
+import br.com.achadosperdidos.controller.dto.ColetaFiltrosResponse;
 import br.com.achadosperdidos.controller.dto.ItemTransicaoRequest;
 import br.com.achadosperdidos.controller.dto.TriagemFilaResponse;
 import br.com.achadosperdidos.controller.dto.TriagemIaResponse;
 import br.com.achadosperdidos.controller.dto.TriagemResponse;
+import br.com.achadosperdidos.controller.dto.TriagemResumoResponse;
 import br.com.achadosperdidos.controller.dto.TriagemSalvarRequest;
 import br.com.achadosperdidos.entity.Item;
 import br.com.achadosperdidos.entity.Triagem;
 import br.com.achadosperdidos.exception.RecursoNaoEncontradoException;
+import br.com.achadosperdidos.pagination.ApiPage;
+import br.com.achadosperdidos.pagination.PaginationMeta;
+import br.com.achadosperdidos.pagination.PaginationParams;
 import br.com.achadosperdidos.repository.ItemRepository;
 import br.com.achadosperdidos.repository.TriagemRepository;
 import br.com.achadosperdidos.security.SignedResourceIdCodec;
+import jakarta.persistence.criteria.Predicate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
 public class TriagemService {
     private static final String STATUS_EM_ANDAMENTO = "EM_ANDAMENTO";
     private static final String STATUS_CONCLUIDA = "CONCLUIDA";
-    private static final List<String> STATUS_FILA = List.of("Aguardando triagem", "Em triagem");
+    private static final List<String> STATUS_FILA = List.of("Aguardando triagem", "Em Análise", "Em triagem");
 
     private final TriagemRepository triagemRepository;
     private final ItemRepository itemRepository;
+    private final ItemService itemService;
     private final WorkflowService workflowService;
     private final CategoriaService categoriaService;
     private final LocalizacaoService localizacaoService;
@@ -33,11 +47,12 @@ public class TriagemService {
     private final SignedResourceIdCodec idCodec;
 
     public TriagemService(TriagemRepository triagemRepository, ItemRepository itemRepository,
-                          WorkflowService workflowService, CategoriaService categoriaService,
+                          ItemService itemService, WorkflowService workflowService, CategoriaService categoriaService,
                           LocalizacaoService localizacaoService, UsuarioContextService usuarioContextService,
                           SignedResourceIdCodec idCodec) {
         this.triagemRepository = triagemRepository;
         this.itemRepository = itemRepository;
+        this.itemService = itemService;
         this.workflowService = workflowService;
         this.categoriaService = categoriaService;
         this.localizacaoService = localizacaoService;
@@ -61,6 +76,21 @@ public class TriagemService {
         triagem.setOperador(usuarioLogadoOuNulo());
         triagem.setTpStatus(STATUS_EM_ANDAMENTO);
         triagem.setDtInicio(LocalDateTime.now());
+        return toResponse(triagemRepository.save(triagem));
+    }
+
+    /** Marca o item como "Em Análise" (botão Analisar Item) e abre/atualiza o registro de triagem. */
+    @Transactional
+    public TriagemResponse analisar(String idItem) {
+        Item item = findItem(idItem);
+        // Só transiciona se ainda não estiver em análise (evita erro de transição para o mesmo status).
+        if (!"Em Análise".equalsIgnoreCase(item.getStatus() != null ? item.getStatus().getNmStatus() : "")) {
+            workflowService.transitar(idItem, new ItemTransicaoRequest("Em Análise", "Item em análise na triagem"));
+        }
+        Triagem triagem = getOrCreate(item);
+        triagem.setOperador(usuarioLogadoOuNulo());
+        if (triagem.getDtInicio() == null) triagem.setDtInicio(LocalDateTime.now());
+        triagem.setTpStatus(STATUS_EM_ANDAMENTO);
         return toResponse(triagemRepository.save(triagem));
     }
 
@@ -99,11 +129,85 @@ public class TriagemService {
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Triagem não encontrada para o item."));
     }
 
+    /** Fila de triagem paginada e filtrada (server-side), restrita aos status da fila. */
     @Transactional(readOnly = true)
-    public List<TriagemFilaResponse> fila(String idEvento) {
-        return itemRepository.findByEvento_IdAndStatus_NmStatusInAndFgExcluidoFalseOrderByDtCadastroAsc(
-                        idCodec.decodeEventoId(idEvento), STATUS_FILA)
-                .stream().map(this::toFilaResponse).toList();
+    public ApiPage<TriagemFilaResponse> fila(String idEvento, Integer page, Integer limit,
+                                             String q, String idCategoria, String local,
+                                             String tpPrioridade, String status, String data) {
+        int p = PaginationParams.resolvePage(page);
+        int l = PaginationParams.resolveLimit(limit);
+        Long eventoId = idCodec.decodeEventoId(idEvento);
+        Long categoriaId = (idCategoria != null && !idCategoria.isBlank()) ? idCodec.decodeCategoriaId(idCategoria) : null;
+        LocalDate dataEncontrado = parseData(data);
+
+        Specification<Item> spec = filtros(eventoId, q, categoriaId, local, tpPrioridade, status, dataEncontrado);
+        Page<Item> result = itemRepository.findAll(spec,
+                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.ASC, "dtCadastro")));
+        var content = result.getContent().stream().map(this::toFilaResponse).toList();
+        var meta = new PaginationMeta(p, l, result.getTotalElements(), result.getTotalPages());
+        return ApiPage.paged(content, meta);
+    }
+
+    private Specification<Item> filtros(Long eventoId, String q, Long categoriaId, String local,
+                                        String tpPrioridade, String status, LocalDate data) {
+        return (root, query, cb) -> {
+            List<Predicate> ps = new ArrayList<>();
+            ps.add(cb.isFalse(root.get("fgExcluido")));
+            ps.add(cb.equal(root.get("evento").get("id"), eventoId));
+            // Restringe à fila de triagem (ou ao status específico, se filtrado e válido).
+            if (status != null && !status.isBlank() && STATUS_FILA.contains(status)) {
+                ps.add(cb.equal(root.get("status").get("nmStatus"), status));
+            } else {
+                ps.add(root.get("status").get("nmStatus").in(STATUS_FILA));
+            }
+            if (categoriaId != null) ps.add(cb.equal(root.get("categoria").get("id"), categoriaId));
+            if (local != null && !local.isBlank()) ps.add(cb.equal(root.get("nmLocalEncontrado"), local));
+            if (tpPrioridade != null && !tpPrioridade.isBlank())
+                ps.add(cb.equal(root.get("tpPrioridade"), tpPrioridade.trim().toUpperCase()));
+            if (data != null) ps.add(cb.equal(root.get("dtEncontrado"), data));
+            if (q != null && !q.isBlank()) {
+                String like = "%" + q.trim().toLowerCase() + "%";
+                ps.add(cb.or(
+                        cb.like(cb.lower(root.get("nmTitulo")), like),
+                        cb.like(cb.lower(root.get("cdItem")), like),
+                        cb.like(cb.lower(root.get("nmLocalEncontrado")), like)));
+            }
+            return cb.and(ps.toArray(new Predicate[0]));
+        };
+    }
+
+    private LocalDate parseData(String data) {
+        if (data == null || data.isBlank()) return null;
+        String v = data.trim();
+        try {
+            if (v.contains("/")) return LocalDate.parse(v, DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+            return LocalDate.parse(v);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** KPIs/cards da tela de triagem. */
+    @Transactional(readOnly = true)
+    public TriagemResumoResponse resumo(String idEvento) {
+        Long ev = idCodec.decodeEventoId(idEvento);
+        long aguardando = itemRepository.countByEvento_IdAndFgExcluidoFalseAndStatus_NmStatus(ev, "Aguardando triagem");
+        long emAnalise = itemRepository.countByEvento_IdAndFgExcluidoFalseAndStatus_NmStatus(ev, "Em Análise");
+        long emTriagem = itemRepository.countByEvento_IdAndFgExcluidoFalseAndStatus_NmStatus(ev, "Em triagem");
+        long total = itemRepository.countByEvento_IdAndFgExcluidoFalseAndStatus_NmStatusIn(ev, STATUS_FILA);
+        long sensiveis = itemRepository.countByEvento_IdAndFgExcluidoFalseAndFgSensivelTrueAndStatus_NmStatusIn(ev, STATUS_FILA);
+        long categorias = itemRepository.countCategoriasDistintas(ev, STATUS_FILA);
+        return new TriagemResumoResponse(total, aguardando, emAnalise, emTriagem, sensiveis, categorias);
+    }
+
+    /** Opções para os filtros/selects (reaproveita a árvore de categorias/locais da coleta). */
+    @Transactional(readOnly = true)
+    public ColetaFiltrosResponse filtros(String idEvento) {
+        ColetaFiltrosResponse base = itemService.coletaFiltros(idEvento);
+        List<ColetaFiltrosResponse.Opcao> status = STATUS_FILA.stream()
+                .map(s -> new ColetaFiltrosResponse.Opcao(s, s))
+                .toList();
+        return new ColetaFiltrosResponse(base.categorias(), status, base.locais(), base.prioridades());
     }
 
     /** Sugestao automatica (stub) baseada na categoria/titulo do item. */
@@ -206,14 +310,23 @@ public class TriagemService {
     }
 
     private TriagemFilaResponse toFilaResponse(Item i) {
+        String recebido = i.getUsuarioCadastro() != null ? i.getUsuarioCadastro().getNmUsuario() : i.getNmEncontradoPor();
         return new TriagemFilaResponse(
                 idCodec.encodeItemId(i.getId()),
                 i.getCdItem(),
                 i.getNmTitulo(),
                 i.getCategoria() != null ? i.getCategoria().getNmCategoria() : null,
+                i.getSubcategoria() != null ? i.getSubcategoria().getNmCategoria() : null,
+                i.getNmCor(),
+                i.getNmMarca(),
+                i.getNmModelo(),
+                i.getNmEstado(),
                 i.getStatus() != null ? i.getStatus().getNmStatus() : null,
                 i.getTpPrioridade(),
                 i.getFgSensivel(),
-                i.getDtEncontrado());
+                i.getDtEncontrado(),
+                i.getHrEncontrado(),
+                i.getNmLocalEncontrado(),
+                recebido);
     }
 }

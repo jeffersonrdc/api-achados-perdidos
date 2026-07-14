@@ -28,15 +28,36 @@ public class CategoriaService {
 
     @Transactional(readOnly = true)
     public List<CategoriaResponse> findAll() {
-        return categoriaRepository.findByFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc().stream().map(this::toResponse).toList();
+        return categoriaRepository.findByCategoriaPaiIsNullAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc().stream().map(this::toResponse).toList();
     }
 
+    /** Lista apenas categorias-pai (topo). Subcategorias vêm por {@link #findSubcategorias}. */
     @Transactional(readOnly = true)
     public List<CategoriaResponse> findAll(boolean incluirInativos) {
         var lista = incluirInativos
-                ? categoriaRepository.findByFgExcluidoFalseOrderByOrOrdemAsc()
-                : categoriaRepository.findByFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc();
+                ? categoriaRepository.findByCategoriaPaiIsNullAndFgExcluidoFalseOrderByOrOrdemAsc()
+                : categoriaRepository.findByCategoriaPaiIsNullAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc();
         return lista.stream().map(this::toResponse).toList();
+    }
+
+    /** Subcategorias (filhos) ativas de uma categoria-pai. */
+    @Transactional(readOnly = true)
+    public List<CategoriaResponse> findSubcategorias(String idPaiToken) {
+        Long idPai = idCodec.decodeCategoriaId(idPaiToken);
+        return categoriaRepository.findByCategoriaPai_IdAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc(idPai)
+                .stream().map(this::toResponse).toList();
+    }
+
+    /** Categorias-pai ativas (entidades) para montagem de árvore. */
+    @Transactional(readOnly = true)
+    public List<br.com.achadosperdidos.entity.Categoria> findPaisAtivos() {
+        return categoriaRepository.findByCategoriaPaiIsNullAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc();
+    }
+
+    /** Subcategorias (entidades) ativas de uma categoria-pai por id numérico. */
+    @Transactional(readOnly = true)
+    public List<br.com.achadosperdidos.entity.Categoria> findSubcategoriasEntidades(Long idPai) {
+        return categoriaRepository.findByCategoriaPai_IdAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc(idPai);
     }
 
     @Transactional(readOnly = true)
@@ -98,6 +119,7 @@ public class CategoriaService {
     }
 
     private CategoriaResponse toResponse(Categoria c) {
-        return new CategoriaResponse(idCodec.encodeCategoriaId(c.getId()), c.getNmCategoria(), c.getDsCategoria(), c.getIcIcone(), c.getOrOrdem(), c.getFgAtivo());
+        String idPai = c.getCategoriaPai() != null ? idCodec.encodeCategoriaId(c.getCategoriaPai().getId()) : null;
+        return new CategoriaResponse(idCodec.encodeCategoriaId(c.getId()), c.getNmCategoria(), idPai, c.getDsCategoria(), c.getIcIcone(), c.getOrOrdem(), c.getFgAtivo());
     }
 }

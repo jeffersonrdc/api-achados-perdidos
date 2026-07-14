@@ -22,8 +22,12 @@ public class CategoriaController {
     public CategoriaController(CategoriaService categoriaService) { this.categoriaService = categoriaService; }
 
     @GetMapping @PreAuthorize("@authz.pode('categoria.listar')")
-    public List<CategoriaResponse> findAll(@RequestParam(required = false, defaultValue = "false") boolean incluirInativos) {
-        return categoriaService.findAll(incluirInativos);
+    public List<CategoriaResponse> findAll(@RequestParam(required = false, defaultValue = "false") boolean incluirInativos,
+                                           @RequestParam(required = false) String idPai) {
+        // Com idPai -> subcategorias (filhos). Sem idPai -> apenas categorias-pai (topo).
+        return (idPai != null && !idPai.isBlank())
+                ? categoriaService.findSubcategorias(idPai)
+                : categoriaService.findAll(incluirInativos);
     }
 
     @GetMapping("/{id}") @PreAuthorize("@authz.pode('categoria.listar')")

@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 public class Arquivo {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "ID_Arquivo") private Long id;
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "IDR_Evento", nullable = false) private Evento evento;
     @Column(name = "TP_Entidade", nullable = false, length = 30) private String tpEntidade;
     @Column(name = "ID_Entidade", nullable = false) private Long idEntidade;
     @Column(name = "TP_Arquivo", nullable = false, length = 30) private String tpArquivo;
@@ -23,6 +24,7 @@ public class Arquivo {
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Ativo", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgAtivo = true;
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Excluido", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgExcluido = false;
     public Long getId(){return id;} public void setId(Long id){this.id=id;}
+    public Evento getEvento(){return evento;} public void setEvento(Evento evento){this.evento=evento;}
     public String getTpEntidade(){return tpEntidade;} public void setTpEntidade(String tpEntidade){this.tpEntidade=tpEntidade;}
     public Long getIdEntidade(){return idEntidade;} public void setIdEntidade(Long idEntidade){this.idEntidade=idEntidade;}
     public String getTpArquivo(){return tpArquivo;} public void setTpArquivo(String tpArquivo){this.tpArquivo=tpArquivo;}

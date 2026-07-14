@@ -9,13 +9,13 @@ import java.util.List;
 public class AppCorsProperties {
 
     private boolean enabled = true;
-    private String pathPattern = "/api/**";
+    private String pathPattern = "/**";
     private List<String> allowedOrigins = new ArrayList<>();
     private List<String> allowedOriginPatterns = new ArrayList<>();
     private List<String> allowedMethods = List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS");
-    private List<String> allowedHeaders = List.of("Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With");
+    private List<String> allowedHeaders = List.of("*");
     private List<String> exposedHeaders = new ArrayList<>();
-    private boolean allowCredentials = false;
+    private boolean allowCredentials = true;
     private long maxAgeSeconds = 3600;
 
     public boolean isEnabled() { return enabled; }

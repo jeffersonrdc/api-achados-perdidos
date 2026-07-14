@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 
 public record LacreResponse(
         String id,
+        String idEvento,
         String nrLacre,
         String nrCodigoBarra,
         String nrQrCode,

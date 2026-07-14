@@ -9,6 +9,10 @@ import java.util.List;
 public interface CategoriaRepository extends JpaRepository<Categoria, Long> {
     List<Categoria> findByFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc();
     List<Categoria> findByFgExcluidoFalseOrderByOrOrdemAsc();
+    // ---- Hierarquia pai/filho (coleta de itens) ----
+    List<Categoria> findByCategoriaPaiIsNullAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc();
+    List<Categoria> findByCategoriaPaiIsNullAndFgExcluidoFalseOrderByOrOrdemAsc();
+    List<Categoria> findByCategoriaPai_IdAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc(Long idPai);
     boolean existsByNmCategoriaIgnoreCaseAndFgExcluidoFalse(String nmCategoria);
     boolean existsByNmCategoriaIgnoreCaseAndIdNotAndFgExcluidoFalse(String nmCategoria, Long id);
 }

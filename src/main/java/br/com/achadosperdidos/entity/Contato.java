@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 @Entity @Table(name = "contato")
 public class Contato {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) @Column(name = "ID_Contato") private Long id;
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "IDR_Evento", nullable = false) private Evento evento;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "IDR_Item") private Item item;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "IDR_Claim") private Claim claim;
     @Column(name = "TP_Contato", nullable = false, length = 30) private String tpContato;
@@ -19,6 +20,7 @@ public class Contato {
     @Column(name = "DT_Cadastro", nullable = false) private LocalDateTime dtCadastro;
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Excluido", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgExcluido = false;
     public Long getId() { return id; } public void setId(Long id) { this.id = id; }
+    public Evento getEvento() { return evento; } public void setEvento(Evento v) { this.evento = v; }
     public Item getItem() { return item; } public void setItem(Item v) { this.item = v; }
     public Claim getClaim() { return claim; } public void setClaim(Claim v) { this.claim = v; }
     public String getTpContato() { return tpContato; } public void setTpContato(String v) { this.tpContato = v; }

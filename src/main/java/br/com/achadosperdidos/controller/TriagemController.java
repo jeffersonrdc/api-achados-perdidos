@@ -1,17 +1,18 @@
 package br.com.achadosperdidos.controller;
 
+import br.com.achadosperdidos.controller.dto.ColetaFiltrosResponse;
 import br.com.achadosperdidos.controller.dto.TriagemFilaResponse;
 import br.com.achadosperdidos.controller.dto.TriagemIaResponse;
 import br.com.achadosperdidos.controller.dto.TriagemResponse;
+import br.com.achadosperdidos.controller.dto.TriagemResumoResponse;
 import br.com.achadosperdidos.controller.dto.TriagemSalvarRequest;
+import br.com.achadosperdidos.pagination.ApiPage;
 import br.com.achadosperdidos.service.TriagemService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/triagem")
@@ -26,8 +27,34 @@ public class TriagemController {
 
     @GetMapping
     @PreAuthorize("@authz.pode('triagem.listar')")
-    public List<TriagemFilaResponse> fila(@RequestParam String idEvento) {
-        return triagemService.fila(idEvento);
+    public ApiPage<TriagemFilaResponse> fila(@RequestParam String idEvento,
+                                             @RequestParam(required = false) Integer page,
+                                             @RequestParam(required = false) Integer limit,
+                                             @RequestParam(required = false) String q,
+                                             @RequestParam(required = false) String idCategoria,
+                                             @RequestParam(required = false) String local,
+                                             @RequestParam(required = false) String tpPrioridade,
+                                             @RequestParam(required = false) String status,
+                                             @RequestParam(required = false) String data) {
+        return triagemService.fila(idEvento, page, limit, q, idCategoria, local, tpPrioridade, status, data);
+    }
+
+    @GetMapping("/resumo")
+    @PreAuthorize("@authz.pode('triagem.listar')")
+    public TriagemResumoResponse resumo(@RequestParam String idEvento) {
+        return triagemService.resumo(idEvento);
+    }
+
+    @GetMapping("/filtros")
+    @PreAuthorize("@authz.pode('triagem.listar')")
+    public ColetaFiltrosResponse filtros(@RequestParam String idEvento) {
+        return triagemService.filtros(idEvento);
+    }
+
+    @PostMapping("/itens/{idItem}/analisar")
+    @PreAuthorize("@authz.pode('triagem.iniciar')")
+    public TriagemResponse analisar(@PathVariable String idItem) {
+        return triagemService.analisar(idItem);
     }
 
     @GetMapping("/itens/{idItem}")

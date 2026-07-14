@@ -2,7 +2,10 @@ package br.com.achadosperdidos.service;
 
 import br.com.achadosperdidos.controller.dto.ClaimValidacaoCreateRequest;
 import br.com.achadosperdidos.controller.dto.ClaimValidacaoResponse;
+import br.com.achadosperdidos.entity.Claim;
 import br.com.achadosperdidos.entity.ClaimValidacao;
+import br.com.achadosperdidos.entity.Item;
+import br.com.achadosperdidos.exception.RecursoNaoEncontradoException;
 import br.com.achadosperdidos.repository.ClaimRepository;
 import br.com.achadosperdidos.repository.ClaimValidacaoRepository;
 import br.com.achadosperdidos.repository.ItemRepository;
@@ -30,9 +33,17 @@ public class ClaimValidacaoService {
 
     @Transactional
     public ClaimValidacaoResponse create(ClaimValidacaoCreateRequest request) {
+        Claim claim = claimRepository.findById(idCodec.decodeClaimId(request.idClaim()))
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Claim não encontrado."));
+        Item item = itemRepository.findById(idCodec.decodeItemId(request.idItem()))
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Item não encontrado."));
+        if (!claim.getEvento().getId().equals(item.getEvento().getId())) {
+            throw new IllegalArgumentException("Claim e item pertencem a eventos diferentes — validação não permitida.");
+        }
         ClaimValidacao v = new ClaimValidacao();
-        v.setClaim(claimRepository.getReferenceById(idCodec.decodeClaimId(request.idClaim())));
-        v.setItem(itemRepository.getReferenceById(idCodec.decodeItemId(request.idItem())));
+        v.setEvento(claim.getEvento());
+        v.setClaim(claim);
+        v.setItem(item);
         v.setQtSimilaridade(request.qtSimilaridade());
         v.setStResultado(request.stResultado() != null ? request.stResultado().trim().toUpperCase() : "PENDENTE");
         v.setDtValidacao("APROVADO".equals(v.getStResultado()) || "REJEITADO".equals(v.getStResultado()) ? LocalDateTime.now() : null);

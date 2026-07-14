@@ -9,6 +9,9 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface ClaimRepository extends JpaRepository<Claim, Long> {
+    /** Solicitações (claims) pendentes de um evento por lista de status. */
+    long countByEvento_IdAndFgExcluidoFalseAndStatus_NmStatusIn(Long eventoId, java.util.Collection<String> statuses);
+
     @EntityGraph(attributePaths = {"evento", "categoria", "status"})
     Page<Claim> findByFgExcluidoFalse(Pageable pageable);
     @EntityGraph(attributePaths = {"evento", "categoria", "status"})
