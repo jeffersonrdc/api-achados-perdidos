@@ -165,7 +165,13 @@
       "Bash(ssh -p 2224 -o BatchMode=yes -o ConnectTimeout=10 git@labdev.mastersdevs.com.br \"whoami; hostname; which nginx\")",
       "Bash(command -v sshpass)",
       "Bash(command -v plink)",
-      "Bash(python -c \"import paramiko; print\\('paramiko OK', paramiko.__version__\\)\")"
+      "Bash(python -c \"import paramiko; print\\('paramiko OK', paramiko.__version__\\)\")",
+      "Bash(mvn -B -q test -Dtest=AchadosPerdidosApplicationTests)",
+      "Bash(mvn -B test)",
+      "Bash(mvn -B -q test -Dtest=PortalIntegrationTest)",
+      "Bash(command -v mysql)",
+      "Bash(command -v jshell)",
+      "Bash(jshell --class-path \"/c/Users/jeffe/.m2/repository/com/mysql/mysql-connector-j/9.5.0/mysql-connector-j-9.5.0.jar\" /tmp/dropdb.jsh)"
     ],
     "additionalDirectories": [
       "C:\\Projetos\\MatsersDevs\\api-achados-perdidos\\paineladmin\\src\\app\\shell\\topbar"

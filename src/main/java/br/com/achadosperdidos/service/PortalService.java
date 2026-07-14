@@ -166,6 +166,7 @@ public class PortalService {
         claim = claimRepository.save(claim);
 
         ClaimValidacao validacao = new ClaimValidacao();
+        validacao.setEvento(item.getEvento());
         validacao.setClaim(claim);
         validacao.setItem(item);
         validacao.setStResultado("PENDENTE");
