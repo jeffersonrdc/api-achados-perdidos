@@ -15,6 +15,7 @@ public class Item {
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "IDR_Categoria", nullable = false) private Categoria categoria;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "IDR_Subcategoria") private Categoria subcategoria;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "IDR_Localizacao") private Localizacao localizacao;
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "IDR_LocalAtual") private Local localAtual;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "IDR_Status", nullable = false) private StatusItem status;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "IDR_UsuarioCadastro") private Usuario usuarioCadastro;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "IDR_UsuarioAlteracao") private Usuario usuarioAlteracao;
@@ -45,6 +46,7 @@ public class Item {
     public Categoria getCategoria() { return categoria; } public void setCategoria(Categoria v) { this.categoria = v; }
     public Categoria getSubcategoria() { return subcategoria; } public void setSubcategoria(Categoria v) { this.subcategoria = v; }
     public Localizacao getLocalizacao() { return localizacao; } public void setLocalizacao(Localizacao v) { this.localizacao = v; }
+    public Local getLocalAtual() { return localAtual; } public void setLocalAtual(Local v) { this.localAtual = v; }
     public StatusItem getStatus() { return status; } public void setStatus(StatusItem v) { this.status = v; }
     public Usuario getUsuarioCadastro() { return usuarioCadastro; } public void setUsuarioCadastro(Usuario v) { this.usuarioCadastro = v; }
     public Usuario getUsuarioAlteracao() { return usuarioAlteracao; } public void setUsuarioAlteracao(Usuario v) { this.usuarioAlteracao = v; }

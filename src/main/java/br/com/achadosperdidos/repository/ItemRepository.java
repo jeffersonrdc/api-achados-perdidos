@@ -31,6 +31,11 @@ public interface ItemRepository extends JpaRepository<Item, Long>, JpaSpecificat
     Page<Item> findByEvento_IdAndFgExcluidoFalseAndFgAtivoTrueAndFgEntregueFalseAndFgDescartadoFalse(
             Long eventoId, Pageable pageable);
 
+    /** Itens públicos no portal: apenas os que já chegaram ao estoque (não entregues/descartados). */
+    @EntityGraph(attributePaths = {"evento", "categoria", "status"})
+    Page<Item> findByEvento_IdAndFgExcluidoFalseAndFgAtivoTrueAndFgEntregueFalseAndFgDescartadoFalseAndStatus_NmStatusIn(
+            Long eventoId, Collection<String> statuses, Pageable pageable);
+
     // ---- Coleta: resumo/KPIs ----
     long countByEvento_IdAndFgExcluidoFalse(Long eventoId);
     long countByEvento_IdAndFgExcluidoFalseAndStatus_NmStatus(Long eventoId, String nmStatus);
@@ -54,4 +59,28 @@ public interface ItemRepository extends JpaRepository<Item, Long>, JpaSpecificat
              WHERE i.evento.id = :eventoId AND i.fgExcluido = false
                AND i.status.nmStatus IN :statuses""")
     long countCategoriasDistintas(@Param("eventoId") Long eventoId, @Param("statuses") Collection<String> statuses);
+
+    @Query("""
+            SELECT i.categoria.nmCategoria AS nome, COUNT(i) AS qt FROM Item i
+             WHERE i.evento.id = :eventoId AND i.fgExcluido = false
+               AND i.status.nmStatus IN :statuses
+             GROUP BY i.categoria.nmCategoria ORDER BY qt DESC""")
+    List<Object[]> contagemPorCategoria(@Param("eventoId") Long eventoId, @Param("statuses") Collection<String> statuses);
+
+    // ---- Transferência: itens disponíveis em um local ----
+    @EntityGraph(attributePaths = {"categoria", "localAtual"})
+    List<Item> findByEvento_IdAndLocalAtual_IdAndFgExcluidoFalseAndFgEntregueFalseAndFgDescartadoFalseOrderByNmTituloAsc(
+            Long eventoId, Long localId);
+
+    @EntityGraph(attributePaths = {"categoria", "localAtual"})
+    List<Item> findByEvento_IdAndFgExcluidoFalseAndFgEntregueFalseAndFgDescartadoFalseAndLocalAtualIsNotNullOrderByNmTituloAsc(
+            Long eventoId);
+
+    // ---- Estoque: resumo (distribuição por depósito; inclui itens sem localização) ----
+    @Query("""
+            SELECT COALESCE(d.nmDeposito, 'Sem localização') AS nome, COUNT(i) AS qt
+              FROM Item i LEFT JOIN i.localizacao l LEFT JOIN l.deposito d
+             WHERE i.evento.id = :eventoId AND i.fgExcluido = false AND i.status.nmStatus = :status
+             GROUP BY d.nmDeposito ORDER BY qt DESC""")
+    List<Object[]> contagemEstoquePorDeposito(@Param("eventoId") Long eventoId, @Param("status") String status);
 }

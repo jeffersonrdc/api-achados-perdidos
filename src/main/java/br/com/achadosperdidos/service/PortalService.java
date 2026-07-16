@@ -22,6 +22,10 @@ import java.util.List;
 @Service
 public class PortalService {
 
+    /** Status que tornam o item visível na consulta pública (após triagem, no estoque). */
+    private static final List<String> STATUS_PORTAL = List.of(
+            "Em estoque", "Com pedido de devolucao", "Aguardando retirada");
+
     private final EventoRepository eventoRepository;
     private final EventoConfiguracaoRepository eventoConfiguracaoRepository;
     private final ItemRepository itemRepository;
@@ -100,8 +104,9 @@ public class PortalService {
         int p = PaginationParams.resolvePage(page);
         int l = PaginationParams.resolveLimit(limit);
         Long eventoId = idCodec.decodeEventoId(idEvento);
-        Page<Item> result = itemRepository.findByEvento_IdAndFgExcluidoFalseAndFgAtivoTrueAndFgEntregueFalseAndFgDescartadoFalse(
-                eventoId, PageRequest.of(p - 1, l));
+        // Só aparecem no portal os itens que já passaram pela triagem e chegaram ao estoque.
+        Page<Item> result = itemRepository.findByEvento_IdAndFgExcluidoFalseAndFgAtivoTrueAndFgEntregueFalseAndFgDescartadoFalseAndStatus_NmStatusIn(
+                eventoId, STATUS_PORTAL, PageRequest.of(p - 1, l));
         var content = result.getContent().stream()
                 .filter(i -> pesquisa == null || pesquisa.isBlank() || matchesPesquisa(i, pesquisa))
                 .map(this::toCatalogoItem)

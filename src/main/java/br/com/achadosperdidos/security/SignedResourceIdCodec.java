@@ -164,5 +164,8 @@ public class SignedResourceIdCodec {
         }
     }
 
-    public enum Kind { EMP, USR, EVT, CAT, ITM, CLM, DEP, STA, LOC, DEV, CRI, CRR, ARQ, MOV, SLA, CAC, ICC, AUD, CLV, CTO, LCR, SLG, IHI, LCL, EQP, EQM, TRG, ETQ, PRF }
+    public String encodeTransferenciaId(long id) { return encode(Kind.TSF, id); }
+    public long decodeTransferenciaId(String token) { return decode(Kind.TSF, token); }
+
+    public enum Kind { EMP, USR, EVT, CAT, ITM, CLM, DEP, STA, LOC, DEV, CRI, CRR, ARQ, MOV, SLA, CAC, ICC, AUD, CLV, CTO, LCR, SLG, IHI, LCL, EQP, EQM, TRG, ETQ, PRF, TSF }
 }

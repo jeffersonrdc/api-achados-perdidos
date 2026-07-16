@@ -5,6 +5,19 @@ import br.com.achadosperdidos.controller.dto.ItemMovimentacaoCreateRequest;
 import br.com.achadosperdidos.controller.dto.ItemMovimentacaoResponse;
 import br.com.achadosperdidos.controller.dto.ItemTransicaoRequest;
 import br.com.achadosperdidos.controller.dto.ItemTransicaoResponse;
+import br.com.achadosperdidos.controller.dto.MovimentacaoEventoResponse;
+import br.com.achadosperdidos.controller.dto.MovimentacaoResumoResponse;
+import br.com.achadosperdidos.pagination.ApiPage;
+import br.com.achadosperdidos.pagination.PaginationMeta;
+import br.com.achadosperdidos.pagination.PaginationParams;
+import jakarta.persistence.criteria.Predicate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import br.com.achadosperdidos.entity.Item;
 import br.com.achadosperdidos.entity.ItemMovimentacao;
 import br.com.achadosperdidos.entity.ItemHistorico;
@@ -179,6 +192,23 @@ public class WorkflowService {
     // Movimentacoes fisicas / consultas de historico
     // ---------------------------------------------------------------------
 
+    /** Registra uma movimentação a partir das entidades (usada por fluxos internos, ex.: estoque). */
+    @Transactional
+    public void registrarMovimentacao(Item item, br.com.achadosperdidos.entity.Localizacao origem,
+                                      br.com.achadosperdidos.entity.Localizacao destino, String tpMovimento, String dsMotivo) {
+        ItemMovimentacao m = new ItemMovimentacao();
+        m.setItem(item);
+        m.setLocalizacaoOrigem(origem);
+        m.setLocalizacaoDestino(destino);
+        m.setTpMovimento(tpMovimento);
+        m.setDsMotivo(dsMotivo);
+        m.setDtMovimento(LocalDateTime.now());
+        m.setDtCadastro(LocalDateTime.now());
+        m.setFgAtivo(true);
+        m.setFgExcluido(false);
+        itemMovimentacaoRepository.save(m);
+    }
+
     @Transactional
     public ItemMovimentacaoResponse registrarMovimentacao(ItemMovimentacaoCreateRequest request) {
         ItemMovimentacao m = new ItemMovimentacao();
@@ -221,22 +251,80 @@ public class WorkflowService {
                 h.getDtHistorico());
     }
 
+    /** Movimentações/transferências do evento, paginadas e filtradas (server-side). */
     @Transactional(readOnly = true)
-    public List<br.com.achadosperdidos.controller.dto.MovimentacaoEventoResponse> listarMovimentacoesPorEvento(String idEvento) {
-        return itemMovimentacaoRepository
-                .findByItem_Evento_IdAndFgExcluidoFalseOrderByDtMovimentoDesc(idCodec.decodeEventoId(idEvento))
-                .stream()
-                .map(m -> new br.com.achadosperdidos.controller.dto.MovimentacaoEventoResponse(
-                        idCodec.encodeMovimentacaoId(m.getId()),
-                        idCodec.encodeItemId(m.getItem().getId()),
-                        m.getItem().getCdItem(),
-                        m.getItem().getNmTitulo(),
-                        m.getTpMovimento(),
-                        m.getDsMotivo(),
-                        localizacaoLabel(m.getLocalizacaoOrigem()),
-                        localizacaoLabel(m.getLocalizacaoDestino()),
-                        m.getDtMovimento()))
+    public ApiPage<MovimentacaoEventoResponse> listarMovimentacoesPorEvento(String idEvento, Integer page, Integer limit,
+                                                                            String q, String tpMovimento, String data) {
+        int p = PaginationParams.resolvePage(page);
+        int l = PaginationParams.resolveLimit(limit);
+        Long eventoId = idCodec.decodeEventoId(idEvento);
+        LocalDate dataMov = parseData(data);
+
+        Specification<ItemMovimentacao> spec = (root, query, cb) -> {
+            List<Predicate> ps = new ArrayList<>();
+            ps.add(cb.isFalse(root.get("fgExcluido")));
+            ps.add(cb.equal(root.get("item").get("evento").get("id"), eventoId));
+            if (tpMovimento != null && !tpMovimento.isBlank())
+                ps.add(cb.equal(root.get("tpMovimento"), tpMovimento));
+            if (dataMov != null) {
+                ps.add(cb.greaterThanOrEqualTo(root.get("dtMovimento"), dataMov.atStartOfDay()));
+                ps.add(cb.lessThan(root.get("dtMovimento"), dataMov.plusDays(1).atStartOfDay()));
+            }
+            if (q != null && !q.isBlank()) {
+                String like = "%" + q.trim().toLowerCase() + "%";
+                ps.add(cb.or(
+                        cb.like(cb.lower(root.get("item").get("nmTitulo")), like),
+                        cb.like(cb.lower(root.get("item").get("cdItem")), like)));
+            }
+            return cb.and(ps.toArray(new Predicate[0]));
+        };
+        Page<ItemMovimentacao> result = itemMovimentacaoRepository.findAll(spec,
+                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.DESC, "dtMovimento")));
+        var content = result.getContent().stream().map(this::toEventoResponse).toList();
+        var meta = new PaginationMeta(p, l, result.getTotalElements(), result.getTotalPages());
+        return ApiPage.paged(content, meta);
+    }
+
+    @Transactional(readOnly = true)
+    public MovimentacaoResumoResponse resumoMovimentacoes(String idEvento) {
+        Long ev = idCodec.decodeEventoId(idEvento);
+        List<MovimentacaoResumoResponse.TipoQt> porTipo = itemMovimentacaoRepository.contagemPorTipo(ev).stream()
+                .map(r -> new MovimentacaoResumoResponse.TipoQt(
+                        r[0] != null ? r[0].toString() : "OUTROS", ((Number) r[1]).longValue()))
                 .toList();
+        long total = porTipo.stream().mapToLong(MovimentacaoResumoResponse.TipoQt::qt).sum();
+        long transferencias = itemMovimentacaoRepository.countByItem_Evento_IdAndFgExcluidoFalseAndTpMovimento(ev, "TRANSFERENCIA");
+        long armazenamentos = itemMovimentacaoRepository.countByItem_Evento_IdAndFgExcluidoFalseAndTpMovimento(ev, "ARMAZENAMENTO");
+        long outros = total - transferencias - armazenamentos;
+        return new MovimentacaoResumoResponse(total, transferencias, armazenamentos, outros, porTipo);
+    }
+
+    private MovimentacaoEventoResponse toEventoResponse(ItemMovimentacao m) {
+        Item item = m.getItem();
+        Usuario resp = item.getUsuarioAlteracao() != null ? item.getUsuarioAlteracao() : item.getUsuarioCadastro();
+        return new MovimentacaoEventoResponse(
+                idCodec.encodeMovimentacaoId(m.getId()),
+                idCodec.encodeItemId(item.getId()),
+                item.getCdItem(),
+                item.getNmTitulo(),
+                item.getCategoria() != null ? item.getCategoria().getNmCategoria() : null,
+                m.getTpMovimento(),
+                m.getDsMotivo(),
+                localizacaoLabel(m.getLocalizacaoOrigem()),
+                localizacaoLabel(m.getLocalizacaoDestino()),
+                resp != null ? resp.getNmUsuario() : null,
+                m.getDtMovimento());
+    }
+
+    private LocalDate parseData(String data) {
+        if (data == null || data.isBlank()) return null;
+        String v = data.trim();
+        try {
+            if (v.contains("/")) return LocalDate.parse(v, DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+            return LocalDate.parse(v);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private String localizacaoLabel(br.com.achadosperdidos.entity.Localizacao loc) {

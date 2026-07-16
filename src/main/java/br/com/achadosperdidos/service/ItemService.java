@@ -2,11 +2,15 @@ package br.com.achadosperdidos.service;
 
 import br.com.achadosperdidos.controller.dto.ColetaFiltrosResponse;
 import br.com.achadosperdidos.controller.dto.ColetaResumoResponse;
+import br.com.achadosperdidos.controller.dto.EstoqueItemResponse;
+import br.com.achadosperdidos.controller.dto.EstoqueResumoResponse;
 import br.com.achadosperdidos.controller.dto.ItemCreateRequest;
+import br.com.achadosperdidos.controller.dto.ItemLocalizacaoRequest;
 import br.com.achadosperdidos.controller.dto.ItemResponse;
 import br.com.achadosperdidos.controller.dto.ItemUpdateRequest;
 import br.com.achadosperdidos.entity.Evento;
 import br.com.achadosperdidos.entity.Item;
+import br.com.achadosperdidos.entity.Localizacao;
 import br.com.achadosperdidos.exception.RecursoNaoEncontradoException;
 import br.com.achadosperdidos.pagination.ApiPage;
 import br.com.achadosperdidos.pagination.PaginationMeta;
@@ -14,6 +18,7 @@ import br.com.achadosperdidos.pagination.PaginationParams;
 import br.com.achadosperdidos.repository.ClaimRepository;
 import br.com.achadosperdidos.repository.EventoRepository;
 import br.com.achadosperdidos.repository.ItemRepository;
+import br.com.achadosperdidos.repository.LocalRepository;
 import br.com.achadosperdidos.security.SignedResourceIdCodec;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
@@ -39,6 +44,8 @@ public class ItemService {
     private final CategoriaService categoriaService;
     private final StatusItemService statusItemService;
     private final WorkflowService workflowService;
+    private final LocalizacaoService localizacaoService;
+    private final LocalRepository localRepository;
     private final SignedResourceIdCodec idCodec;
     private final UsuarioContextService usuarioContextService;
 
@@ -52,11 +59,14 @@ public class ItemService {
     public ItemService(ItemRepository itemRepository, EventoRepository eventoRepository,
                        ClaimRepository claimRepository, CategoriaService categoriaService,
                        StatusItemService statusItemService, WorkflowService workflowService,
+                       LocalizacaoService localizacaoService, LocalRepository localRepository,
                        SignedResourceIdCodec idCodec, UsuarioContextService usuarioContextService) {
         this.itemRepository = itemRepository; this.eventoRepository = eventoRepository;
         this.claimRepository = claimRepository;
         this.categoriaService = categoriaService; this.statusItemService = statusItemService;
         this.workflowService = workflowService;
+        this.localizacaoService = localizacaoService;
+        this.localRepository = localRepository;
         this.idCodec = idCodec; this.usuarioContextService = usuarioContextService;
     }
 
@@ -85,6 +95,7 @@ public class ItemService {
         item.setDtEncontrado(request.dtEncontrado());
         item.setHrEncontrado(request.hrEncontrado());
         item.setNmLocalEncontrado(request.nmLocalEncontrado());
+        item.setLocalAtual(resolverLocalAtual(eventoId, request.nmLocalEncontrado()));
         item.setNmPosto(request.nmPosto());
         item.setNmEncontradoPor(request.nmEncontradoPor());
         item.setVlEstimado(request.vlEstimado());
@@ -135,6 +146,15 @@ public class ItemService {
         item.setUsuarioAlteracao(usuarioContextService.requireUsuarioLogado());
         item.setDtAlteracao(LocalDateTime.now());
         return toResponse(itemRepository.save(item));
+    }
+
+    /** Local físico inicial do item: casa o local encontrado; senão, cai no depósito do evento. */
+    private br.com.achadosperdidos.entity.Local resolverLocalAtual(Long eventoId, String nmLocalEncontrado) {
+        if (nmLocalEncontrado != null && !nmLocalEncontrado.isBlank()) {
+            var local = localRepository.findFirstByEvento_IdAndNmLocalIgnoreCaseAndFgExcluidoFalse(eventoId, nmLocalEncontrado.trim());
+            if (local.isPresent()) return local.get();
+        }
+        return localRepository.findFirstByEvento_IdAndTpLocalAndFgExcluidoFalse(eventoId, "DEPOSITO").orElse(null);
     }
 
     private String normalizarPrioridade(String prioridade) {
@@ -243,22 +263,105 @@ public class ItemService {
         return new ColetaFiltrosResponse(categorias, status, locais, prioridades);
     }
 
+    private static final String STATUS_ESTOQUE = "Em estoque";
+
+    /** Estoque paginado e filtrado (server-side): itens com status "Em estoque". */
     @Transactional(readOnly = true)
-    public java.util.List<br.com.achadosperdidos.controller.dto.EstoqueItemResponse> listarEstoque(String idEvento) {
-        return itemRepository
-                .findByEvento_IdAndStatus_NmStatusAndFgExcluidoFalseOrderByDtEncontradoDesc(
-                        idCodec.decodeEventoId(idEvento), "Em estoque")
-                .stream().map(this::toEstoqueResponse).toList();
+    public ApiPage<EstoqueItemResponse> listarEstoque(String idEvento, Integer page, Integer limit,
+                                                      String q, String idCategoria, String deposito,
+                                                      String tpPrioridade, String data) {
+        int p = PaginationParams.resolvePage(page);
+        int l = PaginationParams.resolveLimit(limit);
+        Long eventoId = idCodec.decodeEventoId(idEvento);
+        Long categoriaId = (idCategoria != null && !idCategoria.isBlank()) ? idCodec.decodeCategoriaId(idCategoria) : null;
+        LocalDate dataEncontrado = parseData(data);
+
+        Specification<Item> spec = (root, query, cb) -> {
+            List<Predicate> ps = new ArrayList<>();
+            ps.add(cb.isFalse(root.get("fgExcluido")));
+            ps.add(cb.equal(root.get("evento").get("id"), eventoId));
+            ps.add(cb.equal(root.get("status").get("nmStatus"), STATUS_ESTOQUE));
+            if (categoriaId != null) ps.add(cb.equal(root.get("categoria").get("id"), categoriaId));
+            if (deposito != null && !deposito.isBlank())
+                ps.add(cb.equal(root.get("localizacao").get("deposito").get("nmDeposito"), deposito));
+            if (tpPrioridade != null && !tpPrioridade.isBlank())
+                ps.add(cb.equal(root.get("tpPrioridade"), tpPrioridade.trim().toUpperCase()));
+            if (dataEncontrado != null) ps.add(cb.equal(root.get("dtEncontrado"), dataEncontrado));
+            if (q != null && !q.isBlank()) {
+                String like = "%" + q.trim().toLowerCase() + "%";
+                ps.add(cb.or(
+                        cb.like(cb.lower(root.get("nmTitulo")), like),
+                        cb.like(cb.lower(root.get("cdItem")), like),
+                        cb.like(cb.lower(root.get("nmLocalEncontrado")), like)));
+            }
+            return cb.and(ps.toArray(new Predicate[0]));
+        };
+        Page<Item> result = itemRepository.findAll(spec,
+                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.DESC, "dtEncontrado")));
+        var content = result.getContent().stream().map(this::toEstoqueResponse).toList();
+        var meta = new PaginationMeta(p, l, result.getTotalElements(), result.getTotalPages());
+        return ApiPage.paged(content, meta);
     }
 
-    private br.com.achadosperdidos.controller.dto.EstoqueItemResponse toEstoqueResponse(Item i) {
+    @Transactional(readOnly = true)
+    public EstoqueResumoResponse estoqueResumo(String idEvento) {
+        Long ev = idCodec.decodeEventoId(idEvento);
+        List<EstoqueResumoResponse.DepositoQt> porDeposito = itemRepository.contagemEstoquePorDeposito(ev, STATUS_ESTOQUE)
+                .stream()
+                .map(r -> new EstoqueResumoResponse.DepositoQt(
+                        r[0] != null ? r[0].toString() : "Sem localização",
+                        ((Number) r[1]).longValue()))
+                .toList();
+        long total = porDeposito.stream().mapToLong(EstoqueResumoResponse.DepositoQt::qt).sum();
+        long semLoc = porDeposito.stream()
+                .filter(d -> "Sem localização".equals(d.nome())).mapToLong(EstoqueResumoResponse.DepositoQt::qt).sum();
+        long comLoc = total - semLoc;
+        long depositos = porDeposito.stream().filter(d -> !"Sem localização".equals(d.nome())).count();
+        long sensiveis = itemRepository.countByEvento_IdAndFgExcluidoFalseAndFgSensivelTrueAndStatus_NmStatusIn(
+                ev, List.of(STATUS_ESTOQUE));
+        return new EstoqueResumoResponse(total, comLoc, semLoc, depositos, sensiveis, porDeposito);
+    }
+
+    /** Opções de filtro do estoque: categorias (árvore), depósitos, prioridades, status. */
+    @Transactional(readOnly = true)
+    public ColetaFiltrosResponse estoqueFiltros(String idEvento) {
+        ColetaFiltrosResponse base = coletaFiltros(idEvento);
+        Long ev = idCodec.decodeEventoId(idEvento);
+        List<String> depositos = itemRepository.contagemEstoquePorDeposito(ev, STATUS_ESTOQUE).stream()
+                .map(r -> r[0] != null ? r[0].toString() : "Sem localização")
+                .filter(nome -> !"Sem localização".equals(nome))
+                .toList();
+        List<ColetaFiltrosResponse.Opcao> status = List.of(new ColetaFiltrosResponse.Opcao(STATUS_ESTOQUE, STATUS_ESTOQUE));
+        return new ColetaFiltrosResponse(base.categorias(), status, depositos, base.prioridades());
+    }
+
+    /** Atualiza a localização física do item no estoque e registra a movimentação. */
+    @Transactional
+    public EstoqueItemResponse atualizarLocalizacao(String idItem, ItemLocalizacaoRequest req) {
+        // Estoque = endereçamento físico do item (setor/estante/caixa) dentro do depósito.
+        // A movimentação entre locais é a "transferência" (outra entidade).
+        Item item = findEntity(idCodec.decodeItemId(idItem));
+        Long depositoId = idCodec.decode(SignedResourceIdCodec.Kind.DEP, req.idDeposito());
+        Localizacao destino = localizacaoService.findOrCreateEntity(
+                depositoId, req.nmSetor(), req.nmCorredor(), req.nmEstante(),
+                req.nmPrateleira(), req.nmCaixa(), req.nmPosicao());
+        item.setLocalizacao(destino);
+        item.setUsuarioAlteracao(usuarioContextService.requireUsuarioLogado());
+        item.setDtAlteracao(LocalDateTime.now());
+        itemRepository.save(item);
+        return toEstoqueResponse(item);
+    }
+
+    private EstoqueItemResponse toEstoqueResponse(Item i) {
         var loc = i.getLocalizacao();
-        return new br.com.achadosperdidos.controller.dto.EstoqueItemResponse(
+        String responsavel = i.getUsuarioCadastro() != null ? i.getUsuarioCadastro().getNmUsuario() : i.getNmEncontradoPor();
+        return new EstoqueItemResponse(
                 idCodec.encodeItemId(i.getId()), i.getCdItem(), i.getNmTitulo(),
                 i.getCategoria() != null ? i.getCategoria().getNmCategoria() : null,
                 i.getSubcategoria() != null ? i.getSubcategoria().getNmCategoria() : null,
                 i.getNmMarca(), i.getNmModelo(), i.getNmCor(), i.getTpPrioridade(), i.getFgSensivel(),
-                i.getDtEncontrado(), i.getNmLocalEncontrado(),
+                i.getNmEstado(),
+                i.getDtEncontrado(), i.getNmLocalEncontrado(), responsavel,
                 i.getStatus() != null ? i.getStatus().getNmStatus() : null,
                 loc != null && loc.getDeposito() != null ? loc.getDeposito().getNmDeposito() : null,
                 loc != null ? loc.getNmSetor() : null,

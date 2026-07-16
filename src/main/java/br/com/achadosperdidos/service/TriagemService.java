@@ -116,17 +116,24 @@ public class TriagemService {
         triagem.setDtConclusao(LocalDateTime.now());
         if (triagem.getOperador() == null) triagem.setOperador(usuarioLogadoOuNulo());
         triagemRepository.save(triagem);
-        // Encaminha para estoque (Em triagem -> Em transporte para estoque).
+        // Encaminha para o estoque: Em triagem -> Em transporte para estoque -> Em estoque.
+        // Ao chegar em "Em estoque" o item fica disponível na consulta pública (portal).
         workflowService.transitar(idItem, new ItemTransicaoRequest("Em transporte para estoque", "Triagem concluída"));
+        workflowService.transitar(idItem, new ItemTransicaoRequest("Em estoque", "Item disponibilizado no estoque após triagem"));
         return toResponse(triagem);
     }
 
     @Transactional(readOnly = true)
     public TriagemResponse detalhe(String idItem) {
         Long itemId = idCodec.decodeItemId(idItem);
+        // Itens ainda na fila (ex.: "Aguardando triagem") não possuem registro de triagem;
+        // nesse caso devolve os dados do próprio item (sem 404).
         return triagemRepository.findByItem_IdAndFgExcluidoFalse(itemId)
                 .map(this::toResponse)
-                .orElseThrow(() -> new RecursoNaoEncontradoException("Triagem não encontrada para o item."));
+                .orElseGet(() -> toResponseFromItem(
+                        itemRepository.findById(itemId)
+                                .filter(i -> !Boolean.TRUE.equals(i.getFgExcluido()))
+                                .orElseThrow(() -> new RecursoNaoEncontradoException("Item não encontrado."))));
     }
 
     /** Fila de triagem paginada e filtrada (server-side), restrita aos status da fila. */
@@ -197,7 +204,13 @@ public class TriagemService {
         long total = itemRepository.countByEvento_IdAndFgExcluidoFalseAndStatus_NmStatusIn(ev, STATUS_FILA);
         long sensiveis = itemRepository.countByEvento_IdAndFgExcluidoFalseAndFgSensivelTrueAndStatus_NmStatusIn(ev, STATUS_FILA);
         long categorias = itemRepository.countCategoriasDistintas(ev, STATUS_FILA);
-        return new TriagemResumoResponse(total, aguardando, emAnalise, emTriagem, sensiveis, categorias);
+        List<TriagemResumoResponse.CategoriaQt> porCategoria = itemRepository.contagemPorCategoria(ev, STATUS_FILA)
+                .stream()
+                .map(r -> new TriagemResumoResponse.CategoriaQt(
+                        r[0] != null ? r[0].toString() : "Outros",
+                        ((Number) r[1]).longValue()))
+                .toList();
+        return new TriagemResumoResponse(total, aguardando, emAnalise, emTriagem, sensiveis, categorias, porCategoria);
     }
 
     /** Opções para os filtros/selects (reaproveita a árvore de categorias/locais da coleta). */
@@ -307,6 +320,27 @@ public class TriagemService {
                 t.getLocalizacaoInicial() != null ? idCodec.encodeLocalizacaoId(t.getLocalizacaoInicial().getId()) : null,
                 t.getDtInicio(),
                 t.getDtConclusao());
+    }
+
+    /** Resposta baseada apenas no item, quando ainda não há registro de triagem. */
+    private TriagemResponse toResponseFromItem(Item i) {
+        return new TriagemResponse(
+                null,
+                idCodec.encodeItemId(i.getId()),
+                i.getCdItem(),
+                i.getNmTitulo(),
+                i.getStatus() != null ? i.getStatus().getNmStatus() : null,
+                null,
+                null,
+                i.getUsuarioCadastro() != null ? i.getUsuarioCadastro().getNmUsuario() : i.getNmEncontradoPor(),
+                i.getNmEstado(),
+                null,
+                i.getDsObservacoes(),
+                null,
+                null,
+                null,
+                null,
+                null);
     }
 
     private TriagemFilaResponse toFilaResponse(Item i) {

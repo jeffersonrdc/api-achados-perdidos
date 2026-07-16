@@ -50,6 +50,36 @@ public class LocalizacaoService {
         return localizacaoRepository.findById(id).orElseThrow(() -> new RecursoNaoEncontradoException("Localização não encontrada."));
     }
 
+    /** Reaproveita uma localização idêntica no depósito ou cria uma nova. */
+    @Transactional
+    public Localizacao findOrCreateEntity(Long depositoId, String setor, String corredor, String estante,
+                                          String prateleira, String caixa, String posicao) {
+        var deposito = depositoService.findEntity(depositoId);
+        return localizacaoRepository.findByDeposito_IdAndFgExcluidoFalseOrderByIdAsc(depositoId).stream()
+                .filter(l -> eq(l.getNmSetor(), setor) && eq(l.getNmCorredor(), corredor)
+                        && eq(l.getNmEstante(), estante) && eq(l.getNmPrateleira(), prateleira)
+                        && eq(l.getNmCaixa(), caixa) && eq(l.getNmPosicao(), posicao))
+                .findFirst()
+                .orElseGet(() -> {
+                    Localizacao l = new Localizacao();
+                    l.setDeposito(deposito);
+                    l.setNmSetor(setor);
+                    l.setNmCorredor(corredor);
+                    l.setNmEstante(estante);
+                    l.setNmPrateleira(prateleira);
+                    l.setNmCaixa(caixa);
+                    l.setNmPosicao(posicao);
+                    l.setDtCadastro(LocalDateTime.now());
+                    l.setFgAtivo(true);
+                    l.setFgExcluido(false);
+                    return localizacaoRepository.save(l);
+                });
+    }
+
+    private static boolean eq(String a, String b) {
+        return (a == null ? "" : a.trim()).equalsIgnoreCase(b == null ? "" : b.trim());
+    }
+
     private LocalizacaoResponse toResponse(Localizacao l) {
         return new LocalizacaoResponse(
                 idCodec.encode(SignedResourceIdCodec.Kind.LOC, l.getId()),

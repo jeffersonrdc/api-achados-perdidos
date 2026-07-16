@@ -2,7 +2,10 @@ package br.com.achadosperdidos.controller;
 
 import br.com.achadosperdidos.controller.dto.ColetaFiltrosResponse;
 import br.com.achadosperdidos.controller.dto.ColetaResumoResponse;
+import br.com.achadosperdidos.controller.dto.EstoqueItemResponse;
+import br.com.achadosperdidos.controller.dto.EstoqueResumoResponse;
 import br.com.achadosperdidos.controller.dto.ItemCreateRequest;
+import br.com.achadosperdidos.controller.dto.ItemLocalizacaoRequest;
 import br.com.achadosperdidos.controller.dto.ItemResponse;
 import br.com.achadosperdidos.controller.dto.ItemUpdateRequest;
 import br.com.achadosperdidos.pagination.ApiPage;
@@ -49,14 +52,35 @@ public class ItemController {
         return itemService.coletaFiltros(idEvento);
     }
     @GetMapping("/estoque") @PreAuthorize("@authz.pode('item.listar')")
-    public java.util.List<br.com.achadosperdidos.controller.dto.EstoqueItemResponse> estoque(@RequestParam String idEvento) {
-        return itemService.listarEstoque(idEvento);
+    public ApiPage<EstoqueItemResponse> estoque(@RequestParam String idEvento,
+                                                @RequestParam(required = false) Integer page,
+                                                @RequestParam(required = false) Integer limit,
+                                                @RequestParam(required = false) String q,
+                                                @RequestParam(required = false) String idCategoria,
+                                                @RequestParam(required = false) String deposito,
+                                                @RequestParam(required = false) String tpPrioridade,
+                                                @RequestParam(required = false) String data) {
+        return itemService.listarEstoque(idEvento, page, limit, q, idCategoria, deposito, tpPrioridade, data);
+    }
+
+    @GetMapping("/estoque/resumo") @PreAuthorize("@authz.pode('item.listar')")
+    public EstoqueResumoResponse estoqueResumo(@RequestParam String idEvento) {
+        return itemService.estoqueResumo(idEvento);
+    }
+
+    @GetMapping("/estoque/filtros") @PreAuthorize("@authz.pode('item.listar')")
+    public ColetaFiltrosResponse estoqueFiltros(@RequestParam String idEvento) {
+        return itemService.estoqueFiltros(idEvento);
     }
     @GetMapping("/{id}") @PreAuthorize("@authz.pode('item.listar')")
     public ItemResponse findById(@PathVariable String id) { return itemService.findById(id); }
     @PutMapping("/{id}") @PreAuthorize("@authz.pode('item.editar')")
     public ItemResponse update(@PathVariable String id, @RequestBody ItemUpdateRequest request) {
         return itemService.update(id, request);
+    }
+    @PutMapping("/{id}/localizacao") @PreAuthorize("@authz.pode('item.movimentar')")
+    public EstoqueItemResponse atualizarLocalizacao(@PathVariable String id, @Valid @RequestBody ItemLocalizacaoRequest request) {
+        return itemService.atualizarLocalizacao(id, request);
     }
     @DeleteMapping("/{id}") @PreAuthorize("@authz.pode('item.excluir')")
     public ResponseEntity<Void> delete(@PathVariable String id) { itemService.softDelete(id); return ResponseEntity.noContent().build(); }

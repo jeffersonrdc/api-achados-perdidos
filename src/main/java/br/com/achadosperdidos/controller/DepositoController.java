@@ -35,4 +35,11 @@ public class DepositoController {
     public List<DepositoResponse> findByEvento(@RequestParam String idEvento) {
         return depositoService.findByEvento(idEvento);
     }
+
+    /** Endereçamento do depósito para os selects do estoque. Ex.: /depositos/{id}/enderecos?nivel=SETOR */
+    @GetMapping("/{idDeposito}/enderecos")
+    @PreAuthorize("@authz.pode('deposito.listar')")
+    public List<String> enderecos(@PathVariable String idDeposito, @RequestParam(required = false) String nivel) {
+        return depositoService.listarEnderecos(idDeposito, nivel);
+    }
 }

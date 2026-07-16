@@ -2,17 +2,18 @@ package br.com.achadosperdidos.controller.dto;
 
 import java.time.LocalDateTime;
 
-/** Movimentação/transferência de um item, com rótulos legíveis de origem/destino. */
-public record MovimentacaoEventoResponse(
+public record TransferenciaResponse(
         String id,
         String idItem,
         String cdItem,
         String nmTitulo,
         String nmCategoria,
-        String tpMovimento,
-        String dsMotivo,
+        Boolean fgSensivel,
         String origem,
         String destino,
         String nmResponsavel,
-        LocalDateTime dtMovimento
+        String nmReceptor,
+        String dsMotivo,
+        String tpStatus,
+        LocalDateTime dtTransferencia
 ) {}

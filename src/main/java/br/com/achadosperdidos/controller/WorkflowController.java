@@ -5,6 +5,9 @@ import br.com.achadosperdidos.controller.dto.ItemMovimentacaoCreateRequest;
 import br.com.achadosperdidos.controller.dto.ItemMovimentacaoResponse;
 import br.com.achadosperdidos.controller.dto.ItemTransicaoRequest;
 import br.com.achadosperdidos.controller.dto.ItemTransicaoResponse;
+import br.com.achadosperdidos.controller.dto.MovimentacaoEventoResponse;
+import br.com.achadosperdidos.controller.dto.MovimentacaoResumoResponse;
+import br.com.achadosperdidos.pagination.ApiPage;
 import br.com.achadosperdidos.service.WorkflowService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -36,9 +39,20 @@ public class WorkflowController {
 
     @GetMapping("/movimentacoes")
     @PreAuthorize("@authz.pode('item.listar')")
-    public List<br.com.achadosperdidos.controller.dto.MovimentacaoEventoResponse> movimentacoesPorEvento(
-            @RequestParam String idEvento) {
-        return workflowService.listarMovimentacoesPorEvento(idEvento);
+    public ApiPage<MovimentacaoEventoResponse> movimentacoesPorEvento(
+            @RequestParam String idEvento,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String tpMovimento,
+            @RequestParam(required = false) String data) {
+        return workflowService.listarMovimentacoesPorEvento(idEvento, page, limit, q, tpMovimento, data);
+    }
+
+    @GetMapping("/movimentacoes/resumo")
+    @PreAuthorize("@authz.pode('item.listar')")
+    public MovimentacaoResumoResponse resumoMovimentacoes(@RequestParam String idEvento) {
+        return workflowService.resumoMovimentacoes(idEvento);
     }
 
     @GetMapping("/itens/{idItem}/movimentacoes")
