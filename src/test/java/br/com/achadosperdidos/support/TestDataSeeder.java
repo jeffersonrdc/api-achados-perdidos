@@ -15,7 +15,8 @@ public class TestDataSeeder {
             String idEmpresa,
             String idCategoria,
             String idStatusRecebido,
-            String idStatusClaimAberto
+            String idStatusClaimAberto,
+            String idStatusEmEstoque
     ) {}
 
     private final EmpresaRepository empresaRepository;
@@ -96,12 +97,16 @@ public class TestDataSeeder {
 
         StatusItem recebido = saveStatus("Recebido", 1, now);
         StatusItem claimAberto = saveStatus("Claim Aberto", 2, now);
+        // "Em estoque" faz parte de STATUS_PORTAL: itens só aparecem no catálogo
+        // público depois da triagem, ao chegarem ao estoque.
+        StatusItem emEstoque = saveStatus("Em estoque", 3, now);
 
         return new SeedData(
                 idCodec.encodeEmpresaId(empresa.getId()),
                 idCodec.encodeCategoriaId(categoria.getId()),
                 idCodec.encodeStatusId(recebido.getId()),
-                idCodec.encodeStatusId(claimAberto.getId())
+                idCodec.encodeStatusId(claimAberto.getId()),
+                idCodec.encodeStatusId(emEstoque.getId())
         );
     }
 

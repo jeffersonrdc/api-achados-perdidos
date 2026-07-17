@@ -19,9 +19,18 @@ public class SignedResourceIdCodec {
 
     private final Mac macPrototype;
 
+    /** Valores de exemplo/documentação que jamais podem ir a produção (A02/A05). */
+    private static final java.util.Set<String> SEGREDOS_PROIBIDOS = java.util.Set.of(
+            "7mP9!qL2#vN8@xD4$kR6^tY1&hJ5*eF3!uW0@pS8#zQ2",
+            "troque-por-outro-segredo-com-pelo-menos-32-caracteres");
+
     public SignedResourceIdCodec(@Value("${app.resource-id.secret}") String secret) {
         if (secret == null || secret.length() < 32) {
             throw new IllegalStateException("Defina app.resource-id.secret com pelo menos 32 caracteres.");
+        }
+        if (SEGREDOS_PROIBIDOS.contains(secret)) {
+            throw new IllegalStateException(
+                    "app.resource-id.secret está usando um valor de exemplo. Defina RESOURCE_ID_SECRET com um segredo próprio.");
         }
         try {
             Mac mac = Mac.getInstance("HmacSHA256");

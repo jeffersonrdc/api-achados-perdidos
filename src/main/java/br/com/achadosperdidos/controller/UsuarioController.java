@@ -8,6 +8,8 @@ import br.com.achadosperdidos.controller.dto.UsuarioUpdateRequest;
 import br.com.achadosperdidos.pagination.ApiPage;
 import br.com.achadosperdidos.service.UsuarioPermissaoService;
 import br.com.achadosperdidos.service.UsuarioService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -20,7 +22,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/usuarios")
-@Tag(name = "Usuários")
+@Tag(name = "Usuários", description = "Gestão de usuários e permissões extras.")
 @SecurityRequirement(name = "bearerAuth")
 public class UsuarioController {
     private final UsuarioService usuarioService;
@@ -33,12 +35,14 @@ public class UsuarioController {
 
     @PostMapping
     @PreAuthorize("@authz.pode('usuario.criar')")
+    @Operation(summary = "Criar usuário")
     public ResponseEntity<UsuarioResponse> create(@Valid @RequestBody UsuarioCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(usuarioService.create(request));
     }
 
     @GetMapping
     @PreAuthorize("@authz.pode('usuario.listar')")
+    @Operation(summary = "Listar usuários (paginado)")
     public ApiPage<UsuarioResponse> findAll(@RequestParam(required = false) Integer page,
                                             @RequestParam(required = false) Integer limit) {
         return usuarioService.findAll(page, limit);
@@ -46,38 +50,44 @@ public class UsuarioController {
 
     @GetMapping("/{id}")
     @PreAuthorize("@authz.pode('usuario.listar')")
-    public UsuarioResponse findById(@PathVariable String id) {
+    @Operation(summary = "Buscar usuário por ID assinado")
+    public UsuarioResponse findById(@Parameter(description = "ID assinado do usuário") @PathVariable String id) {
         return usuarioService.findById(id);
     }
 
     @PutMapping("/{id}")
     @PreAuthorize("@authz.pode('usuario.editar')")
-    public UsuarioResponse update(@PathVariable String id, @Valid @RequestBody UsuarioUpdateRequest request) {
+    @Operation(summary = "Atualizar usuário")
+    public UsuarioResponse update(@Parameter(description = "ID assinado do usuário") @PathVariable String id, @Valid @RequestBody UsuarioUpdateRequest request) {
         return usuarioService.update(id, request);
     }
 
     @DeleteMapping("/{id}")
     @PreAuthorize("@authz.pode('usuario.excluir')")
-    public ResponseEntity<Void> delete(@PathVariable String id) {
+    @Operation(summary = "Excluir usuário (soft delete)")
+    public ResponseEntity<Void> delete(@Parameter(description = "ID assinado do usuário") @PathVariable String id) {
         usuarioService.softDelete(id);
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{id}/permissoes")
     @PreAuthorize("@authz.pode('usuario.permissoes')")
-    public List<PermissaoResponse> listarPermissoesExtras(@PathVariable String id) {
+    @Operation(summary = "Listar permissões extras do usuário")
+    public List<PermissaoResponse> listarPermissoesExtras(@Parameter(description = "ID assinado do usuário") @PathVariable String id) {
         return usuarioPermissaoService.listarExtras(id);
     }
 
     @PutMapping("/{id}/permissoes")
     @PreAuthorize("@authz.pode('usuario.permissoes')")
-    public List<PermissaoResponse> definirPermissoesExtras(@PathVariable String id, @RequestBody PermissoesRequest request) {
+    @Operation(summary = "Definir permissões extras do usuário")
+    public List<PermissaoResponse> definirPermissoesExtras(@Parameter(description = "ID assinado do usuário") @PathVariable String id, @RequestBody PermissoesRequest request) {
         return usuarioPermissaoService.definirExtras(id, request);
     }
 
     @GetMapping("/{id}/permissoes-efetivas")
     @PreAuthorize("@authz.pode('usuario.permissoes')")
-    public List<String> permissoesEfetivas(@PathVariable String id) {
+    @Operation(summary = "Listar permissões efetivas do usuário", description = "Perfil + extras aplicados.")
+    public List<String> permissoesEfetivas(@Parameter(description = "ID assinado do usuário") @PathVariable String id) {
         return usuarioPermissaoService.efetivas(id);
     }
 }

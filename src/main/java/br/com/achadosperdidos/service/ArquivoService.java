@@ -24,6 +24,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -35,6 +36,11 @@ public class ArquivoService {
     private final DevolucaoRepository devolucaoRepository;
     private final ContatoRepository contatoRepository;
     private final SignedResourceIdCodec idCodec;
+
+    /** MIME aceitos no upload (A05/A08): fotos de itens e comprovantes em PDF. */
+    private static final Set<String> MIME_PERMITIDOS = Set.of(
+            "image/jpeg", "image/pjpeg", "image/png", "image/webp",
+            "image/gif", "image/heic", "image/heif", "application/pdf");
 
     @Value("${app.arquivos.dir}")
     private String arquivosDir;
@@ -62,7 +68,8 @@ public class ArquivoService {
         a.setIdEntidade(idEntidade);
         a.setTpArquivo(request.tpArquivo().trim().toUpperCase());
         a.setNmArquivo(request.nmArquivo());
-        a.setNmPath(request.nmPath());
+        // Rejeita caminhos absolutos ou com traversal antes de persistir o metadado.
+        a.setNmPath(validarCaminhoRelativo(request.nmPath()));
         a.setTpMime(request.tpMime());
         a.setFgPrincipal(Boolean.TRUE.equals(request.fgPrincipal()));
         a.setQtBytes(request.qtBytes());
@@ -82,6 +89,7 @@ public class ArquivoService {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("Arquivo não enviado ou vazio.");
         }
+        validarMime(file.getContentType());
         String tipo = tpEntidade.trim().toUpperCase();
         Long idEnt = idCodec.decodeEntidadeId(tipo, idEntidade);
         Evento evento = resolverEvento(tipo, idEnt);
@@ -91,7 +99,7 @@ public class ArquivoService {
         // caminho relativo por entidade: <TP_Entidade>/<id>/<uuid.ext>
         String relPath = tipo + "/" + idEnt + "/" + nomeFisico;
         try {
-            Path destino = Paths.get(arquivosDir).resolve(relPath).normalize();
+            Path destino = resolverDentroDaBase(relPath);
             Files.createDirectories(destino.getParent());
             file.transferTo(destino);
         } catch (IOException e) {
@@ -120,11 +128,50 @@ public class ArquivoService {
         Arquivo a = arquivoRepository.findById(idCodec.decodeArquivoId(idArquivo))
                 .filter(x -> !Boolean.TRUE.equals(x.getFgExcluido()))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Arquivo não encontrado."));
-        Path caminho = Paths.get(arquivosDir).resolve(a.getNmPath()).normalize();
+        // Confina a leitura em app.arquivos.dir: impede path traversal / leitura
+        // de arquivo arbitrário mesmo que o metadado tenha nmPath adulterado.
+        Path caminho = resolverDentroDaBase(a.getNmPath());
         if (!Files.exists(caminho)) {
             throw new RecursoNaoEncontradoException("Conteúdo do arquivo não encontrado em disco.");
         }
         return new ArquivoConteudo(caminho, a.getNmArquivo(), a.getTpMime());
+    }
+
+    /**
+     * Resolve {@code relPath} SEMPRE dentro de {@code app.arquivos.dir} e recusa
+     * qualquer caminho que escape da base (absoluto, {@code ../}, etc.) — barreira
+     * central contra path traversal (OWASP A01/A05).
+     */
+    private Path resolverDentroDaBase(String relPath) {
+        Path base = Paths.get(arquivosDir).toAbsolutePath().normalize();
+        Path destino = base.resolve(validarCaminhoRelativo(relPath)).normalize();
+        if (!destino.startsWith(base)) {
+            throw new IllegalArgumentException("Caminho de arquivo inválido.");
+        }
+        return destino;
+    }
+
+    /** Recusa caminhos nulos, absolutos ou com segmentos de traversal ({@code ..}). */
+    private static String validarCaminhoRelativo(String relPath) {
+        if (relPath == null || relPath.isBlank()) {
+            throw new IllegalArgumentException("Caminho de arquivo não informado.");
+        }
+        String normalizado = relPath.replace('\\', '/').trim();
+        if (normalizado.startsWith("/") || normalizado.contains("..") || normalizado.matches("^[A-Za-z]:.*")) {
+            throw new IllegalArgumentException("Caminho de arquivo inválido.");
+        }
+        return normalizado;
+    }
+
+    /** Valida o MIME declarado no upload contra a allowlist (A05/A08). */
+    private static void validarMime(String contentType) {
+        String mime = contentType == null ? "" : contentType.trim().toLowerCase();
+        int ponto = mime.indexOf(';'); // descarta parâmetros, ex.: "; charset=..."
+        if (ponto >= 0) mime = mime.substring(0, ponto).trim();
+        if (!MIME_PERMITIDOS.contains(mime)) {
+            throw new IllegalArgumentException(
+                    "Tipo de arquivo não permitido. Envie imagem (JPEG, PNG, WEBP, GIF, HEIC) ou PDF.");
+        }
     }
 
     /** Conteúdo físico de um arquivo (caminho + metadados de download). */

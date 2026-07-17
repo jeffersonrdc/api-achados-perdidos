@@ -171,7 +171,20 @@
       "Bash(mvn -B -q test -Dtest=PortalIntegrationTest)",
       "Bash(command -v mysql)",
       "Bash(command -v jshell)",
-      "Bash(jshell --class-path \"/c/Users/jeffe/.m2/repository/com/mysql/mysql-connector-j/9.5.0/mysql-connector-j-9.5.0.jar\" /tmp/dropdb.jsh)"
+      "Bash(jshell --class-path \"/c/Users/jeffe/.m2/repository/com/mysql/mysql-connector-j/9.5.0/mysql-connector-j-9.5.0.jar\" /tmp/dropdb.jsh)",
+      "Bash(mvn -q -DskipTests test-compile)",
+      "Bash(./mvnw -q -o compile)",
+      "Bash(mvn -q compile)",
+      "Bash(mvn -q -o compile)",
+      "Bash(python -c \"import reportlab; print\\('reportlab OK'\\)\")",
+      "Bash(python -c \"import fpdf; print\\('fpdf OK'\\)\")",
+      "Bash(python -c \"import weasyprint; print\\('weasyprint OK'\\)\")",
+      "Bash(xxd)",
+      "Bash('/c/Program Files/Google/Chrome/Application/chrome.exe' --headless --disable-gpu --no-pdf-header-footer --print-to-pdf=c:/Projetos/MatsersDevs/RockInRio/api/docs/Levantamento-Seguranca-Backend.pdf file:///C:/Users/jeffe/AppData/Local/Temp/claude/c--Projetos-MatsersDevs-RockInRio-api/f943c139-e90a-4af7-84d8-811cb789fcfb/scratchpad/seguranca.html)",
+      "Bash(docker info *)",
+      "PowerShell($c = New-Object System.Net.Sockets.TcpClient; try { $c.Connect\\('localhost',3306\\); Write-Output \"MySQL 3306 ACESSIVEL\" } catch { Write-Output \"MySQL 3306 INACESSIVEL\" } finally { $c.Close\\(\\) })",
+      "Bash(mvn -o test)",
+      "Bash(python -c \"import yaml,sys; yaml.safe_load\\(open\\('.gitlab-ci.yml',encoding='utf-8'\\)\\); print\\('YAML OK'\\)\")"
     ],
     "additionalDirectories": [
       "C:\\Projetos\\MatsersDevs\\api-achados-perdidos\\paineladmin\\src\\app\\shell\\topbar"

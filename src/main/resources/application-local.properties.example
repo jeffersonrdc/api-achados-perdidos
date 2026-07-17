@@ -2,5 +2,7 @@ spring.datasource.url=jdbc:mysql://localhost:3306/achados_perdidos?useSSL=false&
 spring.datasource.username=root
 spring.datasource.password=
 
-app.jwt.secret=troque-por-uma-chave-com-pelo-menos-32-caracteres
-app.resource-id.secret=troque-por-outro-segredo-com-pelo-menos-32-caracteres
+# Copie para application-local.properties na raiz do projeto.
+# Defina JWT_SECRET e RESOURCE_ID_SECRET no .env (ou aqui, com valores próprios >= 32 chars).
+app.jwt.secret=${JWT_SECRET}
+app.resource-id.secret=${RESOURCE_ID_SECRET}

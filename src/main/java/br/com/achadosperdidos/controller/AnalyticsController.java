@@ -3,16 +3,18 @@ package br.com.achadosperdidos.controller;
 import br.com.achadosperdidos.controller.dto.EvolucaoPontoResponse;
 import br.com.achadosperdidos.controller.dto.ResumoOperacionalResponse;
 import br.com.achadosperdidos.service.AnalyticsService;
-
-import java.util.List;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/v1/analytics")
-@Tag(name = "Analytics")
+@Tag(name = "Analytics", description = "Indicadores operacionais por evento. Permissão: `analytics.visualizar`.")
 @SecurityRequirement(name = "bearerAuth")
 @PreAuthorize("@authz.pode('analytics.visualizar')")
 public class AnalyticsController {
@@ -23,13 +25,23 @@ public class AnalyticsController {
     }
 
     @GetMapping("/eventos/{idEvento}/resumo")
-    public ResumoOperacionalResponse resumoOperacional(@PathVariable String idEvento) {
+    @Operation(summary = "Resumo operacional do evento",
+            description = "Totais de itens, claims, devoluções e indicadores do evento. "
+                    + "`idEvento` deve ser o token assinado retornado pela API (não o ID numérico).")
+    public ResumoOperacionalResponse resumoOperacional(
+            @Parameter(description = "ID assinado do evento (`s2.*`)", required = true)
+            @PathVariable String idEvento) {
         return analyticsService.resumoOperacional(idEvento);
     }
 
     @GetMapping("/eventos/{idEvento}/evolucao")
-    public List<EvolucaoPontoResponse> evolucao(@PathVariable String idEvento,
-                                                @RequestParam(defaultValue = "14") int dias) {
+    @Operation(summary = "Evolução temporal de indicadores",
+            description = "Série diária de métricas do evento para o número de dias informado.")
+    public List<EvolucaoPontoResponse> evolucao(
+            @Parameter(description = "ID assinado do evento (`s2.*`)", required = true)
+            @PathVariable String idEvento,
+            @Parameter(description = "Quantidade de dias da série (default 14)")
+            @RequestParam(defaultValue = "14") int dias) {
         return analyticsService.evolucao(idEvento, dias);
     }
 }

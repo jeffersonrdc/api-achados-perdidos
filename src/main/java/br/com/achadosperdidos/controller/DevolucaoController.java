@@ -4,6 +4,8 @@ import br.com.achadosperdidos.controller.dto.DevolucaoCreateRequest;
 import br.com.achadosperdidos.controller.dto.DevolucaoResponse;
 import br.com.achadosperdidos.controller.dto.DevolucaoStatusRequest;
 import br.com.achadosperdidos.service.DevolucaoService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -16,7 +18,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/devolucoes")
-@Tag(name = "Devoluções")
+@Tag(name = "Devoluções", description = "Registro e acompanhamento de devoluções.")
 @SecurityRequirement(name = "bearerAuth")
 public class DevolucaoController {
     private final DevolucaoService devolucaoService;
@@ -27,19 +29,22 @@ public class DevolucaoController {
 
     @PostMapping
     @PreAuthorize("@authz.pode('devolucao.realizar')")
+    @Operation(summary = "Registrar devolução")
     public ResponseEntity<DevolucaoResponse> create(@Valid @RequestBody DevolucaoCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(devolucaoService.create(request));
     }
 
     @GetMapping
     @PreAuthorize("@authz.pode('devolucao.listar')")
+    @Operation(summary = "Listar devoluções")
     public List<DevolucaoResponse> findAll() {
         return devolucaoService.findAll();
     }
 
     @PutMapping("/{id}/status")
     @PreAuthorize("@authz.pode('devolucao.realizar')")
-    public DevolucaoResponse atualizarStatus(@PathVariable String id, @Valid @RequestBody DevolucaoStatusRequest request) {
+    @Operation(summary = "Atualizar status da devolução")
+    public DevolucaoResponse atualizarStatus(@Parameter(description = "ID assinado da devolução") @PathVariable String id, @Valid @RequestBody DevolucaoStatusRequest request) {
         return devolucaoService.atualizarStatus(id, request);
     }
 }

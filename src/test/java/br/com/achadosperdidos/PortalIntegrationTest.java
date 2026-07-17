@@ -102,7 +102,8 @@ class PortalIntegrationTest extends IntegrationTestBase {
         var body = objectMapper.createObjectNode()
                 .put("idEvento", idEvento)
                 .put("idCategoria", seedData.idCategoria())
-                .put("idStatus", seedData.idStatusRecebido())
+                // "Em estoque" para o item aparecer no catálogo público (STATUS_PORTAL).
+                .put("idStatus", seedData.idStatusEmEstoque())
                 .put("nmTitulo", "iPhone 15 Pro")
                 .put("nmMarca", "Apple")
                 .put("nmCor", "Preto")

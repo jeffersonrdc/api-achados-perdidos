@@ -8,6 +8,8 @@ import br.com.achadosperdidos.controller.dto.TriagemResumoResponse;
 import br.com.achadosperdidos.controller.dto.TriagemSalvarRequest;
 import br.com.achadosperdidos.pagination.ApiPage;
 import br.com.achadosperdidos.service.TriagemService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -16,7 +18,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/triagem")
-@Tag(name = "Triagem")
+@Tag(name = "Triagem", description = "Fila, análise e conclusão da triagem de itens.")
 @SecurityRequirement(name = "bearerAuth")
 public class TriagemController {
     private final TriagemService triagemService;
@@ -27,7 +29,8 @@ public class TriagemController {
 
     @GetMapping
     @PreAuthorize("@authz.pode('triagem.listar')")
-    public ApiPage<TriagemFilaResponse> fila(@RequestParam String idEvento,
+    @Operation(summary = "Listar fila de triagem (paginado)")
+    public ApiPage<TriagemFilaResponse> fila(@Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento,
                                              @RequestParam(required = false) Integer page,
                                              @RequestParam(required = false) Integer limit,
                                              @RequestParam(required = false) String q,
@@ -41,49 +44,57 @@ public class TriagemController {
 
     @GetMapping("/resumo")
     @PreAuthorize("@authz.pode('triagem.listar')")
-    public TriagemResumoResponse resumo(@RequestParam String idEvento) {
+    @Operation(summary = "Resumo da triagem do evento")
+    public TriagemResumoResponse resumo(@Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento) {
         return triagemService.resumo(idEvento);
     }
 
     @GetMapping("/filtros")
     @PreAuthorize("@authz.pode('triagem.listar')")
-    public ColetaFiltrosResponse filtros(@RequestParam String idEvento) {
+    @Operation(summary = "Opções de filtro da triagem")
+    public ColetaFiltrosResponse filtros(@Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento) {
         return triagemService.filtros(idEvento);
     }
 
     @PostMapping("/itens/{idItem}/analisar")
     @PreAuthorize("@authz.pode('triagem.iniciar')")
-    public TriagemResponse analisar(@PathVariable String idItem) {
+    @Operation(summary = "Analisar item na triagem")
+    public TriagemResponse analisar(@Parameter(description = "ID assinado do item") @PathVariable String idItem) {
         return triagemService.analisar(idItem);
     }
 
     @GetMapping("/itens/{idItem}")
     @PreAuthorize("@authz.pode('triagem.listar')")
-    public TriagemResponse detalhe(@PathVariable String idItem) {
+    @Operation(summary = "Detalhar triagem do item")
+    public TriagemResponse detalhe(@Parameter(description = "ID assinado do item") @PathVariable String idItem) {
         return triagemService.detalhe(idItem);
     }
 
     @GetMapping("/itens/{idItem}/sugestao-ia")
     @PreAuthorize("@authz.pode('triagem.listar')")
-    public TriagemIaResponse sugestaoIa(@PathVariable String idItem) {
+    @Operation(summary = "Obter sugestão de IA para triagem")
+    public TriagemIaResponse sugestaoIa(@Parameter(description = "ID assinado do item") @PathVariable String idItem) {
         return triagemService.sugestaoIa(idItem);
     }
 
     @PostMapping("/itens/{idItem}/iniciar")
     @PreAuthorize("@authz.pode('triagem.iniciar')")
-    public TriagemResponse iniciar(@PathVariable String idItem) {
+    @Operation(summary = "Iniciar triagem do item")
+    public TriagemResponse iniciar(@Parameter(description = "ID assinado do item") @PathVariable String idItem) {
         return triagemService.iniciar(idItem);
     }
 
     @PutMapping("/itens/{idItem}")
     @PreAuthorize("@authz.pode('triagem.salvar')")
-    public TriagemResponse salvar(@PathVariable String idItem, @Valid @RequestBody TriagemSalvarRequest request) {
+    @Operation(summary = "Salvar dados da triagem")
+    public TriagemResponse salvar(@Parameter(description = "ID assinado do item") @PathVariable String idItem, @Valid @RequestBody TriagemSalvarRequest request) {
         return triagemService.salvar(idItem, request);
     }
 
     @PostMapping("/itens/{idItem}/concluir")
     @PreAuthorize("@authz.pode('triagem.concluir')")
-    public TriagemResponse concluir(@PathVariable String idItem, @Valid @RequestBody TriagemSalvarRequest request) {
+    @Operation(summary = "Concluir triagem do item")
+    public TriagemResponse concluir(@Parameter(description = "ID assinado do item") @PathVariable String idItem, @Valid @RequestBody TriagemSalvarRequest request) {
         return triagemService.concluir(idItem, request);
     }
 }

@@ -1,12 +1,16 @@
 package br.com.achadosperdidos.service;
 
+import br.com.achadosperdidos.entity.RefreshToken;
 import br.com.achadosperdidos.entity.Usuario;
+import br.com.achadosperdidos.repository.RefreshTokenRepository;
 import br.com.achadosperdidos.repository.UsuarioRepository;
 import br.com.achadosperdidos.security.JwtUtil;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
 
 @Service
 public class AuthService {
@@ -16,13 +20,15 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final LoginLogService loginLogService;
+    private final RefreshTokenRepository refreshTokenRepository;
 
     public AuthService(UsuarioRepository usuarioRepository, PasswordEncoder passwordEncoder, JwtUtil jwtUtil,
-                       LoginLogService loginLogService) {
+                       LoginLogService loginLogService, RefreshTokenRepository refreshTokenRepository) {
         this.usuarioRepository = usuarioRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
         this.loginLogService = loginLogService;
+        this.refreshTokenRepository = refreshTokenRepository;
     }
 
     public AuthTokens authenticate(String identificador, String senha) {
@@ -45,19 +51,61 @@ public class AuthService {
         }
         // Auditoria de acesso (transacao independente, nunca bloqueia o login).
         loginLogService.registrarAcesso(usuario.getId(), ip, dispositivo, navegador);
-        String subject = usuario.getNmEmail();
-        return new AuthTokens(jwtUtil.generateAccessToken(subject), jwtUtil.generateRefreshToken(subject));
+        return emitirTokens(usuario);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public AuthTokens refresh(String refreshToken) {
         if (!jwtUtil.validateRefreshToken(refreshToken)) {
             throw new BadCredentialsException("Refresh token inválido");
         }
+        String jti = jwtUtil.getJtiFromToken(refreshToken);
+        RefreshToken registro = jti == null ? null : refreshTokenRepository.findByJti(jti).orElse(null);
+        if (registro == null || Boolean.TRUE.equals(registro.getFgRevogado())
+                || registro.getDtExpiracao().isBefore(LocalDateTime.now())) {
+            throw new BadCredentialsException("Refresh token inválido ou revogado");
+        }
         String subject = jwtUtil.getSubjectFromToken(refreshToken);
-        if (subject == null || usuarioRepository.findByNmEmail(subject).isEmpty()) {
+        Usuario usuario = subject == null ? null : usuarioRepository.findByNmEmail(subject).orElse(null);
+        if (usuario == null || !Boolean.TRUE.equals(usuario.getFgAtivo()) || Boolean.TRUE.equals(usuario.getFgExcluido())) {
             throw new BadCredentialsException("Refresh token inválido");
         }
-        return new AuthTokens(jwtUtil.generateAccessToken(subject), jwtUtil.generateRefreshToken(subject));
+        // Rotação: o token usado é revogado e um novo par é emitido.
+        revogar(registro);
+        return emitirTokens(usuario);
+    }
+
+    /** Logout real: revoga o refresh token informado. Idempotente. */
+    @Transactional
+    public void logout(String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank()) return;
+        String jti = jwtUtil.getJtiFromToken(refreshToken);
+        if (jti == null) return;
+        refreshTokenRepository.findByJti(jti)
+                .filter(rt -> !Boolean.TRUE.equals(rt.getFgRevogado()))
+                .ifPresent(this::revogar);
+    }
+
+    /** Gera o par access/refresh e persiste o refresh token para permitir revogação. */
+    private AuthTokens emitirTokens(Usuario usuario) {
+        String subject = usuario.getNmEmail();
+        String accessToken = jwtUtil.generateAccessToken(subject);
+        String refreshToken = jwtUtil.generateRefreshToken(subject);
+
+        RefreshToken registro = new RefreshToken();
+        registro.setJti(jwtUtil.getJtiFromToken(refreshToken));
+        registro.setUsuario(usuario);
+        registro.setDtExpiracao(jwtUtil.getExpirationFromToken(refreshToken));
+        registro.setFgRevogado(false);
+        registro.setDtCadastro(LocalDateTime.now());
+        refreshTokenRepository.save(registro);
+
+        return new AuthTokens(accessToken, refreshToken);
+    }
+
+    private void revogar(RefreshToken registro) {
+        registro.setFgRevogado(true);
+        registro.setDtRevogacao(LocalDateTime.now());
+        refreshTokenRepository.save(registro);
     }
 }

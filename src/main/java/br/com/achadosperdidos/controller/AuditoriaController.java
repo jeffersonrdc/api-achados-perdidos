@@ -3,6 +3,7 @@ package br.com.achadosperdidos.controller;
 import br.com.achadosperdidos.controller.dto.AuditoriaResponse;
 import br.com.achadosperdidos.pagination.ApiPage;
 import br.com.achadosperdidos.service.AuditoriaService;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -10,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/auditoria")
-@Tag(name = "Auditoria")
+@Tag(name = "Auditoria", description = "Consulta de trilhas de alteração (A09).")
 @SecurityRequirement(name = "bearerAuth")
 @PreAuthorize("@authz.pode('auditoria.consultar')")
 public class AuditoriaController {
@@ -21,12 +22,14 @@ public class AuditoriaController {
     }
 
     @GetMapping
+    @Operation(summary = "Listar registros de auditoria (paginado)")
     public ApiPage<AuditoriaResponse> findAll(@RequestParam(required = false) Integer page,
                                               @RequestParam(required = false) Integer limit) {
         return auditoriaService.findAll(page, limit);
     }
 
     @GetMapping("/registro")
+    @Operation(summary = "Listar auditoria por registro", description = "Filtra por tabela e ID numérico interno do registro.")
     public ApiPage<AuditoriaResponse> findByRegistro(@RequestParam String nmTabela,
                                                      @RequestParam Long idRegistro,
                                                      @RequestParam(required = false) Integer page,

@@ -9,6 +9,8 @@ import br.com.achadosperdidos.controller.dto.MovimentacaoEventoResponse;
 import br.com.achadosperdidos.controller.dto.MovimentacaoResumoResponse;
 import br.com.achadosperdidos.pagination.ApiPage;
 import br.com.achadosperdidos.service.WorkflowService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -21,7 +23,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/workflow")
-@Tag(name = "Workflow")
+@Tag(name = "Workflow", description = "Movimentações e transições de status dos itens.")
 @SecurityRequirement(name = "bearerAuth")
 public class WorkflowController {
     private final WorkflowService workflowService;
@@ -32,6 +34,7 @@ public class WorkflowController {
 
     @PostMapping("/movimentacoes")
     @PreAuthorize("@authz.pode('item.movimentar')")
+    @Operation(summary = "Registrar movimentação de item")
     public ResponseEntity<ItemMovimentacaoResponse> registrarMovimentacao(
             @Valid @RequestBody ItemMovimentacaoCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(workflowService.registrarMovimentacao(request));
@@ -39,8 +42,9 @@ public class WorkflowController {
 
     @GetMapping("/movimentacoes")
     @PreAuthorize("@authz.pode('item.listar')")
+    @Operation(summary = "Listar movimentações do evento (paginado)")
     public ApiPage<MovimentacaoEventoResponse> movimentacoesPorEvento(
-            @RequestParam String idEvento,
+            @Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento,
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer limit,
             @RequestParam(required = false) String q,
@@ -51,32 +55,37 @@ public class WorkflowController {
 
     @GetMapping("/movimentacoes/resumo")
     @PreAuthorize("@authz.pode('item.listar')")
-    public MovimentacaoResumoResponse resumoMovimentacoes(@RequestParam String idEvento) {
+    @Operation(summary = "Resumo de movimentações do evento")
+    public MovimentacaoResumoResponse resumoMovimentacoes(@Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento) {
         return workflowService.resumoMovimentacoes(idEvento);
     }
 
     @GetMapping("/itens/{idItem}/movimentacoes")
     @PreAuthorize("@authz.pode('item.listar')")
-    public List<ItemMovimentacaoResponse> historicoItem(@PathVariable String idItem) {
+    @Operation(summary = "Histórico de movimentações do item")
+    public List<ItemMovimentacaoResponse> historicoItem(@Parameter(description = "ID assinado do item") @PathVariable String idItem) {
         return workflowService.historicoItem(idItem);
     }
 
     @GetMapping("/itens/{idItem}/status-historico")
     @PreAuthorize("@authz.pode('item.listar')")
-    public List<ItemHistoricoResponse> historicoStatusItem(@PathVariable String idItem) {
+    @Operation(summary = "Histórico de status do item")
+    public List<ItemHistoricoResponse> historicoStatusItem(@Parameter(description = "ID assinado do item") @PathVariable String idItem) {
         return workflowService.historicoStatusItem(idItem);
     }
 
     @PostMapping("/itens/{idItem}/transicoes")
     @PreAuthorize("@authz.pode('item.transicionar')")
-    public ItemTransicaoResponse transitar(@PathVariable String idItem,
+    @Operation(summary = "Transicionar status do item")
+    public ItemTransicaoResponse transitar(@Parameter(description = "ID assinado do item") @PathVariable String idItem,
                                            @Valid @RequestBody ItemTransicaoRequest request) {
         return workflowService.transitar(idItem, request);
     }
 
     @GetMapping("/itens/{idItem}/transicoes-permitidas")
     @PreAuthorize("@authz.pode('item.listar')")
-    public List<String> transicoesPermitidas(@PathVariable String idItem) {
+    @Operation(summary = "Listar transições permitidas do item")
+    public List<String> transicoesPermitidas(@Parameter(description = "ID assinado do item") @PathVariable String idItem) {
         return workflowService.transicoesPermitidas(idItem);
     }
 }

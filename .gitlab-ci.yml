@@ -10,6 +10,7 @@ default:
 stages:
   - build
   - test
+  - security
   - deploy
 
 variables:
@@ -38,7 +39,87 @@ test:
     - build
   <<: *branch_main_develop
   script:
-    - docker build --target test -t "rockinrio-backend-test:${CI_COMMIT_SHORT_SHA}" .
+    # Gate de teste REAL: a suíte de integração conecta em localhost:3306 e, sem banco,
+    # os testes seriam PULADOS (assumeTrue) — o gate não validaria nada. Subimos um MySQL
+    # efêmero e usamos --network host para o `RUN mvn test` do build alcançá-lo.
+    - docker rm -f it-mysql >/dev/null 2>&1 || true
+    - docker run -d --name it-mysql
+        -e MYSQL_ALLOW_EMPTY_PASSWORD=1
+        -e MYSQL_DATABASE=achados_perdidos_it
+        -p 3306:3306 mysql:8.0 --default-authentication-plugin=mysql_native_password
+    - echo "Aguardando o MySQL aceitar conexões..."
+    - for i in $(seq 1 40); do docker exec it-mysql mysqladmin ping -h 127.0.0.1 --silent >/dev/null 2>&1 && break; sleep 2; done
+    - docker build --target test --network host -t "rockinrio-backend-test:${CI_COMMIT_SHORT_SHA}" .
+  after_script:
+    - docker rm -f it-mysql >/dev/null 2>&1 || true
+
+# =====================================================================================
+# Estágio de segurança (A05/A06/A08) — "avaliação contínua de risco".
+# Todos os jobs rodam em PARALELO e são allow_failure:true (VISÍVEIS, mas NÃO bloqueiam
+# o deploy). Após a primeira triagem de findings, transforme cada um em GATE bloqueante
+# removendo `allow_failure: true` do job desejado.
+# =====================================================================================
+
+# A06 — Software Composition Analysis: CVEs conhecidos nas dependências.
+sca_dependencias:
+  stage: security
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  tags:
+    - deploy
+  needs:
+    - build
+  <<: *branch_main_develop
+  variables:
+    TRIVY_NO_PROGRESS: "true"
+    TRIVY_CACHE_DIR: ".trivycache/"
+  cache:
+    key: trivy-db
+    paths:
+      - .trivycache/
+  script:
+    - trivy --version
+    # --exit-code 1: o job falha (fica vermelho) quando há HIGH/CRITICAL. Como é
+    # allow_failure, não bloqueia a entrega — remova allow_failure para bloquear.
+    - trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format table .
+  allow_failure: true
+
+# A05/A08 — SAST: análise estática do código-fonte (padrões inseguros).
+sast_semgrep:
+  stage: security
+  image:
+    name: semgrep/semgrep:latest
+    entrypoint: [""]
+  tags:
+    - deploy
+  needs:
+    - build
+  <<: *branch_main_develop
+  variables:
+    SEMGREP_SEND_METRICS: "off"
+  script:
+    - semgrep --version
+    # Regras públicas para Java, segredos e OWASP Top 10. --error faz o job falhar
+    # quando há achados (visível; não bloqueia por causa do allow_failure).
+    - semgrep scan --error --config "p/java" --config "p/secrets" --config "p/owasp-top-ten" .
+  allow_failure: true
+
+# Detecção de segredos commitados (chaves, tokens, senhas).
+secret_detection:
+  stage: security
+  image:
+    name: zricethezav/gitleaks:latest
+    entrypoint: [""]
+  tags:
+    - deploy
+  needs:
+    - build
+  <<: *branch_main_develop
+  script:
+    - gitleaks version
+    - gitleaks detect --source . --redact --verbose --exit-code 1
+  allow_failure: true
 
 .deploy_template: &deploy_template
   stage: deploy

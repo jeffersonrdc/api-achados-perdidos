@@ -3,6 +3,7 @@ package br.com.achadosperdidos.config;
 import br.com.achadosperdidos.exception.EmailEmUsoException;
 import br.com.achadosperdidos.exception.PortalIndisponivelException;
 import br.com.achadosperdidos.exception.RecursoNaoEncontradoException;
+import br.com.achadosperdidos.exception.TooManyRequestsException;
 import br.com.achadosperdidos.exception.TransicaoInvalidaException;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
@@ -95,6 +96,15 @@ public class GlobalExceptionHandler {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         detail.setTitle("Conflito de e-mail");
         detail.setType(URI.create("https://api.achadosperdidos.com/errors/email-in-use"));
+        return detail;
+    }
+
+    @ExceptionHandler(TooManyRequestsException.class)
+    public ProblemDetail handleTooManyRequests(TooManyRequestsException ex) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage());
+        detail.setTitle("Muitas requisições");
+        detail.setType(URI.create("https://api.achadosperdidos.com/errors/too-many-requests"));
+        detail.setProperty("retryAfterSeconds", ex.getRetryAfterSeconds());
         return detail;
     }
 
