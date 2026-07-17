@@ -184,7 +184,9 @@
       "Bash(docker info *)",
       "PowerShell($c = New-Object System.Net.Sockets.TcpClient; try { $c.Connect\\('localhost',3306\\); Write-Output \"MySQL 3306 ACESSIVEL\" } catch { Write-Output \"MySQL 3306 INACESSIVEL\" } finally { $c.Close\\(\\) })",
       "Bash(mvn -o test)",
-      "Bash(python -c \"import yaml,sys; yaml.safe_load\\(open\\('.gitlab-ci.yml',encoding='utf-8'\\)\\); print\\('YAML OK'\\)\")"
+      "Bash(python -c \"import yaml,sys; yaml.safe_load\\(open\\('.gitlab-ci.yml',encoding='utf-8'\\)\\); print\\('YAML OK'\\)\")",
+      "Bash(python -c \"import yaml; yaml.safe_load\\(open\\('.gitlab-ci.yml',encoding='utf-8'\\)\\); print\\('gitlab-ci.yml OK'\\)\")",
+      "Bash(python -c \"import tomllib; tomllib.load\\(open\\('.gitleaks.toml','rb'\\)\\); print\\('.gitleaks.toml OK'\\)\")"
     ],
     "additionalDirectories": [
       "C:\\Projetos\\MatsersDevs\\api-achados-perdidos\\paineladmin\\src\\app\\shell\\topbar"

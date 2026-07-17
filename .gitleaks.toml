@@ -1,0 +1,22 @@
+# Configuração do gitleaks (secret scanning no CI).
+# Estende as regras padrão e adiciona allowlist para FALSOS-POSITIVOS conhecidos:
+# arquivos de exemplo (placeholders) e tokens de placeholder do Claude Code.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Arquivos de exemplo e placeholders — não contêm segredos reais"
+paths = [
+  '''\.env\.example$''',
+  '''.*\.properties\.example$''',
+  '''\.claude/settings\.json$''',
+]
+regexes = [
+  # Valores de exemplo que a própria aplicação BLOQUEIA em produção (fail-fast).
+  '''7mP9!qL2#vN8@xD4\$kR6\^tY1&hJ5\*eF3!uW0@pS8#zQ2''',
+  '''troque-por-.*''',
+  '''chave-secreta-minimo-32-chars-para-hs256''',
+  # Placeholders de comando do Claude Code em .claude/settings.json.
+  '''__CMDSUB_OUTPUT__''',
+  '''__TRACKED_VAR__''',
+]

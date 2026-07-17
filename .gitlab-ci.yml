@@ -30,6 +30,15 @@ build:
   <<: *branch_main_develop
   script:
     - docker build -t "${IMAGE_CI}" .
+    # Extrai o fat-jar para o SCA (Trivy) escanear offline, sem resolver o Maven Central.
+    - docker rm -f "ci-extract-${CI_JOB_ID}" >/dev/null 2>&1 || true
+    - docker create --name "ci-extract-${CI_JOB_ID}" "${IMAGE_CI}"
+    - docker cp "ci-extract-${CI_JOB_ID}:/app/app.jar" ./app.jar
+    - docker rm -f "ci-extract-${CI_JOB_ID}" >/dev/null 2>&1 || true
+  artifacts:
+    paths:
+      - app.jar
+    expire_in: 1 hour
 
 test:
   stage: test
@@ -38,20 +47,25 @@ test:
   needs:
     - build
   <<: *branch_main_develop
+  variables:
+    # Porta de host alternativa: a VPS já usa a 3306 para o banco da aplicação.
+    IT_MYSQL_PORT: "13306"
   script:
-    # Gate de teste REAL: a suíte de integração conecta em localhost:3306 e, sem banco,
-    # os testes seriam PULADOS (assumeTrue) — o gate não validaria nada. Subimos um MySQL
-    # efêmero e usamos --network host para o `RUN mvn test` do build alcançá-lo.
-    - docker rm -f it-mysql >/dev/null 2>&1 || true
-    - docker run -d --name it-mysql
+    # Gate de teste REAL: a suíte de integração conecta ao banco e, sem ele, os testes
+    # seriam PULADOS (assumeTrue) — o gate não validaria nada. Subimos um MySQL efêmero
+    # numa porta livre e usamos --network host para o `RUN mvn test` do build alcançá-lo.
+    - docker rm -f "it-mysql-${CI_JOB_ID}" >/dev/null 2>&1 || true
+    - docker run -d --name "it-mysql-${CI_JOB_ID}"
         -e MYSQL_ALLOW_EMPTY_PASSWORD=1
         -e MYSQL_DATABASE=achados_perdidos_it
-        -p 3306:3306 mysql:8.0 --default-authentication-plugin=mysql_native_password
+        -p ${IT_MYSQL_PORT}:3306 mysql:8.0 --default-authentication-plugin=mysql_native_password
     - echo "Aguardando o MySQL aceitar conexões..."
-    - for i in $(seq 1 40); do docker exec it-mysql mysqladmin ping -h 127.0.0.1 --silent >/dev/null 2>&1 && break; sleep 2; done
-    - docker build --target test --network host -t "rockinrio-backend-test:${CI_COMMIT_SHORT_SHA}" .
+    - for i in $(seq 1 40); do docker exec "it-mysql-${CI_JOB_ID}" mysqladmin ping -h 127.0.0.1 --silent >/dev/null 2>&1 && break; sleep 2; done
+    - docker build --target test --network host
+        --build-arg TEST_DB_URL="jdbc:mysql://127.0.0.1:${IT_MYSQL_PORT}/achados_perdidos_it?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC"
+        -t "rockinrio-backend-test:${CI_COMMIT_SHORT_SHA}" .
   after_script:
-    - docker rm -f it-mysql >/dev/null 2>&1 || true
+    - docker rm -f "it-mysql-${CI_JOB_ID}" >/dev/null 2>&1 || true
 
 # =====================================================================================
 # Estágio de segurança (A05/A06/A08) — "avaliação contínua de risco".
@@ -80,9 +94,10 @@ sca_dependencias:
       - .trivycache/
   script:
     - trivy --version
-    # --exit-code 1: o job falha (fica vermelho) quando há HIGH/CRITICAL. Como é
-    # allow_failure, não bloqueia a entrega — remova allow_failure para bloquear.
-    - trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format table .
+    # Escaneia o fat-jar (deps embarcadas) — offline, sem resolver o Maven Central
+    # (evita o 429 de rate-limit). --exit-code 1 deixa o job vermelho quando há
+    # HIGH/CRITICAL; como é allow_failure, não bloqueia. Remova allow_failure p/ bloquear.
+    - trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format table app.jar
   allow_failure: true
 
 # A05/A08 — SAST: análise estática do código-fonte (padrões inseguros).
@@ -102,7 +117,11 @@ sast_semgrep:
     - semgrep --version
     # Regras públicas para Java, segredos e OWASP Top 10. --error faz o job falhar
     # quando há achados (visível; não bloqueia por causa do allow_failure).
-    - semgrep scan --error --config "p/java" --config "p/secrets" --config "p/owasp-top-ten" .
+    # missing-user (rodar como root) é EXCLUÍDO por ora: o compose faz bind-mount de
+    # ./arquivos; rodar como não-root exige ajustar a permissão do volume no servidor.
+    - semgrep scan --error
+        --config "p/java" --config "p/secrets" --config "p/owasp-top-ten"
+        --exclude-rule dockerfile.security.missing-user.missing-user .
   allow_failure: true
 
 # Detecção de segredos commitados (chaves, tokens, senhas).
@@ -118,7 +137,8 @@ secret_detection:
   <<: *branch_main_develop
   script:
     - gitleaks version
-    - gitleaks detect --source . --redact --verbose --exit-code 1
+    # --config: allowlist de falsos-positivos (arquivos .example e placeholders).
+    - gitleaks detect --source . --config .gitleaks.toml --redact --verbose --exit-code 1
   allow_failure: true
 
 .deploy_template: &deploy_template
