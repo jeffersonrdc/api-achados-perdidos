@@ -70,6 +70,12 @@ public class UsuarioController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping("/me/permissoes-efetivas")
+    @Operation(summary = "Listar minhas permissões efetivas", description = "Perfil + extras do usuário autenticado.")
+    public List<String> minhasPermissoesEfetivas() {
+        return usuarioPermissaoService.efetivasDoUsuarioLogado();
+    }
+
     @GetMapping("/{id}/permissoes")
     @PreAuthorize("@authz.pode('usuario.permissoes')")
     @Operation(summary = "Listar permissões extras do usuário")

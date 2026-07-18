@@ -28,6 +28,8 @@ public class Claim {
     @Column(name = "NM_Cor", length = 60) private String nmCor;
     @Column(name = "NM_Estado", length = 60) private String nmEstado;
     @Column(name = "DS_Tags", columnDefinition = "TEXT") private String dsTags;
+    @Column(name = "DS_JustificativaAprovacao", length = 1000) private String dsJustificativaAprovacao;
+    @Column(name = "DS_JustificativaReprovacao", length = 1000) private String dsJustificativaReprovacao;
     @Column(name = "TP_Prioridade", length = 20) private String tpPrioridade;
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Sensivel", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgSensivel = false;
     @Column(name = "DT_Perdeu") private LocalDate dtPerdeu;
@@ -57,6 +59,8 @@ public class Claim {
     public String getNmCor() { return nmCor; } public void setNmCor(String v) { this.nmCor = v; }
     public String getNmEstado() { return nmEstado; } public void setNmEstado(String v) { this.nmEstado = v; }
     public String getDsTags() { return dsTags; } public void setDsTags(String v) { this.dsTags = v; }
+    public String getDsJustificativaAprovacao() { return dsJustificativaAprovacao; } public void setDsJustificativaAprovacao(String v) { this.dsJustificativaAprovacao = v; }
+    public String getDsJustificativaReprovacao() { return dsJustificativaReprovacao; } public void setDsJustificativaReprovacao(String v) { this.dsJustificativaReprovacao = v; }
     public String getTpPrioridade() { return tpPrioridade; } public void setTpPrioridade(String v) { this.tpPrioridade = v; }
     public Boolean getFgSensivel() { return fgSensivel; } public void setFgSensivel(Boolean v) { this.fgSensivel = v; }
     public LocalDate getDtPerdeu() { return dtPerdeu; } public void setDtPerdeu(LocalDate v) { this.dtPerdeu = v; }

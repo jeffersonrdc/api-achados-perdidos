@@ -8,5 +8,6 @@ public record EventoConfiguracaoResponse(
         Boolean fgFotoObrigatoria,
         Boolean fgValidacaoObrigatoria,
         Integer qtMaxFotos,
-        Integer qtDiasDescarte
+        Integer qtDiasDescarte,
+        Integer qtDiasEsperaAceitavel
 ) {}

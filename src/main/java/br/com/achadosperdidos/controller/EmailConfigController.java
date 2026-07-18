@@ -4,6 +4,7 @@ import br.com.achadosperdidos.controller.dto.EmailConfigRequest;
 import br.com.achadosperdidos.controller.dto.EmailConfigResponse;
 import br.com.achadosperdidos.controller.dto.EmailParametroResponse;
 import br.com.achadosperdidos.controller.dto.EmailParametroUpdateRequest;
+import br.com.achadosperdidos.controller.dto.SmtpTesteResponse;
 import br.com.achadosperdidos.service.ClaimConfigService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -34,6 +35,14 @@ public class EmailConfigController {
     @Operation(summary = "Criar conta de e-mail")
     public ResponseEntity<EmailConfigResponse> criar(@Valid @RequestBody EmailConfigRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(claimConfigService.criarConfig(request));
+    }
+
+    @PostMapping("/teste") @PreAuthorize("@authz.pode('configuracao.gerenciar')")
+    @Operation(summary = "Testar conexão e autenticação SMTP sem enviar e-mail")
+    public SmtpTesteResponse testar(
+            @RequestParam(required = false) String id,
+            @Valid @RequestBody EmailConfigRequest request) {
+        return claimConfigService.testarConexao(id, request);
     }
 
     @PutMapping("/{id}") @PreAuthorize("@authz.pode('configuracao.gerenciar')")

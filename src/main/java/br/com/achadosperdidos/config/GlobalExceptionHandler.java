@@ -1,6 +1,7 @@
 package br.com.achadosperdidos.config;
 
 import br.com.achadosperdidos.exception.EmailEmUsoException;
+import br.com.achadosperdidos.exception.LinkExpiradoException;
 import br.com.achadosperdidos.exception.PortalIndisponivelException;
 import br.com.achadosperdidos.exception.RecursoNaoEncontradoException;
 import br.com.achadosperdidos.exception.TooManyRequestsException;
@@ -113,6 +114,24 @@ public class GlobalExceptionHandler {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
         detail.setTitle("Portal indisponível");
         detail.setType(URI.create("https://api.achadosperdidos.com/errors/portal-unavailable"));
+        return detail;
+    }
+
+    @ExceptionHandler(LinkExpiradoException.class)
+    public ProblemDetail handleLinkExpirado(LinkExpiradoException ex) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.GONE, ex.getMessage());
+        detail.setTitle("Link expirado");
+        detail.setType(URI.create("https://api.achadosperdidos.com/errors/link-expired"));
+        return detail;
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ProblemDetail handleGeneric(Exception ex) {
+        log.error("Erro não tratado", ex);
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.INTERNAL_SERVER_ERROR, "Ocorreu um erro interno. Tente novamente.");
+        detail.setTitle("Erro interno");
+        detail.setType(URI.create("https://api.achadosperdidos.com/errors/internal"));
         return detail;
     }
 }

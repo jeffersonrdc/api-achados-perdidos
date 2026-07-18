@@ -6,6 +6,7 @@ import br.com.achadosperdidos.repository.EmailParametroRepository;
 import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,10 @@ import java.util.Properties;
 @Service
 public class EmailService {
     private static final Logger log = LoggerFactory.getLogger(EmailService.class);
+    private static final String LOGO_CID = "email-logo";
+    private static final String BANNER_CID = "email-banner";
+    private static final ClassPathResource LOGO = new ClassPathResource("static/email/logo.png");
+    private static final ClassPathResource BANNER = new ClassPathResource("static/email/banner.jpg");
 
     private final EmailParametroRepository parametroRepository;
     private final EmailTemplateService templateService;
@@ -33,6 +38,20 @@ public class EmailService {
 
     /** Resultado do envio: enviado=false quando cai no fallback (dev) ou falha. */
     public record Resultado(boolean enviado, String erro) {}
+
+    /** Valida abertura da conexão e autenticação sem enviar e-mail. */
+    public Resultado testarConexao(EmailConfig config) {
+        if (config.getNmHost() == null || config.getNmHost().isBlank()) {
+            return naoEnviado("Informe o host SMTP.");
+        }
+        try {
+            montarSender(config).testConnection();
+            return new Resultado(true, null);
+        } catch (Exception e) {
+            log.warn("Falha no teste da conexão SMTP '{}': {}", config.getNmConfig(), e.getMessage());
+            return naoEnviado("Falha na conexão SMTP: " + e.getMessage());
+        }
+    }
 
     @Transactional(readOnly = true)
     public Resultado enviar(String tpEvento, String destinatario, Map<String, String> variaveis) {
@@ -54,7 +73,9 @@ public class EmailService {
             String html = templateService.render(parametro.getNmTemplate(), variaveis);
             JavaMailSenderImpl sender = montarSender(config);
             MimeMessage msg = sender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(msg, false, "UTF-8");
+            // multipart=true permite anexar imagens inline (CID) — funciona em Gmail/Outlook
+            // sem depender de URL pública ou data:image/base64 (bloqueado por vários clientes).
+            MimeMessageHelper helper = new MimeMessageHelper(msg, true, "UTF-8");
             String from = config.getNmRemetente() != null && !config.getNmRemetente().isBlank()
                     ? config.getNmRemetente() : config.getNmUsuario();
             if (config.getNmRemetenteNome() != null && !config.getNmRemetenteNome().isBlank()) {
@@ -65,6 +86,12 @@ public class EmailService {
             helper.setTo(destinatario);
             helper.setSubject(assunto);
             helper.setText(html, true);
+            if (LOGO.exists()) {
+                helper.addInline(LOGO_CID, LOGO, "image/png");
+            }
+            if (BANNER.exists()) {
+                helper.addInline(BANNER_CID, BANNER, "image/jpeg");
+            }
             sender.send(msg);
             log.info("E-mail '{}' enviado para {}", tpEvento, destinatario);
             return new Resultado(true, null);

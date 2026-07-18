@@ -2,6 +2,7 @@ package br.com.achadosperdidos.service;
 
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
+import org.springframework.web.util.HtmlUtils;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -19,7 +20,8 @@ public class EmailTemplateService {
     public String render(String nomeArquivo, Map<String, String> variaveis) throws IOException {
         String html = carregar(nomeArquivo);
         for (Map.Entry<String, String> e : variaveis.entrySet()) {
-            String valor = e.getValue() == null ? "" : e.getValue();
+            String valor = e.getValue() == null ? "" : HtmlUtils.htmlEscape(e.getValue(), StandardCharsets.UTF_8.name());
+            valor = valor.replace("\r\n", "<br>").replace("\n", "<br>");
             html = html.replace("{{" + e.getKey() + "}}", valor);
         }
         return html;

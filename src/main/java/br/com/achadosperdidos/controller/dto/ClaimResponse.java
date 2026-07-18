@@ -34,5 +34,9 @@ public record ClaimResponse(
         String dsObjeto,
         /** Item vinculado ao pedido (quando o pedido é sobre um item específico do estoque). */
         String idItem,
-        String cdItem
+        String cdItem,
+        String dsJustificativaAprovacao,
+        String dsJustificativaReprovacao,
+        /** Mensagens do solicitante ainda não vistas pelo operador. */
+        Long qtMensagensNaoLidas
 ) {}

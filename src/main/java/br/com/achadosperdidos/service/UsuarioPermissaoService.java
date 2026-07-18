@@ -23,15 +23,17 @@ public class UsuarioPermissaoService {
     private final UsuarioPermissaoRepository usuarioPermissaoRepository;
     private final PermissaoRepository permissaoRepository;
     private final PermissaoService permissaoService;
+    private final UsuarioContextService usuarioContextService;
     private final SignedResourceIdCodec idCodec;
 
     public UsuarioPermissaoService(UsuarioRepository usuarioRepository, UsuarioPermissaoRepository usuarioPermissaoRepository,
                                    PermissaoRepository permissaoRepository, PermissaoService permissaoService,
-                                   SignedResourceIdCodec idCodec) {
+                                   UsuarioContextService usuarioContextService, SignedResourceIdCodec idCodec) {
         this.usuarioRepository = usuarioRepository;
         this.usuarioPermissaoRepository = usuarioPermissaoRepository;
         this.permissaoRepository = permissaoRepository;
         this.permissaoService = permissaoService;
+        this.usuarioContextService = usuarioContextService;
         this.idCodec = idCodec;
     }
 
@@ -46,6 +48,12 @@ public class UsuarioPermissaoService {
     @Transactional(readOnly = true)
     public List<String> efetivas(String idUsuario) {
         return permissaoRepository.findPermissoesEfetivas(idCodec.decodeUsuarioId(idUsuario));
+    }
+
+    /** Permissões efetivas do próprio usuário autenticado. */
+    @Transactional(readOnly = true)
+    public List<String> efetivasDoUsuarioLogado() {
+        return permissaoRepository.findPermissoesEfetivas(usuarioContextService.requireUsuarioLogadoId());
     }
 
     /** Define (substitui) o conjunto de permissoes adicionais do usuario. */

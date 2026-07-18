@@ -38,13 +38,14 @@ public class ClaimWorkflowService {
     private final WorkflowService workflowService;
     private final UsuarioContextService usuarioContextService;
     private final SignedResourceIdCodec idCodec;
+    private final ClaimMensagemService claimMensagemService;
 
     public ClaimWorkflowService(ClaimRepository claimRepository, ClaimHistoricoRepository historicoRepository,
                                 ClaimValidacaoRepository validacaoRepository, ItemRepository itemRepository,
                                 ClaimService claimService, StatusItemService statusItemService,
                                 EmailService emailService, DevolucaoService devolucaoService,
                                 WorkflowService workflowService, UsuarioContextService usuarioContextService,
-                                SignedResourceIdCodec idCodec) {
+                                SignedResourceIdCodec idCodec, ClaimMensagemService claimMensagemService) {
         this.claimRepository = claimRepository;
         this.historicoRepository = historicoRepository;
         this.validacaoRepository = validacaoRepository;
@@ -56,6 +57,7 @@ public class ClaimWorkflowService {
         this.workflowService = workflowService;
         this.usuarioContextService = usuarioContextService;
         this.idCodec = idCodec;
+        this.claimMensagemService = claimMensagemService;
     }
 
     @Transactional
@@ -71,21 +73,13 @@ public class ClaimWorkflowService {
 
     @Transactional
     public ClaimResponse solicitarInfo(String idClaim, ClaimSolicitarInfoRequest req) {
-        Claim claim = findClaim(idClaim);
-        String tpSolic = req.tpSolicitacao().trim().toUpperCase();
-        claim.setStatus(statusItemService.findByNomeOrDefault(null, "Claim Aguardando Info"));
-        claim.setDtAlteracao(LocalDateTime.now());
-        claimRepository.save(claim);
-        Map<String, String> vars = variaveis(claim, req.dsDetalhe());
-        vars.put("tipoSolicitacao", "IMAGEM".equals(tpSolic) ? "imagens de comprovação" : "informações adicionais");
-        var email = emailService.enviar("CLAIM_SOLICITACAO_INFO", claim.getNmEmail(), vars);
-        gravarHistorico(claim, null, "SOLICITACAO_INFO", tpSolic, req.dsDetalhe(), email);
-        return response(claim);
+        return claimMensagemService.solicitarInfoComConversa(idClaim, req.tpSolicitacao(), req.dsDetalhe());
     }
 
     @Transactional
     public ClaimResponse aprovar(String idClaim, ClaimAprovarRequest req) {
         Claim claim = findClaim(idClaim);
+        String justificativa = req.dsJustificativa().trim();
         Item item = itemRepository.findById(idCodec.decodeItemId(req.idItem()))
                 .filter(i -> !Boolean.TRUE.equals(i.getFgExcluido()))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Item não encontrado."));
@@ -93,6 +87,7 @@ public class ClaimWorkflowService {
             throw new IllegalArgumentException("Item e pedido pertencem a eventos diferentes.");
         }
         claim.setStatus(statusItemService.findByNomeOrDefault(null, "Claim Aprovado"));
+        claim.setDsJustificativaAprovacao(justificativa);
         claim.setDtAlteracao(LocalDateTime.now());
         claimRepository.save(claim);
 
@@ -110,30 +105,32 @@ public class ClaimWorkflowService {
         // Gera a devolução (aparece na tela /devolucoes) e reserva o item para retirada.
         devolucaoService.create(new DevolucaoCreateRequest(
                 req.idItem(), idCodec.encodeClaimId(claim.getId()), "RETIRADA",
-                claim.getNmNome(), claim.getNrCpf(), req.dsObservacao(), false, false));
+                claim.getNmNome(), claim.getNrCpf(), justificativa, false, false));
         workflowService.transitarSePermitido(req.idItem(), "Aguardando retirada",
                 "Pedido de devolução aprovado — item reservado para retirada.");
 
-        var email = emailService.enviar("CLAIM_APROVACAO", claim.getNmEmail(), variaveis(claim, req.dsObservacao()));
-        gravarHistorico(claim, item, "APROVACAO", null, req.dsObservacao(), email);
+        var email = emailService.enviar("CLAIM_APROVACAO", claim.getNmEmail(), variaveis(claim, justificativa));
+        gravarHistorico(claim, item, "APROVACAO", null, justificativa, email);
         return response(claim);
     }
 
     @Transactional
     public ClaimResponse reprovar(String idClaim, ClaimReprovarRequest req) {
         Claim claim = findClaim(idClaim);
+        String justificativa = req.dsJustificativa().trim();
         Item item = null;
         if (req.idItem() != null && !req.idItem().isBlank()) {
             item = itemRepository.findById(idCodec.decodeItemId(req.idItem()))
                     .filter(i -> !Boolean.TRUE.equals(i.getFgExcluido())).orElse(null);
         }
         claim.setStatus(statusItemService.findByNomeOrDefault(null, "Claim Rejeitado"));
+        claim.setDsJustificativaReprovacao(justificativa);
         claim.setDtAlteracao(LocalDateTime.now());
         claimRepository.save(claim);
-        Map<String, String> vars = variaveis(claim, req.dsMotivo());
-        vars.put("motivo", req.dsMotivo() == null ? "" : req.dsMotivo());
+        Map<String, String> vars = variaveis(claim, justificativa);
+        vars.put("motivo", justificativa);
         var email = emailService.enviar("CLAIM_REPROVACAO", claim.getNmEmail(), vars);
-        gravarHistorico(claim, item, "REPROVACAO", null, req.dsMotivo(), email);
+        gravarHistorico(claim, item, "REPROVACAO", null, justificativa, email);
         return response(claim);
     }
 
@@ -176,6 +173,9 @@ public class ClaimWorkflowService {
         vars.put("nomeSolicitante", claim.getNmNome() != null ? claim.getNmNome() : "");
         vars.put("objeto", claim.getNmObjeto() != null ? claim.getNmObjeto() : "");
         vars.put("evento", claim.getEvento() != null ? claim.getEvento().getNmEvento() : "");
+        vars.put("ano", claim.getEvento() != null && claim.getEvento().getDtInicio() != null
+                ? String.valueOf(claim.getEvento().getDtInicio().getYear()) : "");
+        vars.put("protocolo", claim.getCdClaim() != null ? claim.getCdClaim() : "");
         vars.put("detalhe", detalhe != null ? detalhe : "");
         vars.put("motivo", "");
         vars.put("tipoSolicitacao", "informações adicionais");

@@ -3,6 +3,7 @@ package br.com.achadosperdidos.controller;
 import br.com.achadosperdidos.controller.dto.*;
 import br.com.achadosperdidos.pagination.ApiPage;
 import br.com.achadosperdidos.security.PublicRateLimiter;
+import br.com.achadosperdidos.service.ClaimMensagemService;
 import br.com.achadosperdidos.service.PortalService;
 import br.com.achadosperdidos.util.IpAddressUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -28,10 +29,13 @@ import java.util.List;
 public class PortalController {
 
     private final PortalService portalService;
+    private final ClaimMensagemService claimMensagemService;
     private final PublicRateLimiter publicRateLimiter;
 
-    public PortalController(PortalService portalService, PublicRateLimiter publicRateLimiter) {
+    public PortalController(PortalService portalService, ClaimMensagemService claimMensagemService,
+                            PublicRateLimiter publicRateLimiter) {
         this.portalService = portalService;
+        this.claimMensagemService = claimMensagemService;
         this.publicRateLimiter = publicRateLimiter;
     }
 
@@ -179,5 +183,32 @@ public class PortalController {
             HttpServletRequest http) {
         publicRateLimiter.check("portal-registro", ipDe(http));
         return ResponseEntity.status(HttpStatus.CREATED).body(portalService.registrarParticipante(request));
+    }
+
+    @GetMapping("/respostas/{token}")
+    @SecurityRequirements
+    @Operation(summary = "Contexto público do link de resposta",
+            description = "Valida o token do e-mail e retorna dados mínimos (sem PII sensível).")
+    public PortalRespostaContextResponse contextoResposta(
+            @PathVariable String token,
+            HttpServletRequest http) {
+        publicRateLimiter.check("portal-resposta-get", ipDe(http));
+        return claimMensagemService.contextoPublico(token);
+    }
+
+    @PostMapping(value = "/respostas/{token}", consumes = {
+            org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE,
+            org.springframework.http.MediaType.APPLICATION_FORM_URLENCODED_VALUE
+    })
+    @SecurityRequirements
+    @Operation(summary = "Enviar resposta pública pelo link do e-mail",
+            description = "Texto obrigatório; imagens JPEG/PNG opcionais (até 5 arquivos de 5 MB).")
+    public PortalRespostaSubmitResponse enviarResposta(
+            @PathVariable String token,
+            @RequestParam("dsMensagem") String dsMensagem,
+            @RequestParam(value = "imagens", required = false) List<org.springframework.web.multipart.MultipartFile> imagens,
+            HttpServletRequest http) {
+        publicRateLimiter.check("portal-resposta-post", ipDe(http));
+        return claimMensagemService.responderPublico(token, dsMensagem, imagens);
     }
 }

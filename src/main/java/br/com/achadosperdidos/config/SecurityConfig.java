@@ -69,12 +69,14 @@ public class SecurityConfig {
                                 "/api/v1/portal/eventos/*/locais",
                                 "/api/v1/portal/categorias",
                                 "/api/v1/portal/categorias/**",
-                                "/api/v1/portal/subcategorias/**").permitAll()
+                                "/api/v1/portal/subcategorias/**",
+                                "/api/v1/portal/respostas/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/portal/eventos/*").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/portal/eventos/*/claims", "/api/v1/portal/eventos/*/claims/item",
                                 "/api/v1/portal/eventos/*/claims/*/foto",
                                 "/api/v1/portal/eventos/*/criancas", "/api/v1/portal/eventos/*/criancas/responsaveis",
-                                "/api/v1/portal/auth/registro").permitAll()
+                                "/api/v1/portal/auth/registro",
+                                "/api/v1/portal/respostas/**").permitAll()
                         .requestMatchers("/api/v1/portal/**").hasRole("PARTICIPANTE")
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/api-docs/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/error").permitAll()

@@ -52,12 +52,13 @@ public class EventoConfiguracaoService {
         if (request.fgValidacaoObrigatoria() != null) cfg.setFgValidacaoObrigatoria(request.fgValidacaoObrigatoria());
         if (request.qtMaxFotos() != null) cfg.setQtMaxFotos(request.qtMaxFotos());
         if (request.qtDiasDescarte() != null) cfg.setQtDiasDescarte(request.qtDiasDescarte());
+        if (request.qtDiasEsperaAceitavel() != null) cfg.setQtDiasEsperaAceitavel(request.qtDiasEsperaAceitavel());
         return toResponse(eventoConfiguracaoRepository.save(cfg));
     }
 
     private EventoConfiguracaoResponse defaultResponse(Long eventoId) {
         return new EventoConfiguracaoResponse(
-                idCodec.encodeEventoId(eventoId), true, true, false, true, true, 10, 180);
+                idCodec.encodeEventoId(eventoId), true, true, false, true, true, 10, 180, 15);
     }
 
     private EventoConfiguracaoResponse toResponse(EventoConfiguracao cfg) {
@@ -65,6 +66,7 @@ public class EventoConfiguracaoService {
                 idCodec.encodeEventoId(cfg.getEvento().getId()),
                 cfg.getFgRecebeObjetos(), cfg.getFgAceitaClaim(), cfg.getFgConsultaPublica(),
                 cfg.getFgFotoObrigatoria(), cfg.getFgValidacaoObrigatoria(),
-                cfg.getQtMaxFotos(), cfg.getQtDiasDescarte());
+                cfg.getQtMaxFotos(), cfg.getQtDiasDescarte(),
+                cfg.getQtDiasEsperaAceitavel() != null ? cfg.getQtDiasEsperaAceitavel() : 15);
     }
 }

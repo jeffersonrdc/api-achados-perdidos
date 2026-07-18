@@ -13,6 +13,7 @@ import br.com.achadosperdidos.pagination.PaginationMeta;
 import br.com.achadosperdidos.pagination.PaginationParams;
 import br.com.achadosperdidos.entity.ClaimValidacao;
 import br.com.achadosperdidos.entity.Item;
+import br.com.achadosperdidos.repository.ClaimMensagemRepository;
 import br.com.achadosperdidos.repository.ClaimRepository;
 import br.com.achadosperdidos.repository.ClaimValidacaoRepository;
 import br.com.achadosperdidos.repository.EventoRepository;
@@ -29,8 +30,10 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -45,12 +48,14 @@ public class ClaimService {
     private final LocalService localService;
     private final StatusItemService statusItemService;
     private final ClaimValidacaoRepository claimValidacaoRepository;
+    private final ClaimMensagemRepository claimMensagemRepository;
     private final SignedResourceIdCodec idCodec;
 
     public ClaimService(ClaimRepository claimRepository, EventoRepository eventoRepository,
                         CategoriaService categoriaService, LocalService localService,
                         StatusItemService statusItemService,
                         ClaimValidacaoRepository claimValidacaoRepository,
+                        ClaimMensagemRepository claimMensagemRepository,
                         SignedResourceIdCodec idCodec) {
         this.claimRepository = claimRepository;
         this.eventoRepository = eventoRepository;
@@ -58,6 +63,7 @@ public class ClaimService {
         this.localService = localService;
         this.statusItemService = statusItemService;
         this.claimValidacaoRepository = claimValidacaoRepository;
+        this.claimMensagemRepository = claimMensagemRepository;
         this.idCodec = idCodec;
     }
 
@@ -155,7 +161,10 @@ public class ClaimService {
         };
         Page<Claim> result = claimRepository.findAll(spec,
                 PageRequest.of(p - 1, l, Sort.by(Sort.Direction.DESC, "dtCadastro")));
-        var content = result.getContent().stream().map(this::toResponse).toList();
+        Map<Long, Long> naoLidas = contarNaoLidas(result.getContent().stream().map(Claim::getId).toList());
+        var content = result.getContent().stream()
+                .map(c -> toResponse(c, naoLidas.getOrDefault(c.getId(), 0L)))
+                .toList();
         return ApiPage.paged(content, new PaginationMeta(p, l, result.getTotalElements(), result.getTotalPages()));
     }
 
@@ -292,6 +301,12 @@ public class ClaimService {
     }
 
     ClaimResponse toResponse(Claim c) {
+        long naoLidas = claimMensagemRepository
+                .countByClaim_IdAndTpAutorAndFgLidaOperadorFalseAndFgExcluidoFalse(c.getId(), "SOLICITANTE");
+        return toResponse(c, naoLidas);
+    }
+
+    private ClaimResponse toResponse(Claim c, long qtMensagensNaoLidas) {
         Item item = claimValidacaoRepository.findByClaim_IdAndFgExcluidoFalseOrderByDtCadastroDesc(c.getId())
                 .stream().map(ClaimValidacao::getItem).filter(java.util.Objects::nonNull).findFirst().orElse(null);
         return new ClaimResponse(
@@ -323,6 +338,20 @@ public class ClaimService {
                 c.getNmLocal(),
                 c.getDsObjeto(),
                 item != null ? idCodec.encodeItemId(item.getId()) : null,
-                item != null ? item.getCdItem() : null);
+                item != null ? item.getCdItem() : null,
+                c.getDsJustificativaAprovacao(),
+                c.getDsJustificativaReprovacao(),
+                qtMensagensNaoLidas);
+    }
+
+    private Map<Long, Long> contarNaoLidas(List<Long> claimIds) {
+        if (claimIds == null || claimIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, Long> map = new HashMap<>();
+        for (Object[] row : claimMensagemRepository.contarNaoLidasPorClaims(claimIds)) {
+            map.put((Long) row[0], (Long) row[1]);
+        }
+        return map;
     }
 }

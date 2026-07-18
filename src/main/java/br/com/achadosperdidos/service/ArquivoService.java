@@ -6,6 +6,7 @@ import br.com.achadosperdidos.entity.Arquivo;
 import br.com.achadosperdidos.entity.Evento;
 import br.com.achadosperdidos.exception.RecursoNaoEncontradoException;
 import br.com.achadosperdidos.repository.ArquivoRepository;
+import br.com.achadosperdidos.repository.ClaimMensagemRepository;
 import br.com.achadosperdidos.repository.ClaimRepository;
 import br.com.achadosperdidos.repository.ContatoRepository;
 import br.com.achadosperdidos.repository.CriancaRepository;
@@ -32,6 +33,7 @@ public class ArquivoService {
     private final ArquivoRepository arquivoRepository;
     private final ItemRepository itemRepository;
     private final ClaimRepository claimRepository;
+    private final ClaimMensagemRepository claimMensagemRepository;
     private final CriancaRepository criancaRepository;
     private final DevolucaoRepository devolucaoRepository;
     private final ContatoRepository contatoRepository;
@@ -46,12 +48,14 @@ public class ArquivoService {
     private String arquivosDir;
 
     public ArquivoService(ArquivoRepository arquivoRepository, ItemRepository itemRepository,
-                          ClaimRepository claimRepository, CriancaRepository criancaRepository,
+                          ClaimRepository claimRepository, ClaimMensagemRepository claimMensagemRepository,
+                          CriancaRepository criancaRepository,
                           DevolucaoRepository devolucaoRepository, ContatoRepository contatoRepository,
                           SignedResourceIdCodec idCodec) {
         this.arquivoRepository = arquivoRepository;
         this.itemRepository = itemRepository;
         this.claimRepository = claimRepository;
+        this.claimMensagemRepository = claimMensagemRepository;
         this.criancaRepository = criancaRepository;
         this.devolucaoRepository = devolucaoRepository;
         this.contatoRepository = contatoRepository;
@@ -190,11 +194,14 @@ public class ArquivoService {
         Evento evento = switch (tpEntidade) {
             case "ITEM" -> itemRepository.findById(idEntidade).map(x -> x.getEvento()).orElse(null);
             case "CLAIM" -> claimRepository.findById(idEntidade).map(x -> x.getEvento()).orElse(null);
+            case "CLAIM_MENSAGEM" -> claimMensagemRepository.findById(idEntidade)
+                    .map(x -> x.getClaim() != null ? x.getClaim().getEvento() : null).orElse(null);
             case "CRIANCA" -> criancaRepository.findById(idEntidade).map(x -> x.getEvento()).orElse(null);
             case "DEVOLUCAO" -> devolucaoRepository.findById(idEntidade).map(x -> x.getEvento()).orElse(null);
             case "CONTATO" -> contatoRepository.findById(idEntidade).map(x -> x.getEvento()).orElse(null);
             default -> throw new IllegalArgumentException(
-                    "Tipo de entidade inválido para arquivo: " + tpEntidade + ". Use ITEM, CLAIM, CRIANCA, DEVOLUCAO ou CONTATO.");
+                    "Tipo de entidade inválido para arquivo: " + tpEntidade
+                            + ". Use ITEM, CLAIM, CLAIM_MENSAGEM, CRIANCA, DEVOLUCAO ou CONTATO.");
         };
         if (evento == null) {
             throw new RecursoNaoEncontradoException("Entidade referenciada (" + tpEntidade + ") não encontrada para vincular o arquivo ao evento.");

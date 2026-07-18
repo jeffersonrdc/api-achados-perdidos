@@ -3,11 +3,14 @@ package br.com.achadosperdidos.controller;
 import br.com.achadosperdidos.controller.dto.ClaimAprovarRequest;
 import br.com.achadosperdidos.controller.dto.ClaimCreateRequest;
 import br.com.achadosperdidos.controller.dto.ClaimHistoricoResponse;
+import br.com.achadosperdidos.controller.dto.ClaimMensagemCreateRequest;
+import br.com.achadosperdidos.controller.dto.ClaimMensagemResponse;
 import br.com.achadosperdidos.controller.dto.ClaimReprovarRequest;
 import br.com.achadosperdidos.controller.dto.ClaimResponse;
 import br.com.achadosperdidos.controller.dto.ClaimSolicitarInfoRequest;
 import br.com.achadosperdidos.controller.dto.ClaimUpdateRequest;
 import br.com.achadosperdidos.pagination.ApiPage;
+import br.com.achadosperdidos.service.ClaimMensagemService;
 import br.com.achadosperdidos.service.ClaimService;
 import br.com.achadosperdidos.service.ClaimWorkflowService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -29,9 +32,12 @@ import java.util.List;
 public class ClaimController {
     private final ClaimService claimService;
     private final ClaimWorkflowService claimWorkflowService;
-    public ClaimController(ClaimService claimService, ClaimWorkflowService claimWorkflowService) {
+    private final ClaimMensagemService claimMensagemService;
+    public ClaimController(ClaimService claimService, ClaimWorkflowService claimWorkflowService,
+                           ClaimMensagemService claimMensagemService) {
         this.claimService = claimService;
         this.claimWorkflowService = claimWorkflowService;
+        this.claimMensagemService = claimMensagemService;
     }
 
     @PostMapping
@@ -127,5 +133,21 @@ public class ClaimController {
     @Operation(summary = "Histórico do claim", description = "Trilha de mudanças de status (A09).")
     public List<ClaimHistoricoResponse> historico(@PathVariable String id) {
         return claimWorkflowService.historico(id);
+    }
+
+    @GetMapping("/{id}/mensagens")
+    @PreAuthorize("@authz.pode('claim.listar')")
+    @Operation(summary = "Listar mensagens da conversa do claim",
+            description = "Também marca as mensagens do solicitante como vistas pelo operador.")
+    public List<ClaimMensagemResponse> mensagens(@PathVariable String id) {
+        return claimMensagemService.listar(id);
+    }
+
+    @PostMapping("/{id}/mensagens")
+    @PreAuthorize("@authz.pode('claim.validar')")
+    @Operation(summary = "Enviar mensagem na conversa (dispara e-mail e renova o link)")
+    public ClaimMensagemResponse enviarMensagem(@PathVariable String id,
+                                                @Valid @RequestBody ClaimMensagemCreateRequest request) {
+        return claimMensagemService.enviarOperador(id, request);
     }
 }

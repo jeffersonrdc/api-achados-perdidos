@@ -4,6 +4,7 @@ import br.com.achadosperdidos.controller.dto.EmailConfigRequest;
 import br.com.achadosperdidos.controller.dto.EmailConfigResponse;
 import br.com.achadosperdidos.controller.dto.EmailParametroResponse;
 import br.com.achadosperdidos.controller.dto.EmailParametroUpdateRequest;
+import br.com.achadosperdidos.controller.dto.SmtpTesteResponse;
 import br.com.achadosperdidos.entity.EmailConfig;
 import br.com.achadosperdidos.entity.EmailParametro;
 import br.com.achadosperdidos.exception.RecursoNaoEncontradoException;
@@ -20,10 +21,13 @@ import java.util.List;
 public class ClaimConfigService {
     private final EmailConfigRepository configRepository;
     private final EmailParametroRepository parametroRepository;
+    private final EmailService emailService;
 
-    public ClaimConfigService(EmailConfigRepository configRepository, EmailParametroRepository parametroRepository) {
+    public ClaimConfigService(EmailConfigRepository configRepository, EmailParametroRepository parametroRepository,
+                              EmailService emailService) {
         this.configRepository = configRepository;
         this.parametroRepository = parametroRepository;
+        this.emailService = emailService;
     }
 
     // ---- Contas SMTP ----
@@ -56,6 +60,19 @@ public class ClaimConfigService {
         c.setFgAtivo(false);
         c.setDtAlteracao(LocalDateTime.now());
         configRepository.save(c);
+    }
+
+    @Transactional(readOnly = true)
+    public SmtpTesteResponse testarConexao(String id, EmailConfigRequest req) {
+        EmailConfig teste = new EmailConfig();
+        aplicar(teste, req, true);
+        if ((req.nmSenha() == null || req.nmSenha().isBlank()) && id != null && !id.isBlank()) {
+            teste.setNmSenha(findConfig(id).getNmSenha());
+        }
+        EmailService.Resultado resultado = emailService.testarConexao(teste);
+        return resultado.enviado()
+                ? new SmtpTesteResponse(true, "Conexão SMTP realizada com sucesso.")
+                : new SmtpTesteResponse(false, resultado.erro());
     }
 
     private void aplicar(EmailConfig c, EmailConfigRequest req, boolean novo) {

@@ -105,6 +105,7 @@ public class SignedResourceIdCodec {
         return switch (tpEntidade.trim().toUpperCase()) {
             case "ITEM" -> decodeItemId(token);
             case "CLAIM" -> decodeClaimId(token);
+            case "CLAIM_MENSAGEM" -> decodeClaimMensagemId(token);
             case "DEVOLUCAO" -> decodeDevolucaoId(token);
             case "CRIANCA" -> decodeCriancaId(token);
             default -> decodeNumeric(token);
@@ -115,6 +116,7 @@ public class SignedResourceIdCodec {
         return switch (tpEntidade.trim().toUpperCase()) {
             case "ITEM" -> encodeItemId(id);
             case "CLAIM" -> encodeClaimId(id);
+            case "CLAIM_MENSAGEM" -> encodeClaimMensagemId(id);
             case "DEVOLUCAO" -> encodeDevolucaoId(id);
             case "CRIANCA" -> encodeCriancaId(id);
             default -> String.valueOf(id);
@@ -188,6 +190,8 @@ public class SignedResourceIdCodec {
     public long decodeEstadoId(String token) { return decode(Kind.ESD, token); }
     public String encodeEnderecoId(long id) { return encode(Kind.EDR, id); }
     public long decodeEnderecoId(String token) { return decode(Kind.EDR, token); }
+    public String encodeClaimMensagemId(long id) { return encode(Kind.CMS, id); }
+    public long decodeClaimMensagemId(String token) { return decode(Kind.CMS, token); }
 
-    public enum Kind { EMP, USR, EVT, CAT, ITM, CLM, DEP, STA, LOC, DEV, CRI, CRR, ARQ, MOV, SLA, CAC, ICC, AUD, CLV, CTO, LCR, SLG, IHI, LCL, EQP, EQM, TRG, ETQ, PRF, TSF, MRC, MOD, COR, TAG, ESD, EDR }
+    public enum Kind { EMP, USR, EVT, CAT, ITM, CLM, DEP, STA, LOC, DEV, CRI, CRR, ARQ, MOV, SLA, CAC, ICC, AUD, CLV, CTO, LCR, SLG, IHI, LCL, EQP, EQM, TRG, ETQ, PRF, TSF, MRC, MOD, COR, TAG, ESD, EDR, CMS }
 }
