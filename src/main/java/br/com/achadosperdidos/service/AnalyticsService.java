@@ -90,14 +90,8 @@ public class AnalyticsService {
                         PainelChartHelper.changePositive(aguardando, aguardandoPrev, true),
                         "bg-sky-50 dark:bg-sky-500/20", "text-sky-500"));
 
-        List<Map<String, Object>> taxaCategoria = taxaPorDimensao(ev, j,
-                "COALESCE(c.NM_Categoria, 'Não informado')",
-                "LEFT JOIN categoria c ON c.ID_Categoria = i.IDR_Categoria",
-                "c.NM_Categoria");
-        List<Map<String, Object>> taxaLocal = taxaPorDimensao(ev, j,
-                "COALESCE(NULLIF(i.NM_LocalEncontrado, ''), l.NM_Local, 'Não informado')",
-                "LEFT JOIN local l ON l.ID_Local = i.IDR_LocalAtual",
-                "COALESCE(NULLIF(i.NM_LocalEncontrado, ''), l.NM_Local, 'Não informado')");
+        List<Map<String, Object>> taxaCategoria = taxaPorDimensao(ev, j, DimensaoTaxa.CATEGORIA);
+        List<Map<String, Object>> taxaLocal = taxaPorDimensao(ev, j, DimensaoTaxa.LOCAL);
 
         long encTotal = taxaCategoria.stream().mapToLong(r -> PainelChartHelper.asLong(r.get("encontrados"))).sum();
         long devTotal = taxaCategoria.stream().mapToLong(r -> PainelChartHelper.asLong(r.get("devolvidos"))).sum();
@@ -216,25 +210,72 @@ public class AnalyticsService {
     // Blocos do painel
     // ------------------------------------------------------------------
 
-    private List<Map<String, Object>> taxaPorDimensao(Long ev, PainelChartHelper.Janela j,
-                                                     String dimExpr, String join, String groupBy) {
+    /**
+     * Dimensões permitidas para taxa de devolução — SQL completo e estático
+     * (sem concatenação de fragmentos) para evitar falso positivo de SQLi no Semgrep.
+     */
+    private enum DimensaoTaxa {
+        CATEGORIA(
+                """
+                SELECT COALESCE(c.NM_Categoria, 'Não informado') dimensao, COUNT(*) encontrados
+                FROM item i
+                LEFT JOIN categoria c ON c.ID_Categoria = i.IDR_Categoria
+                WHERE i.IDR_Evento = :ev AND i.FG_Excluido = 0
+                  AND i.DT_Cadastro >= :ini AND i.DT_Cadastro < :fim
+                GROUP BY c.NM_Categoria
+                ORDER BY encontrados DESC
+                LIMIT 12
+                """,
+                """
+                SELECT COALESCE(c.NM_Categoria, 'Não informado') dimensao, COUNT(*) devolvidos
+                FROM devolucao d
+                JOIN item i ON i.ID_Item = d.IDR_Item
+                LEFT JOIN categoria c ON c.ID_Categoria = i.IDR_Categoria
+                WHERE d.IDR_Evento = :ev AND d.FG_Excluido = 0 AND d.FG_Concluido = 1
+                  AND d.DT_Devolucao >= :ini AND d.DT_Devolucao < :fim
+                GROUP BY c.NM_Categoria
+                """),
+        LOCAL(
+                """
+                SELECT COALESCE(NULLIF(i.NM_LocalEncontrado, ''), l.NM_Local, 'Não informado') dimensao,
+                       COUNT(*) encontrados
+                FROM item i
+                LEFT JOIN local l ON l.ID_Local = i.IDR_LocalAtual
+                WHERE i.IDR_Evento = :ev AND i.FG_Excluido = 0
+                  AND i.DT_Cadastro >= :ini AND i.DT_Cadastro < :fim
+                GROUP BY COALESCE(NULLIF(i.NM_LocalEncontrado, ''), l.NM_Local, 'Não informado')
+                ORDER BY encontrados DESC
+                LIMIT 12
+                """,
+                """
+                SELECT COALESCE(NULLIF(i.NM_LocalEncontrado, ''), l.NM_Local, 'Não informado') dimensao,
+                       COUNT(*) devolvidos
+                FROM devolucao d
+                JOIN item i ON i.ID_Item = d.IDR_Item
+                LEFT JOIN local l ON l.ID_Local = i.IDR_LocalAtual
+                WHERE d.IDR_Evento = :ev AND d.FG_Excluido = 0 AND d.FG_Concluido = 1
+                  AND d.DT_Devolucao >= :ini AND d.DT_Devolucao < :fim
+                GROUP BY COALESCE(NULLIF(i.NM_LocalEncontrado, ''), l.NM_Local, 'Não informado')
+                """);
+
+        final String sqlEncontrados;
+        final String sqlDevolvidos;
+
+        DimensaoTaxa(String sqlEncontrados, String sqlDevolvidos) {
+            this.sqlEncontrados = sqlEncontrados;
+            this.sqlDevolvidos = sqlDevolvidos;
+        }
+    }
+
+    private List<Map<String, Object>> taxaPorDimensao(Long ev, PainelChartHelper.Janela j, DimensaoTaxa dim) {
         @SuppressWarnings("unchecked")
-        List<Tuple> enc = em.createNativeQuery(
-                        "SELECT " + dimExpr + " dimensao, COUNT(*) encontrados FROM item i " + join + " " +
-                                "WHERE i.IDR_Evento = :ev AND i.FG_Excluido = 0 " +
-                                "AND i.DT_Cadastro >= :ini AND i.DT_Cadastro < :fim " +
-                                "GROUP BY " + groupBy + " ORDER BY encontrados DESC LIMIT 12", Tuple.class)
+        List<Tuple> enc = em.createNativeQuery(dim.sqlEncontrados, Tuple.class)
                 .setParameter("ev", ev).setParameter("ini", j.inicio()).setParameter("fim", j.fim())
                 .getResultList();
 
         Map<String, Long> devolvidosPorDim = new HashMap<>();
         @SuppressWarnings("unchecked")
-        List<Tuple> dev = em.createNativeQuery(
-                        "SELECT " + dimExpr + " dimensao, COUNT(*) devolvidos FROM devolucao d " +
-                                "JOIN item i ON i.ID_Item = d.IDR_Item " + join + " " +
-                                "WHERE d.IDR_Evento = :ev AND d.FG_Excluido = 0 AND d.FG_Concluido = 1 " +
-                                "AND d.DT_Devolucao >= :ini AND d.DT_Devolucao < :fim " +
-                                "GROUP BY " + groupBy, Tuple.class)
+        List<Tuple> dev = em.createNativeQuery(dim.sqlDevolvidos, Tuple.class)
                 .setParameter("ev", ev).setParameter("ini", j.inicio()).setParameter("fim", j.fim())
                 .getResultList();
         for (Tuple t : dev) {
@@ -243,12 +284,12 @@ public class AnalyticsService {
 
         List<Map<String, Object>> out = new ArrayList<>();
         for (Tuple t : enc) {
-            String dim = String.valueOf(t.get("dimensao"));
+            String dimensao = String.valueOf(t.get("dimensao"));
             long e = PainelChartHelper.asLong(t.get("encontrados"));
-            long d = devolvidosPorDim.getOrDefault(dim, 0L);
+            long d = devolvidosPorDim.getOrDefault(dimensao, 0L);
             int taxa = e > 0 ? (int) Math.round((d * 100.0) / e) : 0;
             Map<String, Object> m = new LinkedHashMap<>();
-            m.put("dimensao", dim);
+            m.put("dimensao", dimensao);
             m.put("encontrados", e);
             m.put("devolvidos", d);
             m.put("taxa", taxa);
