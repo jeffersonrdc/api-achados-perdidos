@@ -14,6 +14,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -33,6 +34,19 @@ public class GlobalExceptionHandler {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, "Credenciais inválidas");
         detail.setTitle("Não autorizado");
         detail.setType(URI.create("https://api.achadosperdidos.com/errors/unauthorized"));
+        return detail;
+    }
+
+    /**
+     * Negações de @PreAuthorize acontecem após a cadeia de filtros e, por isso,
+     * são tratadas pelo ControllerAdvice (não pelo AccessDeniedHandler da SecurityConfig).
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ProblemDetail handleAccessDenied(AccessDeniedException ex) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.FORBIDDEN, "Você não tem permissão para acessar este recurso.");
+        detail.setTitle("Proibido");
+        detail.setType(URI.create("https://api.achadosperdidos.com/errors/forbidden"));
         return detail;
     }
 
