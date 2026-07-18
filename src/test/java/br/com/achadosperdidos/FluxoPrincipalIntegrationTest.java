@@ -39,8 +39,8 @@ class FluxoPrincipalIntegrationTest extends IntegrationTestBase {
         mockMvc.perform(get("/api/v1/devolucoes")
                         .header("Authorization", bearer(adminToken)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].idItem").value(idItem))
-                .andExpect(jsonPath("$[0].fgConcluido").value(true));
+                .andExpect(jsonPath("$.content[0].idItem").value(idItem))
+                .andExpect(jsonPath("$.content[0].fgConcluido").value(true));
     }
 
     private String criarEvento() throws Exception {

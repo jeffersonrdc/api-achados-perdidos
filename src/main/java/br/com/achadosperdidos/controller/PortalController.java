@@ -59,9 +59,25 @@ public class PortalController {
 
     @GetMapping("/categorias")
     @SecurityRequirements
-    @Operation(summary = "Listar categorias públicas")
+    @Operation(summary = "Listar categorias públicas (apenas categorias-pai)")
     public List<CategoriaResponse> listarCategorias() {
         return portalService.listarCategorias();
+    }
+
+    @GetMapping("/categorias/{idCategoria}/subcategorias")
+    @SecurityRequirements
+    @Operation(summary = "Listar subcategorias públicas de uma categoria")
+    public List<CategoriaResponse> listarSubcategorias(
+            @Parameter(description = "ID assinado da categoria-pai") @PathVariable String idCategoria) {
+        return portalService.listarSubcategorias(idCategoria);
+    }
+
+    @GetMapping("/subcategorias/{idSubcategoria}/tags")
+    @SecurityRequirements
+    @Operation(summary = "Listar tags públicas de uma subcategoria")
+    public List<br.com.achadosperdidos.controller.dto.TagResponse> listarTags(
+            @Parameter(description = "ID assinado da subcategoria") @PathVariable String idSubcategoria) {
+        return portalService.listarTags(idSubcategoria);
     }
 
     @GetMapping("/eventos/{idEvento}/locais")
@@ -86,8 +102,8 @@ public class PortalController {
 
     @PostMapping("/eventos/{idEvento}/claims")
     @SecurityRequirements
-    @Operation(summary = "Registrar objeto perdido (claim sem item vinculado)",
-            description = "Endpoint público. Cria claim de objeto perdido informado pelo participante.")
+    @Operation(summary = "Registrar objeto perdido (claim PERDA)",
+            description = "Endpoint público. Cria relato de perda informado pelo participante.")
     public ResponseEntity<ClaimResponse> registrarObjetoPerdido(
             @Parameter(description = "ID assinado do evento") @PathVariable String idEvento,
             @Valid @RequestBody PortalClaimCreateRequest request,
@@ -99,13 +115,26 @@ public class PortalController {
     @PostMapping("/eventos/{idEvento}/claims/item")
     @SecurityRequirements
     @Operation(summary = "Reclamar item específico do catálogo",
-            description = "Endpoint público. Vincula claim a um item existente do evento.")
+            description = "Endpoint público. Vincula claim (RETIRADA) a um item existente do evento.")
     public ResponseEntity<PortalClaimResultResponse> reclamarItem(
             @Parameter(description = "ID assinado do evento") @PathVariable String idEvento,
             @Valid @RequestBody PortalClaimItemRequest request,
             HttpServletRequest http) {
         publicRateLimiter.check("portal-claim-item", ipDe(http));
         return ResponseEntity.status(HttpStatus.CREATED).body(portalService.reclamarItem(idEvento, request));
+    }
+
+    @PostMapping(value = "/eventos/{idEvento}/claims/{idClaim}/foto", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @SecurityRequirements
+    @Operation(summary = "Anexar foto ao relato de perda",
+            description = "Endpoint público. JPEG/PNG até 5 MB. Somente claims do tipo PERDA.")
+    public ResponseEntity<ArquivoResponse> uploadFotoClaim(
+            @Parameter(description = "ID assinado do evento") @PathVariable String idEvento,
+            @Parameter(description = "ID assinado do claim") @PathVariable String idClaim,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
+            HttpServletRequest http) {
+        publicRateLimiter.check("portal-claim-foto", ipDe(http));
+        return ResponseEntity.status(HttpStatus.CREATED).body(portalService.uploadFotoClaim(idEvento, idClaim, file));
     }
 
     @GetMapping("/eventos/{idEvento}/meus-claims")

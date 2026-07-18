@@ -11,5 +11,6 @@ public record LocalCreateRequest(
         BigDecimal vlLatitude,
         BigDecimal vlLongitude,
         String nmHorario,
-        String dsObservacao
+        String dsObservacao,
+        Boolean fgAtivo
 ) {}

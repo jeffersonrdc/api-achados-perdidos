@@ -176,5 +176,18 @@ public class SignedResourceIdCodec {
     public String encodeTransferenciaId(long id) { return encode(Kind.TSF, id); }
     public long decodeTransferenciaId(String token) { return decode(Kind.TSF, token); }
 
-    public enum Kind { EMP, USR, EVT, CAT, ITM, CLM, DEP, STA, LOC, DEV, CRI, CRR, ARQ, MOV, SLA, CAC, ICC, AUD, CLV, CTO, LCR, SLG, IHI, LCL, EQP, EQM, TRG, ETQ, PRF, TSF }
+    public String encodeMarcaId(long id) { return encode(Kind.MRC, id); }
+    public long decodeMarcaId(String token) { return decode(Kind.MRC, token); }
+    public String encodeModeloId(long id) { return encode(Kind.MOD, id); }
+    public long decodeModeloId(String token) { return decode(Kind.MOD, token); }
+    public String encodeCorId(long id) { return encode(Kind.COR, id); }
+    public long decodeCorId(String token) { return decode(Kind.COR, token); }
+    public String encodeTagId(long id) { return encode(Kind.TAG, id); }
+    public long decodeTagId(String token) { return decode(Kind.TAG, token); }
+    public String encodeEstadoId(long id) { return encode(Kind.ESD, id); }
+    public long decodeEstadoId(String token) { return decode(Kind.ESD, token); }
+    public String encodeEnderecoId(long id) { return encode(Kind.EDR, id); }
+    public long decodeEnderecoId(String token) { return decode(Kind.EDR, token); }
+
+    public enum Kind { EMP, USR, EVT, CAT, ITM, CLM, DEP, STA, LOC, DEV, CRI, CRR, ARQ, MOV, SLA, CAC, ICC, AUD, CLV, CTO, LCR, SLG, IHI, LCL, EQP, EQM, TRG, ETQ, PRF, TSF, MRC, MOD, COR, TAG, ESD, EDR }
 }

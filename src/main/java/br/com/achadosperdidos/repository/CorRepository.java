@@ -9,4 +9,7 @@ import java.util.List;
 @Repository
 public interface CorRepository extends JpaRepository<Cor, Long> {
     List<Cor> findByFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAscNmCorAsc();
+    List<Cor> findByFgExcluidoFalseOrderByOrOrdemAscNmCorAsc();
+    boolean existsByNmCorIgnoreCaseAndFgExcluidoFalse(String nmCor);
+    boolean existsByNmCorIgnoreCaseAndIdNotAndFgExcluidoFalse(String nmCor, Long id);
 }

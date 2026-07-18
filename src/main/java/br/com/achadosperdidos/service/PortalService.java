@@ -31,7 +31,10 @@ public class PortalService {
     private final ItemRepository itemRepository;
     private final ClaimRepository claimRepository;
     private final ClaimValidacaoRepository claimValidacaoRepository;
+    private final ClaimService claimService;
+    private final ArquivoService arquivoService;
     private final CategoriaService categoriaService;
+    private final TagService tagService;
     private final LocalService localService;
     private final StatusItemService statusItemService;
     private final CriancaService criancaService;
@@ -46,7 +49,10 @@ public class PortalService {
                          ItemRepository itemRepository,
                          ClaimRepository claimRepository,
                          ClaimValidacaoRepository claimValidacaoRepository,
+                         ClaimService claimService,
+                         ArquivoService arquivoService,
                          CategoriaService categoriaService,
+                         TagService tagService,
                          LocalService localService,
                          StatusItemService statusItemService,
                          CriancaService criancaService,
@@ -60,7 +66,10 @@ public class PortalService {
         this.itemRepository = itemRepository;
         this.claimRepository = claimRepository;
         this.claimValidacaoRepository = claimValidacaoRepository;
+        this.claimService = claimService;
+        this.arquivoService = arquivoService;
         this.categoriaService = categoriaService;
+        this.tagService = tagService;
         this.localService = localService;
         this.statusItemService = statusItemService;
         this.criancaService = criancaService;
@@ -88,6 +97,18 @@ public class PortalService {
     @Transactional(readOnly = true)
     public List<br.com.achadosperdidos.controller.dto.CategoriaResponse> listarCategorias() {
         return categoriaService.findAll();
+    }
+
+    /** Subcategorias ativas de uma categoria-pai (portal). */
+    @Transactional(readOnly = true)
+    public List<br.com.achadosperdidos.controller.dto.CategoriaResponse> listarSubcategorias(String idCategoria) {
+        return categoriaService.findSubcategorias(idCategoria, false);
+    }
+
+    /** Tags ativas de uma subcategoria (portal). */
+    @Transactional(readOnly = true)
+    public List<br.com.achadosperdidos.controller.dto.TagResponse> listarTags(String idSubcategoria) {
+        return tagService.findAll(false, idSubcategoria);
     }
 
     /** Locais do evento para os selects de localização (slim, público). */
@@ -120,24 +141,20 @@ public class PortalService {
         Evento evento = findEvento(idCodec.decodeEventoId(idEvento));
         Claim claim = new Claim();
         claim.setEvento(evento);
-        claim.setCategoria(categoriaService.findEntity(idCodec.decodeCategoriaId(request.idCategoria())));
-        claim.setStatus(statusItemService.findByNomeOrDefault(null, "Claim Aberto"));
-        claim.setNmNome(request.nmNome().trim());
-        claim.setNrCpf(request.nrCpf());
-        claim.setNmEmail(request.nmEmail().trim().toLowerCase());
-        claim.setNrTelefone(request.nrTelefone());
-        claim.setNmObjeto(request.nmObjeto().trim());
-        claim.setDsObjeto(request.dsObjeto());
-        claim.setNmMarca(request.nmMarca());
-        claim.setNmModelo(request.nmModelo());
-        claim.setNmCor(request.nmCor());
-        claim.setDtPerdeu(request.dtPerdeu());
-        claim.setHrPerdeu(request.hrPerdeu());
-        claim.setNmLocal(request.nmLocal());
+        claim.setTpClaim(ClaimService.TIPO_PERDA);
+        claimService.aplicarDadosBasicos(claim,
+                request.idCategoria(), request.idSubcategoria(), null,
+                request.nmNome(), request.nrCpf(), request.nmEmail(), request.nrTelefone(),
+                request.nmObjeto(), request.dsObjeto(), request.nmMarca(), request.nmModelo(),
+                request.nmCor(), request.nmEstado(), request.dsTags(), request.tpPrioridade(),
+                request.fgSensivel(), request.dtPerdeu(), request.hrPerdeu(),
+                request.idLocal(), request.nmLocal());
         claim.setDtCadastro(LocalDateTime.now());
         claim.setFgAtivo(true);
         claim.setFgExcluido(false);
-        return toClaimResponse(claimRepository.save(claim));
+        claim = claimRepository.save(claim);
+        claim.setCdClaim(claimService.gerarProtocolo(claim.getId(), claim.getDtCadastro()));
+        return claimService.toResponse(claimRepository.save(claim));
     }
 
     @Transactional
@@ -153,7 +170,9 @@ public class PortalService {
 
         Claim claim = new Claim();
         claim.setEvento(item.getEvento());
+        claim.setTpClaim(ClaimService.TIPO_RETIRADA);
         claim.setCategoria(item.getCategoria());
+        claim.setSubcategoria(item.getSubcategoria());
         claim.setStatus(statusItemService.findByNomeOrDefault(null, "Claim Aberto"));
         claim.setNmNome(request.nmNome().trim());
         claim.setNrCpf(request.nrCpf());
@@ -164,10 +183,16 @@ public class PortalService {
         claim.setNmMarca(item.getNmMarca());
         claim.setNmModelo(item.getNmModelo());
         claim.setNmCor(item.getNmCor());
+        claim.setNmEstado(item.getNmEstado());
         claim.setDtPerdeu(item.getDtEncontrado());
+        claim.setNmLocal(item.getNmLocalEncontrado());
+        claim.setFgSensivel(Boolean.TRUE.equals(item.getFgSensivel()));
+        claim.setTpPrioridade(item.getTpPrioridade());
         claim.setDtCadastro(LocalDateTime.now());
         claim.setFgAtivo(true);
         claim.setFgExcluido(false);
+        claim = claimRepository.save(claim);
+        claim.setCdClaim(claimService.gerarProtocolo(claim.getId(), claim.getDtCadastro()));
         claim = claimRepository.save(claim);
 
         ClaimValidacao validacao = new ClaimValidacao();
@@ -186,12 +211,37 @@ public class PortalService {
                 "Claim registrado. A equipe do evento irá validar a correspondência com o item.");
     }
 
+    /** Upload público de foto para relato de perda (CLAIM / FOTO). */
+    @Transactional
+    public ArquivoResponse uploadFotoClaim(String idEvento, String idClaim, org.springframework.web.multipart.MultipartFile file) {
+        exigirAceitaClaim(idEvento);
+        Long eventoId = idCodec.decodeEventoId(idEvento);
+        Claim claim = claimRepository.findById(idCodec.decodeClaimId(idClaim))
+                .filter(c -> !Boolean.TRUE.equals(c.getFgExcluido()))
+                .filter(c -> c.getEvento().getId().equals(eventoId))
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Claim não encontrado no evento."));
+        if (!ClaimService.TIPO_PERDA.equalsIgnoreCase(claim.getTpClaim())) {
+            throw new IllegalArgumentException("Somente relatos de perda (PERDA) aceitam foto pelo portal.");
+        }
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("Arquivo não enviado ou vazio.");
+        }
+        String mime = file.getContentType() != null ? file.getContentType().toLowerCase() : "";
+        if (!mime.equals("image/jpeg") && !mime.equals("image/pjpeg") && !mime.equals("image/png")) {
+            throw new IllegalArgumentException("Apenas JPEG ou PNG são aceitos.");
+        }
+        if (file.getSize() > 5L * 1024 * 1024) {
+            throw new IllegalArgumentException("A foto deve ter no máximo 5 MB.");
+        }
+        return arquivoService.upload("CLAIM", idCodec.encodeClaimId(claim.getId()), "FOTO", file, true);
+    }
+
     @Transactional(readOnly = true)
     public List<ClaimResponse> meusClaims(String idEvento, String email) {
         exigirAceitaClaim(idEvento);
         return claimRepository.findByNmEmailIgnoreCaseAndEvento_IdAndFgExcluidoFalseOrderByDtCadastroDesc(
                         email.trim().toLowerCase(), idCodec.decodeEventoId(idEvento))
-                .stream().map(this::toClaimResponse).toList();
+                .stream().map(claimService::toResponse).toList();
     }
 
     @Transactional
@@ -320,23 +370,4 @@ public class PortalService {
                 i.getNmLocalEncontrado());
     }
 
-    private ClaimResponse toClaimResponse(Claim c) {
-        return new ClaimResponse(
-                idCodec.encodeClaimId(c.getId()),
-                c.getNmNome(),
-                c.getNmObjeto(),
-                c.getNmMarca(),
-                c.getNmModelo(),
-                c.getNmCor(),
-                c.getDtPerdeu(),
-                c.getStatus().getNmStatus(),
-                c.getCategoria().getNmCategoria(),
-                c.getEvento().getNmEvento(),
-                c.getDtCadastro(),
-                c.getNrCpf(),
-                c.getNmEmail(),
-                c.getNrTelefone(),
-                c.getNmLocal(),
-                c.getDsObjeto());
-    }
 }

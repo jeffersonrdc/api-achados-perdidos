@@ -40,12 +40,23 @@ public class CategoriaService {
         return lista.stream().map(this::toResponse).toList();
     }
 
-    /** Subcategorias (filhos) ativas de uma categoria-pai. */
+    /** Subcategorias (filhos) de uma categoria-pai. */
     @Transactional(readOnly = true)
-    public List<CategoriaResponse> findSubcategorias(String idPaiToken) {
+    public List<CategoriaResponse> findSubcategorias(String idPaiToken, boolean incluirInativos) {
         Long idPai = idCodec.decodeCategoriaId(idPaiToken);
-        return categoriaRepository.findByCategoriaPai_IdAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc(idPai)
-                .stream().map(this::toResponse).toList();
+        var lista = incluirInativos
+                ? categoriaRepository.findByCategoriaPai_IdAndFgExcluidoFalseOrderByOrOrdemAsc(idPai)
+                : categoriaRepository.findByCategoriaPai_IdAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc(idPai);
+        return lista.stream().map(this::toResponse).toList();
+    }
+
+    /** Todas as subcategorias (qualquer pai). */
+    @Transactional(readOnly = true)
+    public List<CategoriaResponse> findAllSubcategorias(boolean incluirInativos) {
+        var lista = incluirInativos
+                ? categoriaRepository.findByCategoriaPaiIsNotNullAndFgExcluidoFalseOrderByOrOrdemAsc()
+                : categoriaRepository.findByCategoriaPaiIsNotNullAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc();
+        return lista.stream().map(this::toResponse).toList();
     }
 
     /** Categorias-pai ativas (entidades) para montagem de árvore. */
@@ -69,11 +80,11 @@ public class CategoriaService {
     public CategoriaResponse create(CategoriaCreateRequest request) {
         auditoriaContext.marcarContexto();
         String nome = request.nmCategoria().trim();
-        if (categoriaRepository.existsByNmCategoriaIgnoreCaseAndFgExcluidoFalse(nome)) {
-            throw new IllegalArgumentException("Já existe uma categoria com este nome.");
-        }
+        Categoria pai = resolvePai(request.idCategoriaPai());
+        assertNomeUnico(nome, pai, null);
         Categoria c = new Categoria();
         c.setNmCategoria(nome);
+        c.setCategoriaPai(pai);
         c.setDsCategoria(request.dsCategoria());
         c.setIcIcone(request.icIcone());
         c.setOrOrdem(request.orOrdem() != null ? request.orOrdem() : 0);
@@ -87,11 +98,24 @@ public class CategoriaService {
     public CategoriaResponse update(String idToken, CategoriaUpdateRequest request) {
         auditoriaContext.marcarContexto();
         Categoria c = findEntity(idCodec.decodeCategoriaId(idToken));
+        if (request.idCategoriaPai() != null) {
+            if (request.idCategoriaPai().isBlank()) {
+                c.setCategoriaPai(null);
+            } else {
+                Long idPai = idCodec.decodeCategoriaId(request.idCategoriaPai());
+                if (idPai.equals(c.getId())) {
+                    throw new IllegalArgumentException("Uma categoria não pode ser pai de si mesma.");
+                }
+                Categoria pai = findEntity(idPai);
+                if (pai.getCategoriaPai() != null) {
+                    throw new IllegalArgumentException("O pai deve ser uma categoria de topo (sem avô).");
+                }
+                c.setCategoriaPai(pai);
+            }
+        }
         if (request.nmCategoria() != null) {
             String nome = request.nmCategoria().trim();
-            if (categoriaRepository.existsByNmCategoriaIgnoreCaseAndIdNotAndFgExcluidoFalse(nome, c.getId())) {
-                throw new IllegalArgumentException("Já existe uma categoria com este nome.");
-            }
+            assertNomeUnico(nome, c.getCategoriaPai(), c.getId());
             c.setNmCategoria(nome);
         }
         if (request.dsCategoria() != null) c.setDsCategoria(request.dsCategoria());
@@ -116,6 +140,33 @@ public class CategoriaService {
         return categoriaRepository.findById(id)
                 .filter(c -> !Boolean.TRUE.equals(c.getFgExcluido()))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Categoria não encontrada."));
+    }
+
+    private Categoria resolvePai(String idPaiToken) {
+        if (idPaiToken == null || idPaiToken.isBlank()) return null;
+        Categoria pai = findEntity(idCodec.decodeCategoriaId(idPaiToken));
+        if (pai.getCategoriaPai() != null) {
+            throw new IllegalArgumentException("O pai deve ser uma categoria de topo (sem avô).");
+        }
+        return pai;
+    }
+
+    private void assertNomeUnico(String nome, Categoria pai, Long idAtual) {
+        boolean existe;
+        if (pai == null) {
+            existe = idAtual == null
+                    ? categoriaRepository.existsByNmCategoriaIgnoreCaseAndCategoriaPaiIsNullAndFgExcluidoFalse(nome)
+                    : categoriaRepository.existsByNmCategoriaIgnoreCaseAndCategoriaPaiIsNullAndIdNotAndFgExcluidoFalse(nome, idAtual);
+        } else {
+            existe = idAtual == null
+                    ? categoriaRepository.existsByNmCategoriaIgnoreCaseAndCategoriaPai_IdAndFgExcluidoFalse(nome, pai.getId())
+                    : categoriaRepository.existsByNmCategoriaIgnoreCaseAndCategoriaPai_IdAndIdNotAndFgExcluidoFalse(nome, pai.getId(), idAtual);
+        }
+        if (existe) {
+            throw new IllegalArgumentException(pai == null
+                    ? "Já existe uma categoria com este nome."
+                    : "Já existe uma subcategoria com este nome nesta categoria.");
+        }
     }
 
     private CategoriaResponse toResponse(Categoria c) {

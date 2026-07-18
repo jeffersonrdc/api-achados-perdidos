@@ -7,7 +7,10 @@ import java.time.LocalTime;
 public record ClaimCreateRequest(
         @NotBlank String idEvento,
         @NotBlank String idCategoria,
+        String idSubcategoria,
         String idStatus,
+        /** PERDA (padrão) ou RETIRADA. */
+        String tpClaim,
         @NotBlank String nmNome,
         String nrCpf,
         String nmEmail,
@@ -17,7 +20,12 @@ public record ClaimCreateRequest(
         String nmMarca,
         String nmModelo,
         String nmCor,
+        String nmEstado,
+        String dsTags,
+        String tpPrioridade,
+        Boolean fgSensivel,
         LocalDate dtPerdeu,
         LocalTime hrPerdeu,
+        String idLocal,
         String nmLocal
 ) {}

@@ -26,8 +26,15 @@ public class CategoriaController {
                                            @RequestParam(required = false) String idPai) {
         // Com idPai -> subcategorias (filhos). Sem idPai -> apenas categorias-pai (topo).
         return (idPai != null && !idPai.isBlank())
-                ? categoriaService.findSubcategorias(idPai)
+                ? categoriaService.findSubcategorias(idPai, incluirInativos)
                 : categoriaService.findAll(incluirInativos);
+    }
+
+    /** Todas as subcategorias (qualquer pai) — tela /caracteristicas. */
+    @GetMapping("/subcategorias") @PreAuthorize("@authz.pode('categoria.listar')")
+    public List<CategoriaResponse> findAllSubcategorias(
+            @RequestParam(required = false, defaultValue = "false") boolean incluirInativos) {
+        return categoriaService.findAllSubcategorias(incluirInativos);
     }
 
     @GetMapping("/{id}") @PreAuthorize("@authz.pode('categoria.listar')")

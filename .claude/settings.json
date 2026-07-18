@@ -186,10 +186,15 @@
       "Bash(mvn -o test)",
       "Bash(python -c \"import yaml,sys; yaml.safe_load\\(open\\('.gitlab-ci.yml',encoding='utf-8'\\)\\); print\\('YAML OK'\\)\")",
       "Bash(python -c \"import yaml; yaml.safe_load\\(open\\('.gitlab-ci.yml',encoding='utf-8'\\)\\); print\\('gitlab-ci.yml OK'\\)\")",
-      "Bash(python -c \"import tomllib; tomllib.load\\(open\\('.gitleaks.toml','rb'\\)\\); print\\('.gitleaks.toml OK'\\)\")"
+      "Bash(python -c \"import tomllib; tomllib.load\\(open\\('.gitleaks.toml','rb'\\)\\); print\\('.gitleaks.toml OK'\\)\")",
+      "Bash(command -v ssh)",
+      "Bash(npm --version)",
+      "Bash(npm install *)",
+      "Bash(echo \"EXIT=$?\")"
     ],
     "additionalDirectories": [
-      "C:\\Projetos\\MatsersDevs\\api-achados-perdidos\\paineladmin\\src\\app\\shell\\topbar"
+      "C:\\Projetos\\MatsersDevs\\api-achados-perdidos\\paineladmin\\src\\app\\shell\\topbar",
+      "C:\\Projetos\\MatsersDevs\\sistema-placa\\Backend"
     ]
   }
 }

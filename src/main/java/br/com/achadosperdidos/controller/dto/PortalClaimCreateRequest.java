@@ -6,6 +6,7 @@ import java.time.LocalTime;
 
 public record PortalClaimCreateRequest(
         @NotBlank String idCategoria,
+        String idSubcategoria,
         @NotBlank String nmNome,
         String nrCpf,
         @NotBlank String nmEmail,
@@ -15,7 +16,12 @@ public record PortalClaimCreateRequest(
         String nmMarca,
         String nmModelo,
         String nmCor,
+        String nmEstado,
+        String dsTags,
+        String tpPrioridade,
+        Boolean fgSensivel,
         LocalDate dtPerdeu,
         LocalTime hrPerdeu,
+        String idLocal,
         String nmLocal
 ) {}

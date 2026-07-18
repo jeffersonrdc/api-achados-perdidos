@@ -6,6 +6,7 @@ import br.com.achadosperdidos.controller.dto.ClaimHistoricoResponse;
 import br.com.achadosperdidos.controller.dto.ClaimReprovarRequest;
 import br.com.achadosperdidos.controller.dto.ClaimResponse;
 import br.com.achadosperdidos.controller.dto.ClaimSolicitarInfoRequest;
+import br.com.achadosperdidos.controller.dto.ClaimUpdateRequest;
 import br.com.achadosperdidos.pagination.ApiPage;
 import br.com.achadosperdidos.service.ClaimService;
 import br.com.achadosperdidos.service.ClaimWorkflowService;
@@ -23,7 +24,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/claims")
-@Tag(name = "Claims", description = "Pedidos de devolução e workflow operacional (análise → aprovação/reprovação).")
+@Tag(name = "Claims", description = "Relatos de perda (PERDA) e pedidos de retirada (RETIRADA).")
 @SecurityRequirement(name = "bearerAuth")
 public class ClaimController {
     private final ClaimService claimService;
@@ -42,17 +43,49 @@ public class ClaimController {
 
     @GetMapping
     @PreAuthorize("@authz.pode('claim.listar')")
-    @Operation(summary = "Listar claims (paginado)", description = "Filtra opcionalmente por evento (`idEvento` assinado).")
+    @Operation(summary = "Listar claims (paginado)",
+            description = "Filtra por evento, tipo (`PERDA`/`RETIRADA`), busca livre, categoria, local, status e data.")
     public ApiPage<ClaimResponse> findAll(@RequestParam(required = false) Integer page,
                                           @RequestParam(required = false) Integer limit,
-                                          @Parameter(description = "ID assinado do evento") @RequestParam(required = false) String idEvento) {
-        return claimService.findAll(page, limit, idEvento);
+                                          @Parameter(description = "ID assinado do evento") @RequestParam(required = false) String idEvento,
+                                          @Parameter(description = "Busca livre por nome, objeto, local ou protocolo") @RequestParam(required = false) String q,
+                                          @Parameter(description = "ID assinado da categoria") @RequestParam(required = false) String idCategoria,
+                                          @RequestParam(required = false) String local,
+                                          @RequestParam(required = false) String status,
+                                          @Parameter(description = "Data de cadastro (yyyy-MM-dd ou dd/MM/yyyy)") @RequestParam(required = false) String data,
+                                          @Parameter(description = "PERDA ou RETIRADA") @RequestParam(required = false) String tipo) {
+        return claimService.findAll(page, limit, idEvento, q, idCategoria, local, status, data, tipo);
+    }
+
+    @GetMapping("/resumo")
+    @PreAuthorize("@authz.pode('claim.listar')")
+    @Operation(summary = "Resumo/cards dos claims do evento")
+    public br.com.achadosperdidos.controller.dto.ClaimResumoResponse resumo(
+            @Parameter(description = "ID assinado do evento") @RequestParam String idEvento,
+            @Parameter(description = "PERDA ou RETIRADA") @RequestParam(required = false) String tipo) {
+        return claimService.resumo(idEvento, tipo);
+    }
+
+    @GetMapping("/filtros")
+    @PreAuthorize("@authz.pode('claim.listar')")
+    @Operation(summary = "Opções de filtro dos claims do evento")
+    public br.com.achadosperdidos.controller.dto.ColetaFiltrosResponse filtros(
+            @Parameter(description = "ID assinado do evento") @RequestParam String idEvento,
+            @Parameter(description = "PERDA ou RETIRADA") @RequestParam(required = false) String tipo) {
+        return claimService.filtros(idEvento, tipo);
     }
 
     @GetMapping("/{id}")
     @PreAuthorize("@authz.pode('claim.listar')")
     @Operation(summary = "Buscar claim por ID assinado")
     public ClaimResponse findById(@PathVariable String id) { return claimService.findById(id); }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("@authz.podeQualquer('claim.editar', 'claim.criar')")
+    @Operation(summary = "Atualizar claim")
+    public ClaimResponse update(@PathVariable String id, @Valid @RequestBody ClaimUpdateRequest request) {
+        return claimService.update(id, request);
+    }
 
     @DeleteMapping("/{id}")
     @PreAuthorize("@authz.pode('claim.excluir')")

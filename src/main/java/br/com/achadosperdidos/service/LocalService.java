@@ -55,7 +55,7 @@ public class LocalService {
         l.setNmHorario(request.nmHorario());
         l.setDsObservacao(request.dsObservacao());
         l.setDtCadastro(LocalDateTime.now());
-        l.setFgAtivo(true);
+        l.setFgAtivo(request.fgAtivo() == null || Boolean.TRUE.equals(request.fgAtivo()));
         l.setFgExcluido(false);
         return toResponse(localRepository.save(l));
     }

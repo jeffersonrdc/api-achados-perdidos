@@ -2,6 +2,7 @@ package br.com.achadosperdidos.controller.dto;
 
 public record CategoriaUpdateRequest(
         String nmCategoria,
+        String idCategoriaPai,
         String dsCategoria,
         String icIcone,
         Integer orOrdem,
