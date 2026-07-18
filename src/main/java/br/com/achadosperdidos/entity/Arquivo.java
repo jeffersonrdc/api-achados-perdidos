@@ -16,6 +16,8 @@ public class Arquivo {
     @Column(name = "TP_Arquivo", nullable = false, length = 30) private String tpArquivo;
     @Column(name = "NM_Arquivo", nullable = false, length = 255) private String nmArquivo;
     @Column(name = "NM_Path", nullable = false, length = 500) private String nmPath;
+    /** LOCAL ou S3 — provedor físico deste registro (não muda ao trocar o padrão). */
+    @Column(name = "TP_Storage", nullable = false, length = 10) private String tpStorage = "LOCAL";
     @Column(name = "TP_Mime", length = 100) private String tpMime;
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Principal", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgPrincipal = false;
     @Column(name = "QT_Bytes") private Long qtBytes;
@@ -30,6 +32,7 @@ public class Arquivo {
     public String getTpArquivo(){return tpArquivo;} public void setTpArquivo(String tpArquivo){this.tpArquivo=tpArquivo;}
     public String getNmArquivo(){return nmArquivo;} public void setNmArquivo(String nmArquivo){this.nmArquivo=nmArquivo;}
     public String getNmPath(){return nmPath;} public void setNmPath(String nmPath){this.nmPath=nmPath;}
+    public String getTpStorage(){return tpStorage;} public void setTpStorage(String tpStorage){this.tpStorage=tpStorage;}
     public String getTpMime(){return tpMime;} public void setTpMime(String tpMime){this.tpMime=tpMime;}
     public Boolean getFgPrincipal(){return fgPrincipal;} public void setFgPrincipal(Boolean fgPrincipal){this.fgPrincipal=fgPrincipal;}
     public Long getQtBytes(){return qtBytes;} public void setQtBytes(Long qtBytes){this.qtBytes=qtBytes;}

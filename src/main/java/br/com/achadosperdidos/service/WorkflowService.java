@@ -47,7 +47,7 @@ public class WorkflowService {
      */
     private static final Map<String, Set<String>> TRANSICOES = Map.ofEntries(
             Map.entry("Encontrado", Set.of("Coletado", "Descartado")),
-            Map.entry("Coletado", Set.of("Aguardando triagem", "Descartado")),
+            Map.entry("Coletado", Set.of("Aguardando triagem", "Em estoque", "Descartado")),
             Map.entry("Aguardando triagem", Set.of("Em Análise", "Em triagem", "Descartado")),
             Map.entry("Em Análise", Set.of("Em triagem", "Em transporte para estoque", "Aguardando triagem", "Descartado")),
             Map.entry("Em triagem", Set.of("Em Análise", "Em transporte para estoque", "Aguardando triagem", "Descartado")),

@@ -8,7 +8,6 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -22,7 +21,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/arquivos")
-@Tag(name = "Arquivos", description = "Upload, listagem e download de anexos.")
+@Tag(name = "Arquivos", description = "Upload, listagem e download de anexos (Local ou S3 via API).")
 @SecurityRequirement(name = "bearerAuth")
 public class ArquivoController {
     private final ArquivoService arquivoService;
@@ -49,7 +48,7 @@ public class ArquivoController {
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("@authz.pode('arquivo.gerenciar')")
-    @Operation(summary = "Enviar arquivo (multipart)")
+    @Operation(summary = "Enviar arquivo (multipart) — grava no provedor padrão (LOCAL/S3)")
     public ResponseEntity<ArquivoResponse> upload(
             @RequestParam String tpEntidade,
             @Parameter(description = "ID assinado da entidade") @RequestParam String idEntidade,
@@ -62,24 +61,23 @@ public class ArquivoController {
 
     @GetMapping("/{id}/download")
     @PreAuthorize("@authz.pode('arquivo.listar')")
-    @Operation(summary = "Baixar arquivo por ID assinado")
+    @Operation(summary = "Baixar arquivo por ID assinado (streaming Local/S3)")
     public ResponseEntity<Resource> download(@Parameter(description = "ID assinado do arquivo") @PathVariable String id) {
         var conteudo = arquivoService.carregarConteudo(id);
         MediaType mime = conteudo.tpMime() != null
                 ? MediaType.parseMediaType(conteudo.tpMime())
                 : MediaType.APPLICATION_OCTET_STREAM;
-        // attachment + nosniff: o conteúdo (potencialmente HTML/SVG enviado por um
-        // operador) nunca é renderizado inline no domínio da API — evita XSS
-        // armazenado (OWASP A03). O nome é sanitizado para não injetar no header.
         String nomeSeguro = sanitizarNomeArquivo(conteudo.nmArquivo());
-        return ResponseEntity.ok()
+        ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
                 .contentType(mime)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + nomeSeguro + "\"")
-                .header("X-Content-Type-Options", "nosniff")
-                .body(new FileSystemResource(conteudo.caminho()));
+                .header("X-Content-Type-Options", "nosniff");
+        if (conteudo.qtBytes() != null && conteudo.qtBytes() >= 0) {
+            builder.contentLength(conteudo.qtBytes());
+        }
+        return builder.body(conteudo.resource());
     }
 
-    /** Remove aspas, quebras de linha e separadores de caminho do nome exposto no header. */
     private static String sanitizarNomeArquivo(String nome) {
         if (nome == null || nome.isBlank()) {
             return "arquivo";

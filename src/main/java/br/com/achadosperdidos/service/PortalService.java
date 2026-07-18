@@ -15,9 +15,11 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class PortalService {
@@ -25,12 +27,17 @@ public class PortalService {
     /** Status que tornam o item visível na consulta pública (após triagem, no estoque). */
     private static final List<String> STATUS_PORTAL = List.of(
             "Em estoque", "Com pedido de devolucao", "Aguardando retirada");
+    private static final int MAX_COMPROVANTES_RETIRADA = 5;
+    private static final long MAX_BYTES_COMPROVANTE = 10L * 1024 * 1024;
+    private static final Set<String> MIME_COMPROVANTE = Set.of(
+            "image/jpeg", "image/pjpeg", "image/png", "application/pdf");
 
     private final EventoRepository eventoRepository;
     private final EventoConfiguracaoRepository eventoConfiguracaoRepository;
     private final ItemRepository itemRepository;
     private final ClaimRepository claimRepository;
     private final ClaimValidacaoRepository claimValidacaoRepository;
+    private final ArquivoRepository arquivoRepository;
     private final ClaimService claimService;
     private final ArquivoService arquivoService;
     private final CategoriaService categoriaService;
@@ -49,6 +56,7 @@ public class PortalService {
                          ItemRepository itemRepository,
                          ClaimRepository claimRepository,
                          ClaimValidacaoRepository claimValidacaoRepository,
+                         ArquivoRepository arquivoRepository,
                          ClaimService claimService,
                          ArquivoService arquivoService,
                          CategoriaService categoriaService,
@@ -66,6 +74,7 @@ public class PortalService {
         this.itemRepository = itemRepository;
         this.claimRepository = claimRepository;
         this.claimValidacaoRepository = claimValidacaoRepository;
+        this.arquivoRepository = arquivoRepository;
         this.claimService = claimService;
         this.arquivoService = arquivoService;
         this.categoriaService = categoriaService;
@@ -90,7 +99,7 @@ public class PortalService {
 
     @Transactional(readOnly = true)
     public PortalEventoResumoResponse detalharEvento(String idEvento) {
-        return toEventoResumo(findEvento(idCodec.decodeEventoId(idEvento)));
+        return toEventoResumo(findEvento(idCodec.decodeEventoIdAssinado(idEvento)));
     }
 
     /** Categorias para os formulários públicos (registro de objeto perdido). */
@@ -124,7 +133,7 @@ public class PortalService {
         exigirConsultaPublica(idEvento);
         int p = PaginationParams.resolvePage(page);
         int l = PaginationParams.resolveLimit(limit);
-        Long eventoId = idCodec.decodeEventoId(idEvento);
+        Long eventoId = idCodec.decodeEventoIdAssinado(idEvento);
         // Só aparecem no portal os itens que já passaram pela triagem e chegaram ao estoque.
         Page<Item> result = itemRepository.findByEvento_IdAndFgExcluidoFalseAndFgAtivoTrueAndFgEntregueFalseAndFgDescartadoFalseAndStatus_NmStatusIn(
                 eventoId, STATUS_PORTAL, PageRequest.of(p - 1, l));
@@ -138,7 +147,7 @@ public class PortalService {
     @Transactional
     public ClaimResponse registrarObjetoPerdido(String idEvento, PortalClaimCreateRequest request) {
         exigirAceitaClaim(idEvento);
-        Evento evento = findEvento(idCodec.decodeEventoId(idEvento));
+        Evento evento = findEvento(idCodec.decodeEventoIdAssinado(idEvento));
         Claim claim = new Claim();
         claim.setEvento(evento);
         claim.setTpClaim(ClaimService.TIPO_PERDA);
@@ -160,12 +169,13 @@ public class PortalService {
     @Transactional
     public PortalClaimResultResponse reclamarItem(String idEvento, PortalClaimItemRequest request) {
         exigirAceitaClaim(idEvento);
-        Long eventoId = idCodec.decodeEventoId(idEvento);
-        Item item = itemRepository.findById(idCodec.decodeItemId(request.idItem()))
+        Long eventoId = idCodec.decodeEventoIdAssinado(idEvento);
+        Item item = itemRepository.findById(idCodec.decodeItemIdAssinado(request.idItem()))
                 .filter(i -> !Boolean.TRUE.equals(i.getFgExcluido()))
                 .filter(i -> i.getEvento().getId().equals(eventoId))
                 .filter(i -> !Boolean.TRUE.equals(i.getFgEntregue()))
                 .filter(i -> !Boolean.TRUE.equals(i.getFgDescartado()))
+                .filter(i -> i.getStatus() != null && STATUS_PORTAL.contains(i.getStatus().getNmStatus()))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Item não encontrado no evento."));
 
         Claim claim = new Claim();
@@ -211,12 +221,59 @@ public class PortalService {
                 "Claim registrado. A equipe do evento irá validar a correspondência com o item.");
     }
 
+    /**
+     * Anexa comprovantes ao pedido público de retirada.
+     * O vínculo é feito diretamente no claim para que os arquivos apareçam na análise administrativa.
+     */
+    @Transactional
+    public List<ArquivoResponse> uploadComprovantesRetirada(
+            String idEvento, String idClaim, List<MultipartFile> anexos) {
+        exigirAceitaClaim(idEvento);
+        Long eventoId = idCodec.decodeEventoIdAssinado(idEvento);
+        Claim claim = claimRepository.findById(idCodec.decodeClaimIdAssinado(idClaim))
+                .filter(c -> !Boolean.TRUE.equals(c.getFgExcluido()))
+                .filter(c -> c.getEvento().getId().equals(eventoId))
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Solicitação não encontrada no evento."));
+        if (!ClaimService.TIPO_RETIRADA.equalsIgnoreCase(claim.getTpClaim())) {
+            throw new IllegalArgumentException("Somente solicitações de retirada aceitam comprovantes neste endpoint.");
+        }
+
+        List<MultipartFile> arquivos = anexos == null ? List.of() : anexos.stream()
+                .filter(f -> f != null && !f.isEmpty())
+                .toList();
+        if (arquivos.isEmpty()) {
+            throw new IllegalArgumentException("Envie ao menos um comprovante.");
+        }
+        long existentes = arquivoRepository
+                .countByTpEntidadeAndIdEntidadeAndTpArquivoIgnoreCaseAndFgExcluidoFalse(
+                        "CLAIM", claim.getId(), "COMPROVANTE");
+        if (existentes + arquivos.size() > MAX_COMPROVANTES_RETIRADA) {
+            throw new IllegalArgumentException(
+                    "A solicitação aceita no máximo " + MAX_COMPROVANTES_RETIRADA + " comprovantes.");
+        }
+        for (MultipartFile arquivo : arquivos) {
+            if (arquivo.getSize() > MAX_BYTES_COMPROVANTE) {
+                throw new IllegalArgumentException("Cada comprovante deve ter no máximo 10 MB.");
+            }
+            String mime = normalizarMime(arquivo.getContentType());
+            if (!MIME_COMPROVANTE.contains(mime)) {
+                throw new IllegalArgumentException("Envie apenas comprovantes PDF, JPEG ou PNG.");
+            }
+        }
+
+        String claimAssinado = idCodec.encodeClaimId(claim.getId());
+        return arquivos.stream()
+                .map(arquivo -> arquivoService.upload(
+                        "CLAIM", claimAssinado, "COMPROVANTE", arquivo, false))
+                .toList();
+    }
+
     /** Upload público de foto para relato de perda (CLAIM / FOTO). */
     @Transactional
     public ArquivoResponse uploadFotoClaim(String idEvento, String idClaim, org.springframework.web.multipart.MultipartFile file) {
         exigirAceitaClaim(idEvento);
-        Long eventoId = idCodec.decodeEventoId(idEvento);
-        Claim claim = claimRepository.findById(idCodec.decodeClaimId(idClaim))
+        Long eventoId = idCodec.decodeEventoIdAssinado(idEvento);
+        Claim claim = claimRepository.findById(idCodec.decodeClaimIdAssinado(idClaim))
                 .filter(c -> !Boolean.TRUE.equals(c.getFgExcluido()))
                 .filter(c -> c.getEvento().getId().equals(eventoId))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Claim não encontrado no evento."));
@@ -236,11 +293,18 @@ public class PortalService {
         return arquivoService.upload("CLAIM", idCodec.encodeClaimId(claim.getId()), "FOTO", file, true);
     }
 
+    private static String normalizarMime(String contentType) {
+        if (contentType == null) return "";
+        String mime = contentType.trim().toLowerCase();
+        int separator = mime.indexOf(';');
+        return separator >= 0 ? mime.substring(0, separator).trim() : mime;
+    }
+
     @Transactional(readOnly = true)
     public List<ClaimResponse> meusClaims(String idEvento, String email) {
         exigirAceitaClaim(idEvento);
         return claimRepository.findByNmEmailIgnoreCaseAndEvento_IdAndFgExcluidoFalseOrderByDtCadastroDesc(
-                        email.trim().toLowerCase(), idCodec.decodeEventoId(idEvento))
+                        email.trim().toLowerCase(), idCodec.decodeEventoIdAssinado(idEvento))
                 .stream().map(claimService::toResponse).toList();
     }
 
@@ -249,7 +313,7 @@ public class PortalService {
         if (!idEvento.equals(request.idEvento())) {
             throw new IllegalArgumentException("O evento do corpo deve coincidir com o evento do portal.");
         }
-        findEvento(idCodec.decodeEventoId(idEvento));
+        findEvento(idCodec.decodeEventoIdAssinado(idEvento));
         return criancaService.create(request);
     }
 
@@ -313,8 +377,8 @@ public class PortalService {
     }
 
     private EventoConfiguracao config(String idEvento) {
-        return eventoConfiguracaoRepository.findByEvento_IdAndFgExcluidoFalse(idCodec.decodeEventoId(idEvento))
-                .orElseGet(() -> configPadrao(findEvento(idCodec.decodeEventoId(idEvento))));
+        return eventoConfiguracaoRepository.findByEvento_IdAndFgExcluidoFalse(idCodec.decodeEventoIdAssinado(idEvento))
+                .orElseGet(() -> configPadrao(findEvento(idCodec.decodeEventoIdAssinado(idEvento))));
     }
 
     private EventoConfiguracao configPadrao(Evento evento) {
@@ -359,6 +423,9 @@ public class PortalService {
     }
 
     private PortalItemCatalogoResponse toCatalogoItem(Item i) {
+        String idFoto = arquivoService.fotoPrincipalItem(i.getId())
+                .map(a -> idCodec.encodeArquivoId(a.getId()))
+                .orElse(null);
         return new PortalItemCatalogoResponse(
                 idCodec.encodeItemId(i.getId()),
                 i.getNmTitulo(),
@@ -367,7 +434,14 @@ public class PortalService {
                 i.getNmModelo(),
                 i.getNmCor(),
                 i.getDtEncontrado(),
-                i.getNmLocalEncontrado());
+                i.getNmLocalEncontrado(),
+                idFoto);
+    }
+
+    /** Streaming público da foto principal de item do catálogo. */
+    @Transactional(readOnly = true)
+    public ArquivoService.ArquivoConteudo baixarFotoPublica(String idArquivo) {
+        return arquivoService.carregarConteudoPublicoItem(idArquivo);
     }
 
 }

@@ -17,6 +17,8 @@ import br.com.achadosperdidos.repository.ItemRepository;
 import br.com.achadosperdidos.repository.TriagemRepository;
 import br.com.achadosperdidos.security.SignedResourceIdCodec;
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -35,7 +37,12 @@ import java.util.List;
 public class TriagemService {
     private static final String STATUS_EM_ANDAMENTO = "EM_ANDAMENTO";
     private static final String STATUS_CONCLUIDA = "CONCLUIDA";
-    private static final List<String> STATUS_FILA = List.of("Aguardando triagem", "Em Análise", "Em triagem");
+    private static final String STATUS_ESTOQUE = "Em estoque";
+    /** Status legados da fila (antes do cadastro já liberar ao estoque). */
+    private static final List<String> STATUS_FILA_LEGADO = List.of("Aguardando triagem", "Em Análise", "Em triagem");
+    /** Status exibidos nos filtros da tela. */
+    private static final List<String> STATUS_FILA = List.of(
+            "Aguardando triagem", "Em Análise", "Em triagem", STATUS_ESTOQUE);
 
     private final TriagemRepository triagemRepository;
     private final ItemRepository itemRepository;
@@ -82,14 +89,19 @@ public class TriagemService {
         return toResponse(triagemRepository.save(triagem));
     }
 
-    /** Marca o item como "Em Análise" (botão Analisar Item) e abre/atualiza o registro de triagem. */
+    /**
+     * Abre/atualiza o registro de triagem para análise.
+     * Não força mudança de status quando o item já está em estoque (cadastro já liberou).
+     */
     @Transactional
     public TriagemResponse analisar(String idItem) {
         auditoriaContext.marcarContexto();
         Item item = findItem(idItem);
-        // Só transiciona se ainda não estiver em análise (evita erro de transição para o mesmo status).
-        if (!"Em Análise".equalsIgnoreCase(item.getStatus() != null ? item.getStatus().getNmStatus() : "")) {
-            workflowService.transitar(idItem, new ItemTransicaoRequest("Em Análise", "Item em análise na triagem"));
+        String statusAtual = item.getStatus() != null ? item.getStatus().getNmStatus() : "";
+        // Mantém "Em estoque"; só tenta "Em Análise" quando a transição for permitida (fila legada).
+        if (!STATUS_ESTOQUE.equalsIgnoreCase(statusAtual)
+                && !"Em Análise".equalsIgnoreCase(statusAtual)) {
+            workflowService.transitarSePermitido(idItem, "Em Análise", "Item em análise na triagem");
         }
         Triagem triagem = getOrCreate(item);
         triagem.setOperador(usuarioLogadoOuNulo());
@@ -108,7 +120,10 @@ public class TriagemService {
         return toResponse(triagemRepository.save(triagem));
     }
 
-    /** Conclui a triagem: aplica a classificacao, define a localizacao e encaminha ao estoque. */
+    /**
+     * Conclui a triagem: aplica a classificacao/observacoes e remove o item da fila.
+     * O item permanece (ou passa a ficar) em estoque — a liberacao primaria ocorre no cadastro.
+     */
     @Transactional
     public TriagemResponse concluir(String idItem, TriagemSalvarRequest request) {
         auditoriaContext.marcarContexto();
@@ -122,10 +137,8 @@ public class TriagemService {
         triagem.setDtConclusao(LocalDateTime.now());
         if (triagem.getOperador() == null) triagem.setOperador(usuarioLogadoOuNulo());
         triagemRepository.save(triagem);
-        // Encaminha para o estoque: Em triagem -> Em transporte para estoque -> Em estoque.
-        // Ao chegar em "Em estoque" o item fica disponível na consulta pública (portal).
-        workflowService.transitar(idItem, new ItemTransicaoRequest("Em transporte para estoque", "Triagem concluída"));
-        workflowService.transitar(idItem, new ItemTransicaoRequest("Em estoque", "Item disponibilizado no estoque após triagem"));
+        // Itens da fila legada saem da triagem e ficam só no estoque.
+        garantirEmEstoque(idItem);
         return toResponse(triagem);
     }
 
@@ -167,12 +180,31 @@ public class TriagemService {
             List<Predicate> ps = new ArrayList<>();
             ps.add(cb.isFalse(root.get("fgExcluido")));
             ps.add(cb.equal(root.get("evento").get("id"), eventoId));
-            // Restringe à fila de triagem (ou ao status específico, se filtrado e válido).
+
+            Subquery<Long> triagemConcluida = query.subquery(Long.class);
+            Root<Triagem> tRoot = triagemConcluida.from(Triagem.class);
+            triagemConcluida.select(tRoot.get("id"));
+            triagemConcluida.where(
+                    cb.equal(tRoot.get("item").get("id"), root.get("id")),
+                    cb.isFalse(tRoot.get("fgExcluido")),
+                    cb.equal(tRoot.get("tpStatus"), STATUS_CONCLUIDA));
+
+            Predicate legado = root.get("status").get("nmStatus").in(STATUS_FILA_LEGADO);
+            Predicate estoquePendente = cb.and(
+                    cb.equal(root.get("status").get("nmStatus"), STATUS_ESTOQUE),
+                    cb.not(cb.exists(triagemConcluida)));
+
             if (status != null && !status.isBlank() && STATUS_FILA.contains(status)) {
-                ps.add(cb.equal(root.get("status").get("nmStatus"), status));
+                if (STATUS_ESTOQUE.equals(status)) {
+                    ps.add(estoquePendente);
+                } else {
+                    ps.add(cb.equal(root.get("status").get("nmStatus"), status));
+                }
             } else {
-                ps.add(root.get("status").get("nmStatus").in(STATUS_FILA));
+                // Fila: status legado OU em estoque ainda sem triagem concluída.
+                ps.add(cb.or(legado, estoquePendente));
             }
+
             if (categoriaId != null) ps.add(cb.equal(root.get("categoria").get("id"), categoriaId));
             if (local != null && !local.isBlank()) ps.add(cb.equal(root.get("nmLocalEncontrado"), local));
             if (tpPrioridade != null && !tpPrioridade.isBlank())
@@ -204,13 +236,15 @@ public class TriagemService {
     @Transactional(readOnly = true)
     public TriagemResumoResponse resumo(String idEvento) {
         Long ev = idCodec.decodeEventoId(idEvento);
-        long aguardando = itemRepository.countByEvento_IdAndFgExcluidoFalseAndStatus_NmStatus(ev, "Aguardando triagem");
+        long estoquePendente = itemRepository.countEstoquePendenteTriagem(ev);
+        long aguardando = itemRepository.countByEvento_IdAndFgExcluidoFalseAndStatus_NmStatus(ev, "Aguardando triagem")
+                + estoquePendente;
         long emAnalise = itemRepository.countByEvento_IdAndFgExcluidoFalseAndStatus_NmStatus(ev, "Em Análise");
         long emTriagem = itemRepository.countByEvento_IdAndFgExcluidoFalseAndStatus_NmStatus(ev, "Em triagem");
-        long total = itemRepository.countByEvento_IdAndFgExcluidoFalseAndStatus_NmStatusIn(ev, STATUS_FILA);
-        long sensiveis = itemRepository.countByEvento_IdAndFgExcluidoFalseAndFgSensivelTrueAndStatus_NmStatusIn(ev, STATUS_FILA);
-        long categorias = itemRepository.countCategoriasDistintas(ev, STATUS_FILA);
-        List<TriagemResumoResponse.CategoriaQt> porCategoria = itemRepository.contagemPorCategoria(ev, STATUS_FILA)
+        long total = itemRepository.countNaFilaTriagem(ev, STATUS_FILA_LEGADO);
+        long sensiveis = itemRepository.countSensiveisNaFila(ev, STATUS_FILA_LEGADO);
+        long categorias = itemRepository.countCategoriasDistintas(ev, STATUS_FILA_LEGADO);
+        List<TriagemResumoResponse.CategoriaQt> porCategoria = itemRepository.contagemPorCategoria(ev, STATUS_FILA_LEGADO)
                 .stream()
                 .map(r -> new TriagemResumoResponse.CategoriaQt(
                         r[0] != null ? r[0].toString() : "Outros",
@@ -271,7 +305,14 @@ public class TriagemService {
     }
 
     private Triagem getOrCreate(Item item) {
-        return triagemRepository.findByItem_IdAndFgExcluidoFalse(item.getId())
+        return triagemRepository.findByItem_Id(item.getId())
+                .map(t -> {
+                    if (Boolean.TRUE.equals(t.getFgExcluido())) {
+                        t.setFgExcluido(false);
+                        t.setFgAtivo(true);
+                    }
+                    return t;
+                })
                 .orElseGet(() -> {
                     Triagem t = new Triagem();
                     t.setItem(item);
@@ -283,6 +324,16 @@ public class TriagemService {
                     t.setFgExcluido(false);
                     return t;
                 });
+    }
+
+    /** Garante status Em estoque após concluir (fila legada ou já liberado no cadastro). */
+    private void garantirEmEstoque(String idItem) {
+        Item item = findItem(idItem);
+        String status = item.getStatus() != null ? item.getStatus().getNmStatus() : "";
+        if (STATUS_ESTOQUE.equalsIgnoreCase(status)) return;
+        workflowService.transitarSePermitido(idItem, "Em Análise", "Preparando liberação ao estoque");
+        workflowService.transitarSePermitido(idItem, "Em transporte para estoque", "Triagem concluída");
+        workflowService.transitarSePermitido(idItem, "Em estoque", "Item disponível no estoque após triagem");
     }
 
     private Item findItem(String idItem) {

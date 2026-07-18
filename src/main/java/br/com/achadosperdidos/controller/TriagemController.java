@@ -58,7 +58,7 @@ public class TriagemController {
 
     @PostMapping("/itens/{idItem}/analisar")
     @PreAuthorize("@authz.pode('triagem.iniciar')")
-    @Operation(summary = "Analisar item na triagem")
+    @Operation(summary = "Analisar item na triagem (abre registro; não remove do estoque)")
     public TriagemResponse analisar(@Parameter(description = "ID assinado do item") @PathVariable String idItem) {
         return triagemService.analisar(idItem);
     }
@@ -93,7 +93,7 @@ public class TriagemController {
 
     @PostMapping("/itens/{idItem}/concluir")
     @PreAuthorize("@authz.pode('triagem.concluir')")
-    @Operation(summary = "Concluir triagem do item")
+    @Operation(summary = "Concluir triagem do item (apenas atualiza dados; não encaminha ao estoque)")
     public TriagemResponse concluir(@Parameter(description = "ID assinado do item") @PathVariable String idItem, @Valid @RequestBody TriagemSalvarRequest request) {
         return triagemService.concluir(idItem, request);
     }

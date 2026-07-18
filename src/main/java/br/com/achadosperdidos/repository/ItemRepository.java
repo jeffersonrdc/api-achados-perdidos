@@ -57,15 +57,74 @@ public interface ItemRepository extends JpaRepository<Item, Long>, JpaSpecificat
     @Query("""
             SELECT COUNT(DISTINCT i.categoria.id) FROM Item i
              WHERE i.evento.id = :eventoId AND i.fgExcluido = false
-               AND i.status.nmStatus IN :statuses""")
+               AND (
+                 i.status.nmStatus IN :statuses
+                 OR (
+                   i.status.nmStatus = 'Em estoque'
+                   AND NOT EXISTS (
+                     SELECT 1 FROM Triagem t
+                      WHERE t.item.id = i.id AND t.fgExcluido = false AND t.tpStatus = 'CONCLUIDA'
+                   )
+                 )
+               )""")
     long countCategoriasDistintas(@Param("eventoId") Long eventoId, @Param("statuses") Collection<String> statuses);
 
     @Query("""
             SELECT i.categoria.nmCategoria AS nome, COUNT(i) AS qt FROM Item i
              WHERE i.evento.id = :eventoId AND i.fgExcluido = false
-               AND i.status.nmStatus IN :statuses
+               AND (
+                 i.status.nmStatus IN :statuses
+                 OR (
+                   i.status.nmStatus = 'Em estoque'
+                   AND NOT EXISTS (
+                     SELECT 1 FROM Triagem t
+                      WHERE t.item.id = i.id AND t.fgExcluido = false AND t.tpStatus = 'CONCLUIDA'
+                   )
+                 )
+               )
              GROUP BY i.categoria.nmCategoria ORDER BY qt DESC""")
     List<Object[]> contagemPorCategoria(@Param("eventoId") Long eventoId, @Param("statuses") Collection<String> statuses);
+
+    /** Itens já no estoque que ainda não tiveram a triagem concluída (aparecem na fila). */
+    @Query("""
+            SELECT COUNT(i) FROM Item i
+             WHERE i.evento.id = :eventoId AND i.fgExcluido = false
+               AND i.status.nmStatus = 'Em estoque'
+               AND NOT EXISTS (
+                 SELECT 1 FROM Triagem t
+                  WHERE t.item.id = i.id AND t.fgExcluido = false AND t.tpStatus = 'CONCLUIDA'
+               )""")
+    long countEstoquePendenteTriagem(@Param("eventoId") Long eventoId);
+
+    @Query("""
+            SELECT COUNT(i) FROM Item i
+             WHERE i.evento.id = :eventoId AND i.fgExcluido = false AND i.fgSensivel = true
+               AND (
+                 i.status.nmStatus IN :statuses
+                 OR (
+                   i.status.nmStatus = 'Em estoque'
+                   AND NOT EXISTS (
+                     SELECT 1 FROM Triagem t
+                      WHERE t.item.id = i.id AND t.fgExcluido = false AND t.tpStatus = 'CONCLUIDA'
+                   )
+                 )
+               )""")
+    long countSensiveisNaFila(@Param("eventoId") Long eventoId, @Param("statuses") Collection<String> statuses);
+
+    @Query("""
+            SELECT COUNT(i) FROM Item i
+             WHERE i.evento.id = :eventoId AND i.fgExcluido = false
+               AND (
+                 i.status.nmStatus IN :statuses
+                 OR (
+                   i.status.nmStatus = 'Em estoque'
+                   AND NOT EXISTS (
+                     SELECT 1 FROM Triagem t
+                      WHERE t.item.id = i.id AND t.fgExcluido = false AND t.tpStatus = 'CONCLUIDA'
+                   )
+                 )
+               )""")
+    long countNaFilaTriagem(@Param("eventoId") Long eventoId, @Param("statuses") Collection<String> statuses);
 
     // ---- Transferência: itens disponíveis em um local ----
     @EntityGraph(attributePaths = {"categoria", "localAtual"})

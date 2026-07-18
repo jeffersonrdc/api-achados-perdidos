@@ -4,11 +4,13 @@ import br.com.achadosperdidos.support.IntegrationTestBase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -39,7 +41,7 @@ class PortalIntegrationTest extends IntegrationTestBase {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].nmTitulo").value("iPhone 15 Pro"));
 
-        mockMvc.perform(post("/api/v1/portal/eventos/" + idEvento + "/claims/item")
+        var claimResult = mockMvc.perform(post("/api/v1/portal/eventos/" + idEvento + "/claims/item")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(objectMapper.createObjectNode()
                                 .put("idItem", idItem)
@@ -47,7 +49,25 @@ class PortalIntegrationTest extends IntegrationTestBase {
                                 .put("nmEmail", "maria.portal@teste.com")
                                 .put("dsObservacao", "Tenho a nota fiscal"))))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.stValidacao").value("PENDENTE"));
+                .andExpect(jsonPath("$.stValidacao").value("PENDENTE"))
+                .andReturn();
+        String idClaim = objectMapper.readTree(claimResult.getResponse().getContentAsString())
+                .get("idClaim").asText();
+
+        MockMultipartFile comprovante = new MockMultipartFile(
+                "anexos", "nota-fiscal.pdf", MediaType.APPLICATION_PDF_VALUE, "%PDF-1.4 teste".getBytes());
+        mockMvc.perform(multipart(
+                        "/api/v1/portal/eventos/" + idEvento + "/claims/" + idClaim + "/comprovantes")
+                        .file(comprovante))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$[0].tpEntidade").value("CLAIM"))
+                .andExpect(jsonPath("$[0].tpArquivo").value("COMPROVANTE"))
+                .andExpect(jsonPath("$[0].nmArquivo").value("nota-fiscal.pdf"));
+
+        // Endpoints públicos rejeitam ID numérico (exigem token s2.*).
+        mockMvc.perform(multipart("/api/v1/portal/eventos/" + idEvento + "/claims/1/comprovantes")
+                        .file(comprovante))
+                .andExpect(status().isBadRequest());
 
         mockMvc.perform(post("/api/v1/portal/auth/registro")
                         .contentType(MediaType.APPLICATION_JSON)

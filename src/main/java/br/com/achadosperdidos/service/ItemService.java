@@ -85,9 +85,10 @@ public class ItemService {
         if (request.idSubcategoria() != null && !request.idSubcategoria().isBlank()) {
             item.setSubcategoria(categoriaService.findEntity(idCodec.decodeCategoriaId(request.idSubcategoria())));
         }
+        // Cadastro libera o item direto no estoque (visível em /estoque e no portal).
         item.setStatus(request.idStatus() != null && !request.idStatus().isBlank()
                 ? statusItemService.findEntity(idCodec.decodeStatusId(request.idStatus()))
-                : statusItemService.findByNomeOrDefault(null, "Coletado"));
+                : statusItemService.findByNomeOrDefault(null, "Em estoque"));
         item.setCdItem(gerarCodigoItem());
         item.setNmTitulo(request.nmTitulo().trim());
         item.setDsItem(request.dsItem());

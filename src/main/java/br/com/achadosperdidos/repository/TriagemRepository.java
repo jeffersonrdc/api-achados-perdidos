@@ -11,4 +11,8 @@ import java.util.Optional;
 public interface TriagemRepository extends JpaRepository<Triagem, Long> {
     @EntityGraph(attributePaths = {"item", "operador", "localizacaoInicial"})
     Optional<Triagem> findByItem_IdAndFgExcluidoFalse(Long itemId);
+
+    /** Inclui soft-deleted — a UNIQUE em IDR_Item exige reaproveitar a linha. */
+    @EntityGraph(attributePaths = {"item", "operador", "localizacaoInicial"})
+    Optional<Triagem> findByItem_Id(Long itemId);
 }

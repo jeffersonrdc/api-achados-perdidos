@@ -13,18 +13,21 @@ import br.com.achadosperdidos.repository.CriancaRepository;
 import br.com.achadosperdidos.repository.DevolucaoRepository;
 import br.com.achadosperdidos.repository.ItemRepository;
 import br.com.achadosperdidos.security.SignedResourceIdCodec;
-import org.springframework.beans.factory.annotation.Value;
+import br.com.achadosperdidos.storage.ArquivoStorage;
+import br.com.achadosperdidos.storage.ArquivoStorageProvider;
+import br.com.achadosperdidos.storage.ArquivoStorageRouter;
+import br.com.achadosperdidos.storage.LocalArquivoStorage;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -38,20 +41,17 @@ public class ArquivoService {
     private final DevolucaoRepository devolucaoRepository;
     private final ContatoRepository contatoRepository;
     private final SignedResourceIdCodec idCodec;
+    private final ArquivoStorageRouter storageRouter;
 
-    /** MIME aceitos no upload (A05/A08): fotos de itens e comprovantes em PDF. */
     private static final Set<String> MIME_PERMITIDOS = Set.of(
             "image/jpeg", "image/pjpeg", "image/png", "image/webp",
             "image/gif", "image/heic", "image/heif", "application/pdf");
-
-    @Value("${app.arquivos.dir}")
-    private String arquivosDir;
 
     public ArquivoService(ArquivoRepository arquivoRepository, ItemRepository itemRepository,
                           ClaimRepository claimRepository, ClaimMensagemRepository claimMensagemRepository,
                           CriancaRepository criancaRepository,
                           DevolucaoRepository devolucaoRepository, ContatoRepository contatoRepository,
-                          SignedResourceIdCodec idCodec) {
+                          SignedResourceIdCodec idCodec, ArquivoStorageRouter storageRouter) {
         this.arquivoRepository = arquivoRepository;
         this.itemRepository = itemRepository;
         this.claimRepository = claimRepository;
@@ -60,6 +60,7 @@ public class ArquivoService {
         this.devolucaoRepository = devolucaoRepository;
         this.contatoRepository = contatoRepository;
         this.idCodec = idCodec;
+        this.storageRouter = storageRouter;
     }
 
     @Transactional
@@ -72,8 +73,8 @@ public class ArquivoService {
         a.setIdEntidade(idEntidade);
         a.setTpArquivo(request.tpArquivo().trim().toUpperCase());
         a.setNmArquivo(request.nmArquivo());
-        // Rejeita caminhos absolutos ou com traversal antes de persistir o metadado.
-        a.setNmPath(validarCaminhoRelativo(request.nmPath()));
+        a.setNmPath(LocalArquivoStorage.validar(request.nmPath()));
+        a.setTpStorage(storageRouter.provedorPadrao().name());
         a.setTpMime(request.tpMime());
         a.setFgPrincipal(Boolean.TRUE.equals(request.fgPrincipal()));
         a.setQtBytes(request.qtBytes());
@@ -84,8 +85,8 @@ public class ArquivoService {
     }
 
     /**
-     * Upload binário: grava o arquivo em disco (app.arquivos.dir) e registra o metadado.
-     * Usado pela coleta de itens para anexar fotos (TP_Entidade=ITEM, TP_Arquivo=FOTO).
+     * Upload binário: grava no provedor padrão (LOCAL/S3) e registra metadados.
+     * Em falha de persistência, tenta compensar removendo o objeto físico.
      */
     @Transactional
     public ArquivoResponse upload(String tpEntidade, String idEntidade, String tpArquivo,
@@ -100,77 +101,93 @@ public class ArquivoService {
 
         String extensao = extrair(file.getOriginalFilename());
         String nomeFisico = UUID.randomUUID().toString().replace("-", "") + extensao;
-        // caminho relativo por entidade: <TP_Entidade>/<id>/<uuid.ext>
         String relPath = tipo + "/" + idEnt + "/" + nomeFisico;
-        try {
-            Path destino = resolverDentroDaBase(relPath);
-            Files.createDirectories(destino.getParent());
-            file.transferTo(destino);
+
+        ArquivoStorage storage = storageRouter.paraEscrita();
+        ArquivoStorageProvider provider = storage.provider();
+        try (InputStream in = file.getInputStream()) {
+            storage.store(relPath, in, file.getSize(), file.getContentType());
         } catch (IOException e) {
-            throw new UncheckedIOException("Falha ao gravar o arquivo em disco.", e);
+            throw new UncheckedIOException("Falha ao ler o arquivo enviado.", e);
         }
 
-        Arquivo a = new Arquivo();
-        a.setEvento(evento);
-        a.setTpEntidade(tipo);
-        a.setIdEntidade(idEnt);
-        a.setTpArquivo(tpArquivo != null && !tpArquivo.isBlank() ? tpArquivo.trim().toUpperCase() : "FOTO");
-        a.setNmArquivo(file.getOriginalFilename() != null ? file.getOriginalFilename() : nomeFisico);
-        a.setNmPath(relPath);
-        a.setTpMime(file.getContentType());
-        a.setFgPrincipal(Boolean.TRUE.equals(fgPrincipal));
-        a.setQtBytes(file.getSize());
-        a.setDtCadastro(LocalDateTime.now());
-        a.setFgAtivo(true);
-        a.setFgExcluido(false);
-        return toResponse(arquivoRepository.save(a));
+        try {
+            Arquivo a = new Arquivo();
+            a.setEvento(evento);
+            a.setTpEntidade(tipo);
+            a.setIdEntidade(idEnt);
+            a.setTpArquivo(tpArquivo != null && !tpArquivo.isBlank() ? tpArquivo.trim().toUpperCase() : "FOTO");
+            a.setNmArquivo(file.getOriginalFilename() != null ? file.getOriginalFilename() : nomeFisico);
+            a.setNmPath(relPath);
+            a.setTpStorage(provider.name());
+            a.setTpMime(file.getContentType());
+            a.setFgPrincipal(Boolean.TRUE.equals(fgPrincipal));
+            a.setQtBytes(file.getSize());
+            a.setDtCadastro(LocalDateTime.now());
+            a.setFgAtivo(true);
+            a.setFgExcluido(false);
+            return toResponse(arquivoRepository.save(a));
+        } catch (RuntimeException ex) {
+            try {
+                storage.delete(relPath);
+            } catch (RuntimeException ignored) {
+                // melhor esforço — evita deixar órfão quando possível
+            }
+            throw ex;
+        }
     }
 
-    /** Localiza o binário em disco a partir do id assinado do arquivo. */
     @Transactional(readOnly = true)
     public ArquivoConteudo carregarConteudo(String idArquivo) {
         Arquivo a = arquivoRepository.findById(idCodec.decodeArquivoId(idArquivo))
                 .filter(x -> !Boolean.TRUE.equals(x.getFgExcluido()))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Arquivo não encontrado."));
-        // Confina a leitura em app.arquivos.dir: impede path traversal / leitura
-        // de arquivo arbitrário mesmo que o metadado tenha nmPath adulterado.
-        Path caminho = resolverDentroDaBase(a.getNmPath());
-        if (!Files.exists(caminho)) {
-            throw new RecursoNaoEncontradoException("Conteúdo do arquivo não encontrado em disco.");
+        try {
+            Resource resource = storageRouter.paraLeitura(a.getTpStorage()).open(a.getNmPath());
+            return new ArquivoConteudo(resource, a.getNmArquivo(), a.getTpMime(), a.getQtBytes());
+        } catch (IllegalArgumentException e) {
+            throw new RecursoNaoEncontradoException(e.getMessage());
         }
-        return new ArquivoConteudo(caminho, a.getNmArquivo(), a.getTpMime());
     }
 
     /**
-     * Resolve {@code relPath} SEMPRE dentro de {@code app.arquivos.dir} e recusa
-     * qualquer caminho que escape da base (absoluto, {@code ../}, etc.) — barreira
-     * central contra path traversal (OWASP A01/A05).
+     * Download público de foto principal de item do catálogo (portal).
+     * Só libera se o arquivo for FOTO de ITEM em status público.
      */
-    private Path resolverDentroDaBase(String relPath) {
-        Path base = Paths.get(arquivosDir).toAbsolutePath().normalize();
-        Path destino = base.resolve(validarCaminhoRelativo(relPath)).normalize();
-        if (!destino.startsWith(base)) {
-            throw new IllegalArgumentException("Caminho de arquivo inválido.");
+    @Transactional(readOnly = true)
+    public ArquivoConteudo carregarConteudoPublicoItem(String idArquivo) {
+        Arquivo a = arquivoRepository.findById(idCodec.decodeArquivoIdAssinado(idArquivo))
+                .filter(x -> !Boolean.TRUE.equals(x.getFgExcluido()))
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Arquivo não encontrado."));
+        if (!"ITEM".equalsIgnoreCase(a.getTpEntidade()) || !"FOTO".equalsIgnoreCase(a.getTpArquivo())) {
+            throw new RecursoNaoEncontradoException("Arquivo não disponível no portal.");
         }
-        return destino;
+        var item = itemRepository.findById(a.getIdEntidade())
+                .filter(i -> !Boolean.TRUE.equals(i.getFgExcluido()))
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Item não encontrado."));
+        String status = item.getStatus() != null ? item.getStatus().getNmStatus() : "";
+        if (!List.of("Em estoque", "Com pedido de devolucao", "Aguardando retirada").contains(status)) {
+            throw new RecursoNaoEncontradoException("Arquivo não disponível no portal.");
+        }
+        return carregarConteudo(idArquivo);
     }
 
-    /** Recusa caminhos nulos, absolutos ou com segmentos de traversal ({@code ..}). */
-    private static String validarCaminhoRelativo(String relPath) {
-        if (relPath == null || relPath.isBlank()) {
-            throw new IllegalArgumentException("Caminho de arquivo não informado.");
-        }
-        String normalizado = relPath.replace('\\', '/').trim();
-        if (normalizado.startsWith("/") || normalizado.contains("..") || normalizado.matches("^[A-Za-z]:.*")) {
-            throw new IllegalArgumentException("Caminho de arquivo inválido.");
-        }
-        return normalizado;
+    /** Foto principal do item (para catálogo público). */
+    @Transactional(readOnly = true)
+    public Optional<Arquivo> fotoPrincipalItem(Long idItem) {
+        return arquivoRepository
+                .findByTpEntidadeAndIdEntidadeAndFgExcluidoFalseOrderByDtCadastroDesc("ITEM", idItem)
+                .stream()
+                .filter(a -> "FOTO".equalsIgnoreCase(a.getTpArquivo()))
+                .sorted((a, b) -> Boolean.compare(
+                        Boolean.TRUE.equals(b.getFgPrincipal()),
+                        Boolean.TRUE.equals(a.getFgPrincipal())))
+                .findFirst();
     }
 
-    /** Valida o MIME declarado no upload contra a allowlist (A05/A08). */
     private static void validarMime(String contentType) {
         String mime = contentType == null ? "" : contentType.trim().toLowerCase();
-        int ponto = mime.indexOf(';'); // descarta parâmetros, ex.: "; charset=..."
+        int ponto = mime.indexOf(';');
         if (ponto >= 0) mime = mime.substring(0, ponto).trim();
         if (!MIME_PERMITIDOS.contains(mime)) {
             throw new IllegalArgumentException(
@@ -178,8 +195,7 @@ public class ArquivoService {
         }
     }
 
-    /** Conteúdo físico de um arquivo (caminho + metadados de download). */
-    public record ArquivoConteudo(Path caminho, String nmArquivo, String tpMime) {}
+    public record ArquivoConteudo(Resource resource, String nmArquivo, String tpMime, Long qtBytes) {}
 
     private static String extrair(String nomeOriginal) {
         if (nomeOriginal == null) return "";
@@ -189,7 +205,6 @@ public class ArquivoService {
         return ext.matches("\\.[a-z0-9]{1,8}") ? ext : "";
     }
 
-    /** Deriva o evento a partir da entidade referenciada (arquivo é polimórfico). */
     private Evento resolverEvento(String tpEntidade, Long idEntidade) {
         Evento evento = switch (tpEntidade) {
             case "ITEM" -> itemRepository.findById(idEntidade).map(x -> x.getEvento()).orElse(null);
@@ -204,7 +219,8 @@ public class ArquivoService {
                             + ". Use ITEM, CLAIM, CLAIM_MENSAGEM, CRIANCA, DEVOLUCAO ou CONTATO.");
         };
         if (evento == null) {
-            throw new RecursoNaoEncontradoException("Entidade referenciada (" + tpEntidade + ") não encontrada para vincular o arquivo ao evento.");
+            throw new RecursoNaoEncontradoException(
+                    "Entidade referenciada (" + tpEntidade + ") não encontrada para vincular o arquivo ao evento.");
         }
         return evento;
     }
@@ -226,6 +242,7 @@ public class ArquivoService {
                 a.getTpArquivo(),
                 a.getNmArquivo(),
                 a.getNmPath(),
+                a.getTpStorage() != null ? a.getTpStorage() : "LOCAL",
                 a.getTpMime(),
                 a.getFgPrincipal(),
                 a.getQtBytes(),

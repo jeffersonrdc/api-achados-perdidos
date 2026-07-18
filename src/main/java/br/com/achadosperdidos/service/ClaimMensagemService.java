@@ -191,7 +191,7 @@ public class ClaimMensagemService {
         msg = mensagemRepository.save(msg);
 
         for (MultipartFile f : files) {
-            arquivoService.upload("CLAIM_MENSAGEM", String.valueOf(msg.getId()), "IMAGEM", f, false);
+            arquivoService.upload("CLAIM_MENSAGEM", idCodec.encodeClaimMensagemId(msg.getId()), "IMAGEM", f, false);
         }
 
         token.setFgAtivo(false);

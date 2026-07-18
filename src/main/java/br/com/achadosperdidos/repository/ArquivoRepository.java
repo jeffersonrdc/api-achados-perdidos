@@ -9,4 +9,7 @@ import java.util.List;
 @Repository
 public interface ArquivoRepository extends JpaRepository<Arquivo, Long> {
     List<Arquivo> findByTpEntidadeAndIdEntidadeAndFgExcluidoFalseOrderByDtCadastroDesc(String tpEntidade, Long idEntidade);
+
+    long countByTpEntidadeAndIdEntidadeAndTpArquivoIgnoreCaseAndFgExcluidoFalse(
+            String tpEntidade, Long idEntidade, String tpArquivo);
 }

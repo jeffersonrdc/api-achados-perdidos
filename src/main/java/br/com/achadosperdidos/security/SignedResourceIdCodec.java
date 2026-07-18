@@ -42,14 +42,23 @@ public class SignedResourceIdCodec {
     }
 
     public String encode(Kind kind, long id) { return sign(kind, id); }
-    public long decode(Kind kind, String token) { return verify(kind, token); }
+    public long decode(Kind kind, String token) { return verify(kind, token, true); }
+
+    /**
+     * Decodifica exigindo token {@code s2.*} assinado.
+     * Rejeita ID numérico puro — uso obrigatório em endpoints públicos (anti-enumeração).
+     */
+    public long decodeAssinado(Kind kind, String token) { return verify(kind, token, false); }
 
     public String encodeEventoId(long id) { return encode(Kind.EVT, id); }
     public long decodeEventoId(String token) { return decode(Kind.EVT, token); }
+    public long decodeEventoIdAssinado(String token) { return decodeAssinado(Kind.EVT, token); }
     public String encodeItemId(long id) { return encode(Kind.ITM, id); }
     public long decodeItemId(String token) { return decode(Kind.ITM, token); }
+    public long decodeItemIdAssinado(String token) { return decodeAssinado(Kind.ITM, token); }
     public String encodeClaimId(long id) { return encode(Kind.CLM, id); }
     public long decodeClaimId(String token) { return decode(Kind.CLM, token); }
+    public long decodeClaimIdAssinado(String token) { return decodeAssinado(Kind.CLM, token); }
     public String encodeCategoriaId(long id) { return encode(Kind.CAT, id); }
     public long decodeCategoriaId(String token) { return decode(Kind.CAT, token); }
     public String encodeUsuarioId(long id) { return encode(Kind.USR, id); }
@@ -68,6 +77,7 @@ public class SignedResourceIdCodec {
     public long decodeCriancaResponsavelId(String token) { return decode(Kind.CRR, token); }
     public String encodeArquivoId(long id) { return encode(Kind.ARQ, id); }
     public long decodeArquivoId(String token) { return decode(Kind.ARQ, token); }
+    public long decodeArquivoIdAssinado(String token) { return decodeAssinado(Kind.ARQ, token); }
     public String encodeMovimentacaoId(long id) { return encode(Kind.MOV, id); }
     public long decodeMovimentacaoId(String token) { return decode(Kind.MOV, token); }
     public String encodeSlaId(long id) { return encode(Kind.SLA, id); }
@@ -138,10 +148,15 @@ public class SignedResourceIdCodec {
         return TOKEN_PREFIX + "." + B64_ENC.encodeToString(payloadBytes) + "." + B64_ENC.encodeToString(sig);
     }
 
-    private long verify(Kind expectedKind, String token) {
+    private long verify(Kind expectedKind, String token, boolean allowPlainNumeric) {
         if (token == null || token.isBlank()) throw new IllegalArgumentException("Token de ID não informado.");
         String value = token.trim();
-        if (value.chars().allMatch(Character::isDigit)) return Long.parseLong(value);
+        if (value.chars().allMatch(Character::isDigit)) {
+            if (!allowPlainNumeric) {
+                throw new IllegalArgumentException("Token de ID inválido.");
+            }
+            return Long.parseLong(value);
+        }
         String[] parts = value.split("\\.");
         if (parts.length != 3 || !TOKEN_PREFIX.equals(parts[0])) {
             throw new IllegalArgumentException("Token de ID inválido.");

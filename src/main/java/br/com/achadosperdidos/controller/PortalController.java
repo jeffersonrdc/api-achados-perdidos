@@ -13,7 +13,10 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -104,6 +107,29 @@ public class PortalController {
         return portalService.catalogoItens(idEvento, page, limit, pesquisa);
     }
 
+    @GetMapping("/arquivos/{idArquivo}/download")
+    @SecurityRequirements
+    @Operation(summary = "Baixar foto pública de item do catálogo",
+            description = "Endpoint público. Somente foto principal de item visível no portal. Streaming Local/S3.")
+    public ResponseEntity<Resource> baixarFotoPublica(
+            @Parameter(description = "ID assinado do arquivo") @PathVariable String idArquivo,
+            HttpServletRequest http) {
+        publicRateLimiter.check("portal-foto", ipDe(http));
+        var conteudo = portalService.baixarFotoPublica(idArquivo);
+        MediaType mime = conteudo.tpMime() != null
+                ? MediaType.parseMediaType(conteudo.tpMime())
+                : MediaType.IMAGE_JPEG;
+        ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
+                .contentType(mime)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
+                .header("X-Content-Type-Options", "nosniff")
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=300");
+        if (conteudo.qtBytes() != null && conteudo.qtBytes() >= 0) {
+            builder.contentLength(conteudo.qtBytes());
+        }
+        return builder.body(conteudo.resource());
+    }
+
     @PostMapping("/eventos/{idEvento}/claims")
     @SecurityRequirements
     @Operation(summary = "Registrar objeto perdido (claim PERDA)",
@@ -126,6 +152,22 @@ public class PortalController {
             HttpServletRequest http) {
         publicRateLimiter.check("portal-claim-item", ipDe(http));
         return ResponseEntity.status(HttpStatus.CREATED).body(portalService.reclamarItem(idEvento, request));
+    }
+
+    @PostMapping(
+            value = "/eventos/{idEvento}/claims/{idClaim}/comprovantes",
+            consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @SecurityRequirements
+    @Operation(summary = "Anexar comprovantes à solicitação de retirada",
+            description = "Endpoint público. Até 5 arquivos PDF/JPEG/PNG de 10 MB, vinculados ao claim RETIRADA.")
+    public ResponseEntity<List<ArquivoResponse>> uploadComprovantesRetirada(
+            @Parameter(description = "ID assinado do evento") @PathVariable String idEvento,
+            @Parameter(description = "ID assinado do claim de retirada") @PathVariable String idClaim,
+            @RequestParam("anexos") List<org.springframework.web.multipart.MultipartFile> anexos,
+            HttpServletRequest http) {
+        publicRateLimiter.check("portal-claim-comprovantes", ipDe(http));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(portalService.uploadComprovantesRetirada(idEvento, idClaim, anexos));
     }
 
     @PostMapping(value = "/eventos/{idEvento}/claims/{idClaim}/foto", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)

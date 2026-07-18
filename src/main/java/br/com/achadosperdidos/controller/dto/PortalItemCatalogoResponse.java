@@ -10,5 +10,7 @@ public record PortalItemCatalogoResponse(
         String nmModelo,
         String nmCor,
         LocalDate dtEncontrado,
-        String nmLocalEncontrado
+        String nmLocalEncontrado,
+        /** ID assinado da foto principal — baixar em GET /portal/arquivos/{id}/download */
+        String idFotoPrincipal
 ) {}
