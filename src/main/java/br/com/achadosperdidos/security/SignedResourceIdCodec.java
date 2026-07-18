@@ -192,6 +192,8 @@ public class SignedResourceIdCodec {
     public long decodeEnderecoId(String token) { return decode(Kind.EDR, token); }
     public String encodeClaimMensagemId(long id) { return encode(Kind.CMS, id); }
     public long decodeClaimMensagemId(String token) { return decode(Kind.CMS, token); }
+    public String encodeAuthEventId(long id) { return encode(Kind.AEV, id); }
+    public long decodeAuthEventId(String token) { return decode(Kind.AEV, token); }
 
-    public enum Kind { EMP, USR, EVT, CAT, ITM, CLM, DEP, STA, LOC, DEV, CRI, CRR, ARQ, MOV, SLA, CAC, ICC, AUD, CLV, CTO, LCR, SLG, IHI, LCL, EQP, EQM, TRG, ETQ, PRF, TSF, MRC, MOD, COR, TAG, ESD, EDR, CMS }
+    public enum Kind { EMP, USR, EVT, CAT, ITM, CLM, DEP, STA, LOC, DEV, CRI, CRR, ARQ, MOV, SLA, CAC, ICC, AUD, CLV, CTO, LCR, SLG, IHI, LCL, EQP, EQM, TRG, ETQ, PRF, TSF, MRC, MOD, COR, TAG, ESD, EDR, CMS, AEV }
 }

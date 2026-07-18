@@ -21,72 +21,114 @@ public class AuthService {
     private final JwtUtil jwtUtil;
     private final LoginLogService loginLogService;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final AuthEventService authEventService;
 
     public AuthService(UsuarioRepository usuarioRepository, PasswordEncoder passwordEncoder, JwtUtil jwtUtil,
-                       LoginLogService loginLogService, RefreshTokenRepository refreshTokenRepository) {
+                       LoginLogService loginLogService, RefreshTokenRepository refreshTokenRepository,
+                       AuthEventService authEventService) {
         this.usuarioRepository = usuarioRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
         this.loginLogService = loginLogService;
         this.refreshTokenRepository = refreshTokenRepository;
+        this.authEventService = authEventService;
     }
 
     public AuthTokens authenticate(String identificador, String senha) {
         return authenticate(identificador, senha, null, null, null);
     }
 
-    // Transacao read-write unica: a leitura do usuario e a gravacao do login_log
-    // acontecem na mesma transacao. Evita o conflito de FK entre transacoes
-    // (login_log -> usuario) que ocorreria com REQUIRES_NEW.
     @Transactional
     public AuthTokens authenticate(String identificador, String senha, String ip, String dispositivo, String navegador) {
         Usuario usuario = usuarioRepository.findWithPerfilByNmEmail(identificador.trim())
                 .or(() -> usuarioRepository.findWithPerfilByNmLogin(identificador.trim()))
-                .orElseThrow(() -> new BadCredentialsException("Credenciais inválidas"));
+                .orElse(null);
+        if (usuario == null) {
+            // Sem IDR_Usuario: REQUIRES_NEW não compete com locks da TX atual (ex.: testes @Transactional).
+            authEventService.registrarIndependente(
+                    AuthEventService.LOGIN_CREDENCIAL_INVALIDA, AuthEventService.RESULTADO_FALHA,
+                    "USUARIO_INEXISTENTE", null, identificador, ip, dispositivo, navegador);
+            throw new BadCredentialsException("Credenciais inválidas");
+        }
         if (!passwordEncoder.matches(senha, usuario.getNmSenha())) {
+            authEventService.registrarIndependente(
+                    AuthEventService.LOGIN_CREDENCIAL_INVALIDA, AuthEventService.RESULTADO_FALHA,
+                    "SENHA_INVALIDA", null, identificador, ip, dispositivo, navegador);
             throw new BadCredentialsException("Credenciais inválidas");
         }
         if (!Boolean.TRUE.equals(usuario.getFgAtivo()) || Boolean.TRUE.equals(usuario.getFgExcluido())) {
-            throw new BadCredentialsException("Usuário inativo");
+            authEventService.registrarIndependente(
+                    AuthEventService.LOGIN_CREDENCIAL_INVALIDA, AuthEventService.RESULTADO_FALHA,
+                    "USUARIO_INATIVO", null, identificador, ip, dispositivo, navegador);
+            throw new BadCredentialsException("Credenciais inválidas");
         }
-        // Auditoria de acesso (transacao independente, nunca bloqueia o login).
         loginLogService.registrarAcesso(usuario.getId(), ip, dispositivo, navegador);
+        authEventService.registrar(
+                AuthEventService.LOGIN_SUCESSO, AuthEventService.RESULTADO_SUCESSO,
+                null, usuario.getId(), identificador, ip, dispositivo, navegador);
         return emitirTokens(usuario);
     }
 
     @Transactional
+    public AuthTokens refresh(String refreshToken, String ip, String dispositivo, String navegador) {
+        try {
+            if (!jwtUtil.validateRefreshToken(refreshToken)) {
+                throw new BadCredentialsException("Refresh token inválido");
+            }
+            String jti = jwtUtil.getJtiFromToken(refreshToken);
+            RefreshToken registro = jti == null ? null : refreshTokenRepository.findByJti(jti).orElse(null);
+            if (registro == null || Boolean.TRUE.equals(registro.getFgRevogado())
+                    || registro.getDtExpiracao().isBefore(LocalDateTime.now())) {
+                throw new BadCredentialsException("Refresh token inválido ou revogado");
+            }
+            String subject = jwtUtil.getSubjectFromToken(refreshToken);
+            Usuario usuario = subject == null ? null : usuarioRepository.findByNmEmail(subject).orElse(null);
+            if (usuario == null || !Boolean.TRUE.equals(usuario.getFgAtivo()) || Boolean.TRUE.equals(usuario.getFgExcluido())) {
+                throw new BadCredentialsException("Refresh token inválido");
+            }
+            revogar(registro);
+            AuthTokens tokens = emitirTokens(usuario);
+            authEventService.registrar(
+                    AuthEventService.REFRESH_SUCESSO, AuthEventService.RESULTADO_SUCESSO,
+                    null, usuario.getId(), subject, ip, dispositivo, navegador);
+            return tokens;
+        } catch (BadCredentialsException ex) {
+            authEventService.registrarIndependente(
+                    AuthEventService.REFRESH_INVALIDO, AuthEventService.RESULTADO_FALHA,
+                    "REFRESH_INVALIDO", null, null, ip, dispositivo, navegador);
+            throw ex;
+        }
+    }
+
+    /** Compatibilidade: refresh sem metadados de rede. */
+    @Transactional
     public AuthTokens refresh(String refreshToken) {
-        if (!jwtUtil.validateRefreshToken(refreshToken)) {
-            throw new BadCredentialsException("Refresh token inválido");
-        }
-        String jti = jwtUtil.getJtiFromToken(refreshToken);
-        RefreshToken registro = jti == null ? null : refreshTokenRepository.findByJti(jti).orElse(null);
-        if (registro == null || Boolean.TRUE.equals(registro.getFgRevogado())
-                || registro.getDtExpiracao().isBefore(LocalDateTime.now())) {
-            throw new BadCredentialsException("Refresh token inválido ou revogado");
-        }
-        String subject = jwtUtil.getSubjectFromToken(refreshToken);
-        Usuario usuario = subject == null ? null : usuarioRepository.findByNmEmail(subject).orElse(null);
-        if (usuario == null || !Boolean.TRUE.equals(usuario.getFgAtivo()) || Boolean.TRUE.equals(usuario.getFgExcluido())) {
-            throw new BadCredentialsException("Refresh token inválido");
-        }
-        // Rotação: o token usado é revogado e um novo par é emitido.
-        revogar(registro);
-        return emitirTokens(usuario);
+        return refresh(refreshToken, null, null, null);
     }
 
     /** Logout real: revoga o refresh token informado. Idempotente. */
     @Transactional
-    public void logout(String refreshToken) {
+    public void logout(String refreshToken, String ip, String dispositivo, String navegador) {
         if (refreshToken == null || refreshToken.isBlank()) return;
         String jti = jwtUtil.getJtiFromToken(refreshToken);
         if (jti == null) return;
         refreshTokenRepository.findByJti(jti)
                 .filter(rt -> !Boolean.TRUE.equals(rt.getFgRevogado()))
-                .ifPresent(this::revogar);
+                .ifPresent(rt -> {
+                    Long usuarioId = rt.getUsuario() != null ? rt.getUsuario().getId() : null;
+                    String email = rt.getUsuario() != null ? rt.getUsuario().getNmEmail() : null;
+                    revogar(rt);
+                    authEventService.registrar(
+                            AuthEventService.LOGOUT, AuthEventService.RESULTADO_SUCESSO,
+                            null, usuarioId, email, ip, dispositivo, navegador);
+                });
     }
 
-    /** Gera o par access/refresh e persiste o refresh token para permitir revogação. */
+    @Transactional
+    public void logout(String refreshToken) {
+        logout(refreshToken, null, null, null);
+    }
+
     private AuthTokens emitirTokens(Usuario usuario) {
         String subject = usuario.getNmEmail();
         String accessToken = jwtUtil.generateAccessToken(subject);

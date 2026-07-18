@@ -46,14 +46,16 @@ public class LoginRateLimiter {
     public void checkIp(String ip) {
         if (!enabled || ip == null || ip.isBlank()) return;
         consumir(ipBuckets.computeIfAbsent(ip, k -> newIpBucket()),
-                "Muitas tentativas a partir deste endereço. Tente novamente em instantes.");
+                "Muitas tentativas a partir deste endereço. Tente novamente em instantes.",
+                TooManyRequestsException.MOTIVO_IP);
     }
 
     /** Consome uma tentativa por conta. Lança 429 quando a conta está bloqueada. */
     public void checkAccount(String identificador) {
         if (!enabled || identificador == null || identificador.isBlank()) return;
         consumir(accountBuckets.computeIfAbsent(normalizar(identificador), k -> newAccountBucket()),
-                "Muitas tentativas de login para esta conta. Tente novamente mais tarde.");
+                "Muitas tentativas de login para esta conta. Tente novamente mais tarde.",
+                TooManyRequestsException.MOTIVO_CONTA);
     }
 
     /** Zera o contador da conta após um login bem-sucedido. */
@@ -62,11 +64,17 @@ public class LoginRateLimiter {
         accountBuckets.remove(normalizar(identificador));
     }
 
-    private void consumir(Bucket bucket, String mensagem) {
+    /** Limpa buckets de IP e conta (uso em testes de integração). */
+    public void resetAll() {
+        ipBuckets.clear();
+        accountBuckets.clear();
+    }
+
+    private void consumir(Bucket bucket, String mensagem, String codigoMotivo) {
         ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
         if (!probe.isConsumed()) {
             long segundos = Math.max(1, Duration.ofNanos(probe.getNanosToWaitForRefill()).toSeconds());
-            throw new TooManyRequestsException(mensagem, segundos);
+            throw new TooManyRequestsException(mensagem, segundos, codigoMotivo);
         }
     }
 
@@ -79,8 +87,6 @@ public class LoginRateLimiter {
     }
 
     private Bucket newAccountBucket() {
-        // Recarga "intervally": os N créditos voltam de uma vez ao fim da janela,
-        // caracterizando um bloqueio temporário depois de esgotadas as tentativas.
         Bandwidth limite = Bandwidth.builder()
                 .capacity(accountAttempts)
                 .refillIntervally(accountAttempts, accountWindow)

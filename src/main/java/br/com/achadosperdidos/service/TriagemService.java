@@ -44,12 +44,13 @@ public class TriagemService {
     private final CategoriaService categoriaService;
     private final LocalizacaoService localizacaoService;
     private final UsuarioContextService usuarioContextService;
+    private final AuditoriaContextService auditoriaContext;
     private final SignedResourceIdCodec idCodec;
 
     public TriagemService(TriagemRepository triagemRepository, ItemRepository itemRepository,
                           ItemService itemService, WorkflowService workflowService, CategoriaService categoriaService,
                           LocalizacaoService localizacaoService, UsuarioContextService usuarioContextService,
-                          SignedResourceIdCodec idCodec) {
+                          AuditoriaContextService auditoriaContext, SignedResourceIdCodec idCodec) {
         this.triagemRepository = triagemRepository;
         this.itemRepository = itemRepository;
         this.itemService = itemService;
@@ -57,12 +58,14 @@ public class TriagemService {
         this.categoriaService = categoriaService;
         this.localizacaoService = localizacaoService;
         this.usuarioContextService = usuarioContextService;
+        this.auditoriaContext = auditoriaContext;
         this.idCodec = idCodec;
     }
 
     /** Inicia a triagem: transiciona o item para "Em triagem" e abre o registro. */
     @Transactional
     public TriagemResponse iniciar(String idItem) {
+        auditoriaContext.marcarContexto();
         Item item = findItem(idItem);
         workflowService.transitar(idItem, new ItemTransicaoRequest("Em triagem", "Triagem iniciada"));
         Triagem triagem = triagemRepository.findByItem_IdAndFgExcluidoFalse(item.getId())
@@ -82,6 +85,7 @@ public class TriagemService {
     /** Marca o item como "Em Análise" (botão Analisar Item) e abre/atualiza o registro de triagem. */
     @Transactional
     public TriagemResponse analisar(String idItem) {
+        auditoriaContext.marcarContexto();
         Item item = findItem(idItem);
         // Só transiciona se ainda não estiver em análise (evita erro de transição para o mesmo status).
         if (!"Em Análise".equalsIgnoreCase(item.getStatus() != null ? item.getStatus().getNmStatus() : "")) {
@@ -97,6 +101,7 @@ public class TriagemService {
     /** Salva a classificacao/observacoes da triagem sem encaminhar ao estoque. */
     @Transactional
     public TriagemResponse salvar(String idItem, TriagemSalvarRequest request) {
+        auditoriaContext.marcarContexto();
         Item item = findItem(idItem);
         Triagem triagem = getOrCreate(item);
         aplicar(item, triagem, request);
@@ -106,6 +111,7 @@ public class TriagemService {
     /** Conclui a triagem: aplica a classificacao, define a localizacao e encaminha ao estoque. */
     @Transactional
     public TriagemResponse concluir(String idItem, TriagemSalvarRequest request) {
+        auditoriaContext.marcarContexto();
         Item item = findItem(idItem);
         Triagem triagem = getOrCreate(item);
         aplicar(item, triagem, request);

@@ -1,12 +1,9 @@
 package br.com.achadosperdidos.service;
 
-import br.com.achadosperdidos.util.IpAddressUtil;
+import br.com.achadosperdidos.util.ClientIpResolver;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Service;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 
 /**
  * Publica o usuário logado e o IP da requisição como variáveis de sessão do MySQL
@@ -23,15 +20,18 @@ public class AuditoriaContextService {
     private EntityManager em;
 
     private final UsuarioContextService usuarioContextService;
+    private final ClientIpResolver clientIpResolver;
 
-    public AuditoriaContextService(UsuarioContextService usuarioContextService) {
+    public AuditoriaContextService(UsuarioContextService usuarioContextService,
+                                   ClientIpResolver clientIpResolver) {
         this.usuarioContextService = usuarioContextService;
+        this.clientIpResolver = clientIpResolver;
     }
 
     public void marcarContexto() {
         em.createNativeQuery("SET @app_user_id = :uid, @app_ip = :ip")
                 .setParameter("uid", usuarioIdOuZero())
-                .setParameter("ip", ipRequisicaoOuVazio())
+                .setParameter("ip", clientIpResolver.resolveCurrentOrEmpty())
                 .executeUpdate();
     }
 
@@ -42,20 +42,5 @@ public class AuditoriaContextService {
         } catch (RuntimeException ex) {
             return 0L;
         }
-    }
-
-    private String ipRequisicaoOuVazio() {
-        try {
-            if (RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes sra) {
-                HttpServletRequest req = sra.getRequest();
-                String fwd = req.getHeader("X-Forwarded-For");
-                String ip = (fwd != null && !fwd.isBlank()) ? fwd.split(",")[0].trim() : req.getRemoteAddr();
-                String normalizado = IpAddressUtil.normalize(ip);
-                return normalizado != null ? normalizado : "";
-            }
-        } catch (RuntimeException ignored) {
-            // sem contexto de requisição (ex.: tarefa agendada) — grava sem IP
-        }
-        return "";
     }
 }

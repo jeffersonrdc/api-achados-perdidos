@@ -1,10 +1,12 @@
 package br.com.achadosperdidos.controller;
 
 import br.com.achadosperdidos.controller.dto.*;
+import br.com.achadosperdidos.exception.TooManyRequestsException;
 import br.com.achadosperdidos.security.LoginRateLimiter;
+import br.com.achadosperdidos.service.AuthEventService;
 import br.com.achadosperdidos.service.AuthService;
 import br.com.achadosperdidos.service.UsuarioService;
-import br.com.achadosperdidos.util.IpAddressUtil;
+import br.com.achadosperdidos.util.ClientIpResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -28,8 +30,16 @@ public class AuthController {
     private final AuthService authService;
     private final UsuarioService usuarioService;
     private final LoginRateLimiter loginRateLimiter;
-    public AuthController(AuthService authService, UsuarioService usuarioService, LoginRateLimiter loginRateLimiter) {
-        this.authService = authService; this.usuarioService = usuarioService; this.loginRateLimiter = loginRateLimiter;
+    private final AuthEventService authEventService;
+    private final ClientIpResolver clientIpResolver;
+
+    public AuthController(AuthService authService, UsuarioService usuarioService, LoginRateLimiter loginRateLimiter,
+                          AuthEventService authEventService, ClientIpResolver clientIpResolver) {
+        this.authService = authService;
+        this.usuarioService = usuarioService;
+        this.loginRateLimiter = loginRateLimiter;
+        this.authEventService = authEventService;
+        this.clientIpResolver = clientIpResolver;
     }
 
     @PostMapping("/login")
@@ -40,7 +50,7 @@ public class AuthController {
 
                     **OWASP A07:** rate limit por IP e por conta é aplicado **antes** da verificação de credenciais.
                     Credenciais inválidas retornam mensagem genérica (sem enumerar usuário).
-                    Login bem-sucedido registra IP, dispositivo e User-Agent (A09).
+                    Login bem-sucedido e falhas/bloqueios são registrados em `auth_event` (A09).
                     """
     )
     @ApiResponses({
@@ -58,23 +68,25 @@ public class AuthController {
                             schema = @Schema(implementation = ProblemDetail.class)))
     })
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
-        String ip = IpAddressUtil.normalize(resolverIp(http));
-        // Barreiras de força-bruta antes de qualquer verificação de credenciais (A07).
-        loginRateLimiter.checkIp(ip);
-        loginRateLimiter.checkAccount(request.identificador());
+        String ip = clientIpResolver.resolve(http);
         String navegador = truncar(http.getHeader("User-Agent"), 150);
-        var tokens = authService.authenticate(request.identificador(), request.senha(), ip, detectarDispositivo(navegador), navegador);
+        String dispositivo = detectarDispositivo(navegador);
+        try {
+            loginRateLimiter.checkIp(ip);
+            loginRateLimiter.checkAccount(request.identificador());
+        } catch (TooManyRequestsException ex) {
+            String evento = TooManyRequestsException.MOTIVO_CONTA.equals(ex.getCodigoMotivo())
+                    ? AuthEventService.LOGIN_RATE_LIMIT_CONTA
+                    : AuthEventService.LOGIN_RATE_LIMIT_IP;
+            authEventService.registrarIndependente(
+                    evento, AuthEventService.RESULTADO_BLOQUEIO,
+                    ex.getCodigoMotivo(), null, request.identificador(), ip, dispositivo, navegador);
+            throw ex;
+        }
+        var tokens = authService.authenticate(request.identificador(), request.senha(), ip, dispositivo, navegador);
         loginRateLimiter.resetAccount(request.identificador());
         var usuario = usuarioService.findResumoByIdentificador(request.identificador());
         return ResponseEntity.ok(LoginResponse.of(tokens.accessToken(), tokens.refreshToken(), usuario));
-    }
-
-    private static String resolverIp(HttpServletRequest http) {
-        // Com server.forward-headers-strategy=NATIVE, o Tomcat já resolve o IP real do
-        // cliente a partir do X-Forwarded-For — mas só quando ele vem de um proxy interno
-        // confiável. Confiar no header cru aqui permitiria spoofing do IP (burlar o rate
-        // limit e envenenar a auditoria).
-        return http.getRemoteAddr();
     }
 
     private static String detectarDispositivo(String userAgent) {
@@ -106,8 +118,10 @@ public class AuthController {
                     content = @Content(mediaType = "application/problem+json",
                             schema = @Schema(implementation = ProblemDetail.class)))
     })
-    public ResponseEntity<RefreshResponse> refresh(@Valid @RequestBody RefreshRequest request) {
-        var tokens = authService.refresh(request.refreshToken());
+    public ResponseEntity<RefreshResponse> refresh(@Valid @RequestBody RefreshRequest request, HttpServletRequest http) {
+        String ip = clientIpResolver.resolve(http);
+        String navegador = truncar(http.getHeader("User-Agent"), 150);
+        var tokens = authService.refresh(request.refreshToken(), ip, detectarDispositivo(navegador), navegador);
         return ResponseEntity.ok(RefreshResponse.of(tokens.accessToken(), tokens.refreshToken()));
     }
 
@@ -122,8 +136,10 @@ public class AuthController {
                     content = @Content(mediaType = "application/problem+json",
                             schema = @Schema(implementation = ProblemDetail.class)))
     })
-    public ResponseEntity<Void> logout(@Valid @RequestBody LogoutRequest request) {
-        authService.logout(request.refreshToken());
+    public ResponseEntity<Void> logout(@Valid @RequestBody LogoutRequest request, HttpServletRequest http) {
+        String ip = clientIpResolver.resolve(http);
+        String navegador = truncar(http.getHeader("User-Agent"), 150);
+        authService.logout(request.refreshToken(), ip, detectarDispositivo(navegador), navegador);
         return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
     }
 }

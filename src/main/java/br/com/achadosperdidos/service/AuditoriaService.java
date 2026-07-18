@@ -13,7 +13,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -32,10 +36,18 @@ public class AuditoriaService {
     }
 
     @Transactional(readOnly = true)
-    public ApiPage<AuditoriaResponse> findAll(Integer page, Integer limit) {
+    public ApiPage<AuditoriaResponse> findAll(Integer page, Integer limit,
+                                              String nmTabela, String tpAcao,
+                                              String idUsuario, String nrIp,
+                                              LocalDate dataInicio, LocalDate dataFim) {
         int p = PaginationParams.resolvePage(page);
         int l = PaginationParams.resolveLimit(limit);
-        Page<Auditoria> result = auditoriaRepository.findByFgExcluidoFalseOrderByDtAuditoriaDesc(PageRequest.of(p - 1, l));
+        Long usuarioId = StringUtils.hasText(idUsuario) ? idCodec.decodeUsuarioId(idUsuario.trim()) : null;
+        LocalDateTime de = dataInicio != null ? dataInicio.atStartOfDay() : null;
+        LocalDateTime ate = dataFim != null ? dataFim.atTime(LocalTime.MAX) : null;
+        Page<Auditoria> result = auditoriaRepository.buscarFiltrado(
+                blankToNull(nmTabela), blankToNull(tpAcao), usuarioId, blankToNull(nrIp),
+                de, ate, PageRequest.of(p - 1, l));
         return mapPage(result, p, l);
     }
 
@@ -46,6 +58,10 @@ public class AuditoriaService {
         Page<Auditoria> result = auditoriaRepository.findByNmTabelaAndIdRegistroAndFgExcluidoFalseOrderByDtAuditoriaDesc(
                 nmTabela, idRegistro, PageRequest.of(p - 1, l));
         return mapPage(result, p, l);
+    }
+
+    private static String blankToNull(String value) {
+        return StringUtils.hasText(value) ? value.trim() : null;
     }
 
     private ApiPage<AuditoriaResponse> mapPage(Page<Auditoria> result, int p, int l) {

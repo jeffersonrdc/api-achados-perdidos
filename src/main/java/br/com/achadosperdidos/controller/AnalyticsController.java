@@ -11,6 +11,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/analytics")
@@ -22,6 +23,19 @@ public class AnalyticsController {
 
     public AnalyticsController(AnalyticsService analyticsService) {
         this.analyticsService = analyticsService;
+    }
+
+    @GetMapping("/eventos/{idEvento}/painel")
+    @Operation(summary = "Painel completo de analytics do evento",
+            description = "Substitui os mocks das telas Angular /analytics. "
+                    + "`dias`: 7|14|30|0 (0 = evento completo). KPIs com comparação ao período anterior, "
+                    + "taxas, tempos, incidência, horários, SLA, gargalos e previsão por média móvel.")
+    public Map<String, Object> painel(
+            @Parameter(description = "ID assinado do evento (`s2.*`)", required = true)
+            @PathVariable String idEvento,
+            @Parameter(description = "Janela em dias (0 = evento completo)")
+            @RequestParam(defaultValue = "14") int dias) {
+        return analyticsService.painel(idEvento, dias);
     }
 
     @GetMapping("/eventos/{idEvento}/resumo")

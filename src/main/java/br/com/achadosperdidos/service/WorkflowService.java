@@ -66,18 +66,20 @@ public class WorkflowService {
     private final LocalizacaoService localizacaoService;
     private final StatusItemService statusItemService;
     private final UsuarioContextService usuarioContextService;
+    private final AuditoriaContextService auditoriaContext;
     private final SignedResourceIdCodec idCodec;
 
     public WorkflowService(ItemMovimentacaoRepository itemMovimentacaoRepository, ItemHistoricoRepository itemHistoricoRepository,
                            ItemRepository itemRepository, LocalizacaoService localizacaoService,
                            StatusItemService statusItemService, UsuarioContextService usuarioContextService,
-                           SignedResourceIdCodec idCodec) {
+                           AuditoriaContextService auditoriaContext, SignedResourceIdCodec idCodec) {
         this.itemMovimentacaoRepository = itemMovimentacaoRepository;
         this.itemHistoricoRepository = itemHistoricoRepository;
         this.itemRepository = itemRepository;
         this.localizacaoService = localizacaoService;
         this.statusItemService = statusItemService;
         this.usuarioContextService = usuarioContextService;
+        this.auditoriaContext = auditoriaContext;
         this.idCodec = idCodec;
     }
 
@@ -87,6 +89,7 @@ public class WorkflowService {
 
     @Transactional
     public ItemTransicaoResponse transitar(String idItem, ItemTransicaoRequest request) {
+        auditoriaContext.marcarContexto();
         Item item = itemRepository.findById(idCodec.decodeItemId(idItem))
                 .filter(i -> !Boolean.TRUE.equals(i.getFgExcluido()))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Item não encontrado."));
@@ -211,6 +214,7 @@ public class WorkflowService {
 
     @Transactional
     public ItemMovimentacaoResponse registrarMovimentacao(ItemMovimentacaoCreateRequest request) {
+        auditoriaContext.marcarContexto();
         ItemMovimentacao m = new ItemMovimentacao();
         m.setItem(itemRepository.findById(idCodec.decodeItemId(request.idItem()))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Item não encontrado.")));

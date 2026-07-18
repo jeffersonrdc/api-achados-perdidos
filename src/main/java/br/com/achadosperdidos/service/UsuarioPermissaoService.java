@@ -24,16 +24,19 @@ public class UsuarioPermissaoService {
     private final PermissaoRepository permissaoRepository;
     private final PermissaoService permissaoService;
     private final UsuarioContextService usuarioContextService;
+    private final AuditoriaContextService auditoriaContext;
     private final SignedResourceIdCodec idCodec;
 
     public UsuarioPermissaoService(UsuarioRepository usuarioRepository, UsuarioPermissaoRepository usuarioPermissaoRepository,
                                    PermissaoRepository permissaoRepository, PermissaoService permissaoService,
-                                   UsuarioContextService usuarioContextService, SignedResourceIdCodec idCodec) {
+                                   UsuarioContextService usuarioContextService, AuditoriaContextService auditoriaContext,
+                                   SignedResourceIdCodec idCodec) {
         this.usuarioRepository = usuarioRepository;
         this.usuarioPermissaoRepository = usuarioPermissaoRepository;
         this.permissaoRepository = permissaoRepository;
         this.permissaoService = permissaoService;
         this.usuarioContextService = usuarioContextService;
+        this.auditoriaContext = auditoriaContext;
         this.idCodec = idCodec;
     }
 
@@ -59,6 +62,7 @@ public class UsuarioPermissaoService {
     /** Define (substitui) o conjunto de permissoes adicionais do usuario. */
     @Transactional
     public List<PermissaoResponse> definirExtras(String idUsuario, PermissoesRequest request) {
+        auditoriaContext.marcarContexto();
         Usuario usuario = usuarioRepository.findById(idCodec.decodeUsuarioId(idUsuario))
                 .filter(u -> !Boolean.TRUE.equals(u.getFgExcluido()))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Usuário não encontrado."));

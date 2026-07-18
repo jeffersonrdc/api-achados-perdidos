@@ -120,6 +120,9 @@ public class GlobalExceptionHandler {
         detail.setTitle("Muitas requisições");
         detail.setType(URI.create("https://api.achadosperdidos.com/errors/too-many-requests"));
         detail.setProperty("retryAfterSeconds", ex.getRetryAfterSeconds());
+        if (ex.getCodigoMotivo() != null) {
+            detail.setProperty("codigoMotivo", ex.getCodigoMotivo());
+        }
         return detail;
     }
 

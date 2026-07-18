@@ -23,6 +23,18 @@ public class RelatorioController {
         this.relatorioService = relatorioService;
     }
 
+    @GetMapping("/painel/{tipo}")
+    @Operation(summary = "Painel completo de relatório por tipo",
+            description = "Substitui os mocks das telas Angular /relatorios. "
+                    + "`tipo`: encontrados|devolvidos|estoque|pedidos|transferencias|produtividade|auditoria|lgpd. "
+                    + "`dias`: 7|14|30|0 (0 = evento completo). `idEvento` assinado.")
+    public Map<String, Object> painel(
+            @Parameter(description = "Tipo do relatório", required = true) @PathVariable String tipo,
+            @Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento,
+            @Parameter(description = "Janela em dias (0 = evento completo)") @RequestParam(defaultValue = "14") int dias) {
+        return relatorioService.painel(tipo, idEvento, dias);
+    }
+
     @GetMapping("/itens-por-categoria")
     @Operation(summary = "Itens agrupados por categoria")
     public List<Map<String, Object>> itensPorCategoria(@Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento) {

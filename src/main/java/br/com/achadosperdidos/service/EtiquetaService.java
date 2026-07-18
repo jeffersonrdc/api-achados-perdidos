@@ -25,13 +25,16 @@ public class EtiquetaService {
     private final EtiquetaImpressaoRepository etiquetaRepository;
     private final ItemRepository itemRepository;
     private final UsuarioContextService usuarioContextService;
+    private final AuditoriaContextService auditoriaContext;
     private final SignedResourceIdCodec idCodec;
 
     public EtiquetaService(EtiquetaImpressaoRepository etiquetaRepository, ItemRepository itemRepository,
-                           UsuarioContextService usuarioContextService, SignedResourceIdCodec idCodec) {
+                           UsuarioContextService usuarioContextService, AuditoriaContextService auditoriaContext,
+                           SignedResourceIdCodec idCodec) {
         this.etiquetaRepository = etiquetaRepository;
         this.itemRepository = itemRepository;
         this.usuarioContextService = usuarioContextService;
+        this.auditoriaContext = auditoriaContext;
         this.idCodec = idCodec;
     }
 
@@ -42,6 +45,7 @@ public class EtiquetaService {
 
     @Transactional
     public EtiquetaImpressaoResponse imprimir(String idItem, EtiquetaImprimirRequest request) {
+        auditoriaContext.marcarContexto();
         Item item = findItem(idItem);
         EtiquetaImpressao e = new EtiquetaImpressao();
         e.setItem(item);

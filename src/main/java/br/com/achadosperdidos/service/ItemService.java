@@ -48,6 +48,7 @@ public class ItemService {
     private final LocalRepository localRepository;
     private final SignedResourceIdCodec idCodec;
     private final UsuarioContextService usuarioContextService;
+    private final AuditoriaContextService auditoriaContext;
 
     private static final Set<String> PRIORIDADES = Set.of("ALTA", "MEDIA", "BAIXA");
     // Status irrelevantes para o filtro de coleta (fluxo de claims).
@@ -60,7 +61,8 @@ public class ItemService {
                        ClaimRepository claimRepository, CategoriaService categoriaService,
                        StatusItemService statusItemService, WorkflowService workflowService,
                        LocalizacaoService localizacaoService, LocalRepository localRepository,
-                       SignedResourceIdCodec idCodec, UsuarioContextService usuarioContextService) {
+                       SignedResourceIdCodec idCodec, UsuarioContextService usuarioContextService,
+                       AuditoriaContextService auditoriaContext) {
         this.itemRepository = itemRepository; this.eventoRepository = eventoRepository;
         this.claimRepository = claimRepository;
         this.categoriaService = categoriaService; this.statusItemService = statusItemService;
@@ -68,10 +70,12 @@ public class ItemService {
         this.localizacaoService = localizacaoService;
         this.localRepository = localRepository;
         this.idCodec = idCodec; this.usuarioContextService = usuarioContextService;
+        this.auditoriaContext = auditoriaContext;
     }
 
     @Transactional
     public ItemResponse create(ItemCreateRequest request) {
+        auditoriaContext.marcarContexto();
         Long eventoId = idCodec.decodeEventoId(request.idEvento());
         Evento evento = eventoRepository.findById(eventoId)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Evento não encontrado."));
@@ -114,6 +118,7 @@ public class ItemService {
 
     @Transactional
     public ItemResponse update(String idToken, ItemUpdateRequest request) {
+        auditoriaContext.marcarContexto();
         Item item = findEntity(idCodec.decodeItemId(idToken));
         if (request.idCategoria() != null && !request.idCategoria().isBlank()) {
             item.setCategoria(categoriaService.findEntity(idCodec.decodeCategoriaId(request.idCategoria())));
@@ -338,6 +343,7 @@ public class ItemService {
     /** Atualiza a localização física do item no estoque e registra a movimentação. */
     @Transactional
     public EstoqueItemResponse atualizarLocalizacao(String idItem, ItemLocalizacaoRequest req) {
+        auditoriaContext.marcarContexto();
         // Estoque = endereçamento físico do item (setor/estante/caixa) dentro do depósito.
         // A movimentação entre locais é a "transferência" (outra entidade).
         Item item = findEntity(idCodec.decodeItemId(idItem));
@@ -374,6 +380,7 @@ public class ItemService {
 
     @Transactional
     public void softDelete(String idToken) {
+        auditoriaContext.marcarContexto();
         Item item = findEntity(idCodec.decodeItemId(idToken));
         item.setFgExcluido(true);
         item.setFgAtivo(false);

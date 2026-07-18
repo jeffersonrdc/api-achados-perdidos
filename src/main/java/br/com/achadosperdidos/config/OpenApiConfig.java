@@ -347,6 +347,8 @@ public class OpenApiConfig {
                 tag("Lacres", "Controle de lacres físicos."),
                 tag("Locais", "Locais do evento (pontos de coleta/atendimento)."),
                 tag("Localizações", "Endereçamento interno em depósitos."),
+                tag("Logs de Acesso", "Eventos de autenticação (login, bloqueio, refresh, logout). Aba Acessos. "
+                        + "Permissão: `logs.consultar`."),
                 tag("Perfis", "Perfis de acesso e vínculo de permissões."),
                 tag("Permissões", "Catálogo de permissões `modulo.acao`."),
                 tag("Relatórios", "Relatórios gerenciais. Permissão: `relatorio.visualizar`."),
