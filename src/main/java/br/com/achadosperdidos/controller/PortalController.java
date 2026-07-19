@@ -8,6 +8,10 @@ import br.com.achadosperdidos.service.PortalService;
 import br.com.achadosperdidos.util.IpAddressUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -28,7 +32,9 @@ import java.util.List;
 @RequestMapping("/api/v1/portal")
 @Tag(name = "Portal do Participante",
         description = "Área pública do evento para consulta, claims, crianças e registro. "
-                + "A maioria das rotas é pública; `meus-claims` exige JWT com ROLE_PARTICIPANTE.")
+                + "A maioria das rotas é pública com rate limit por IP; "
+                + "`meus-claims` exige JWT com ROLE_PARTICIPANTE. "
+                + "IDs de path/query são tokens assinados (`s2.*`), nunca numéricos sequenciais.")
 public class PortalController {
 
     private final PortalService portalService;
@@ -52,21 +58,27 @@ public class PortalController {
     @SecurityRequirements
     @Operation(summary = "Listar eventos abertos no portal",
             description = "Endpoint público. Retorna apenas eventos com portal habilitado.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lista de eventos disponíveis")
+    })
     public List<PortalEventoResumoResponse> listarEventos() {
         return portalService.listarEventosAbertos();
     }
 
     @GetMapping("/eventos/{idEvento}")
     @SecurityRequirements
-    @Operation(summary = "Detalhar evento no portal")
+    @Operation(summary = "Detalhar evento no portal",
+            description = "Endpoint público. Retorna 404 se o evento não existir ou o portal estiver desabilitado.")
     public PortalEventoResumoResponse detalharEvento(
-            @Parameter(description = "ID assinado do evento (`s2.*`)") @PathVariable String idEvento) {
+            @Parameter(description = "ID assinado do evento (`s2.*`)", required = true)
+            @PathVariable String idEvento) {
         return portalService.detalharEvento(idEvento);
     }
 
     @GetMapping("/categorias")
     @SecurityRequirements
-    @Operation(summary = "Listar categorias públicas (apenas categorias-pai)")
+    @Operation(summary = "Listar categorias públicas (apenas categorias-pai)",
+            description = "Endpoint público. Usado nos filtros do catálogo do portal.")
     public List<CategoriaResponse> listarCategorias() {
         return portalService.listarCategorias();
     }
@@ -75,7 +87,8 @@ public class PortalController {
     @SecurityRequirements
     @Operation(summary = "Listar subcategorias públicas de uma categoria")
     public List<CategoriaResponse> listarSubcategorias(
-            @Parameter(description = "ID assinado da categoria-pai") @PathVariable String idCategoria) {
+            @Parameter(description = "ID assinado da categoria-pai", required = true)
+            @PathVariable String idCategoria) {
         return portalService.listarSubcategorias(idCategoria);
     }
 
@@ -83,7 +96,8 @@ public class PortalController {
     @SecurityRequirements
     @Operation(summary = "Listar tags públicas de uma subcategoria")
     public List<br.com.achadosperdidos.controller.dto.TagResponse> listarTags(
-            @Parameter(description = "ID assinado da subcategoria") @PathVariable String idSubcategoria) {
+            @Parameter(description = "ID assinado da subcategoria", required = true)
+            @PathVariable String idSubcategoria) {
         return portalService.listarTags(idSubcategoria);
     }
 
@@ -91,28 +105,38 @@ public class PortalController {
     @SecurityRequirements
     @Operation(summary = "Listar locais do evento no portal")
     public List<PortalLocalResponse> listarLocais(
-            @Parameter(description = "ID assinado do evento") @PathVariable String idEvento) {
+            @Parameter(description = "ID assinado do evento", required = true) @PathVariable String idEvento) {
         return portalService.listarLocais(idEvento);
     }
 
     @GetMapping("/eventos/{idEvento}/itens")
     @SecurityRequirements
     @Operation(summary = "Catálogo paginado de itens do evento",
-            description = "Endpoint público. IDs de item na resposta são assinados.")
+            description = "Endpoint público. Retorna itens visíveis no portal com IDs assinados. "
+                    + "Paginação baseada em `page` (1+) e `limit`.")
     public ApiPage<PortalItemCatalogoResponse> catalogoItens(
-            @Parameter(description = "ID assinado do evento") @PathVariable String idEvento,
-            @RequestParam(required = false) Integer page,
-            @RequestParam(required = false) Integer limit,
-            @RequestParam(required = false) String pesquisa) {
+            @Parameter(description = "ID assinado do evento", required = true) @PathVariable String idEvento,
+            @Parameter(description = "Página baseada em 1") @RequestParam(required = false) Integer page,
+            @Parameter(description = "Quantidade por página") @RequestParam(required = false) Integer limit,
+            @Parameter(description = "Texto livre de busca") @RequestParam(required = false) String pesquisa) {
         return portalService.catalogoItens(idEvento, page, limit, pesquisa);
     }
 
     @GetMapping("/arquivos/{idArquivo}/download")
     @SecurityRequirements
     @Operation(summary = "Baixar foto pública de item do catálogo",
-            description = "Endpoint público. Somente foto principal de item visível no portal. Streaming Local/S3.")
+            description = "Endpoint público com rate limit por IP. "
+                    + "Somente foto principal de item visível no portal. Streaming Local/S3. "
+                    + "Resposta binária com Content-Type da imagem.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Stream da imagem",
+                    content = @Content(mediaType = "image/jpeg",
+                            schema = @Schema(type = "string", format = "binary"))),
+            @ApiResponse(responseCode = "404", description = "Arquivo inexistente ou não público"),
+            @ApiResponse(responseCode = "429", description = "Rate limit excedido")
+    })
     public ResponseEntity<Resource> baixarFotoPublica(
-            @Parameter(description = "ID assinado do arquivo") @PathVariable String idArquivo,
+            @Parameter(description = "ID assinado do arquivo", required = true) @PathVariable String idArquivo,
             HttpServletRequest http) {
         publicRateLimiter.check("portal-foto", ipDe(http));
         var conteudo = portalService.baixarFotoPublica(idArquivo);
@@ -133,9 +157,13 @@ public class PortalController {
     @PostMapping("/eventos/{idEvento}/claims")
     @SecurityRequirements
     @Operation(summary = "Registrar objeto perdido (claim PERDA)",
-            description = "Endpoint público. Cria relato de perda informado pelo participante.")
+            description = "Endpoint público com rate limit por IP. Cria relato de perda informado pelo participante.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Claim criado"),
+            @ApiResponse(responseCode = "429", description = "Rate limit excedido")
+    })
     public ResponseEntity<ClaimResponse> registrarObjetoPerdido(
-            @Parameter(description = "ID assinado do evento") @PathVariable String idEvento,
+            @Parameter(description = "ID assinado do evento", required = true) @PathVariable String idEvento,
             @Valid @RequestBody PortalClaimCreateRequest request,
             HttpServletRequest http) {
         publicRateLimiter.check("portal-claim", ipDe(http));
@@ -145,9 +173,16 @@ public class PortalController {
     @PostMapping("/eventos/{idEvento}/claims/item")
     @SecurityRequirements
     @Operation(summary = "Reclamar item específico do catálogo",
-            description = "Endpoint público. Vincula claim (RETIRADA) a um item existente do evento.")
+            description = "Endpoint público com rate limit por IP. "
+                    + "Cria claim do tipo RETIRADA vinculado a um item existente e elegível do evento. "
+                    + "Após o sucesso, anexe comprovantes em `POST .../claims/{idClaim}/comprovantes`.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Solicitação de retirada criada"),
+            @ApiResponse(responseCode = "409", description = "Item indisponível para reclamação"),
+            @ApiResponse(responseCode = "429", description = "Rate limit excedido")
+    })
     public ResponseEntity<PortalClaimResultResponse> reclamarItem(
-            @Parameter(description = "ID assinado do evento") @PathVariable String idEvento,
+            @Parameter(description = "ID assinado do evento", required = true) @PathVariable String idEvento,
             @Valid @RequestBody PortalClaimItemRequest request,
             HttpServletRequest http) {
         publicRateLimiter.check("portal-claim-item", ipDe(http));
@@ -156,13 +191,24 @@ public class PortalController {
 
     @PostMapping(
             value = "/eventos/{idEvento}/claims/{idClaim}/comprovantes",
-            consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @SecurityRequirements
     @Operation(summary = "Anexar comprovantes à solicitação de retirada",
-            description = "Endpoint público. Até 5 arquivos PDF/JPEG/PNG de 10 MB, vinculados ao claim RETIRADA.")
+            description = "Endpoint público com rate limit por IP. "
+                    + "Campo multipart `anexos`: até 5 arquivos PDF/JPEG/PNG de no máximo 10 MB cada. "
+                    + "Vincula ao claim RETIRADA (`TP_Entidade=CLAIM`, `TP_Arquivo=COMPROVANTE`). "
+                    + "Pode ser chamado novamente se o upload anterior falhou, sem criar novo claim.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Comprovantes armazenados"),
+            @ApiResponse(responseCode = "400", description = "Arquivo inválido ou limites excedidos"),
+            @ApiResponse(responseCode = "413", description = "Payload acima do limite"),
+            @ApiResponse(responseCode = "415", description = "MIME não suportado"),
+            @ApiResponse(responseCode = "429", description = "Rate limit excedido")
+    })
     public ResponseEntity<List<ArquivoResponse>> uploadComprovantesRetirada(
-            @Parameter(description = "ID assinado do evento") @PathVariable String idEvento,
-            @Parameter(description = "ID assinado do claim de retirada") @PathVariable String idClaim,
+            @Parameter(description = "ID assinado do evento", required = true) @PathVariable String idEvento,
+            @Parameter(description = "ID assinado do claim de retirada", required = true) @PathVariable String idClaim,
+            @Parameter(description = "Arquivos multipart (campo `anexos`)", required = true)
             @RequestParam("anexos") List<org.springframework.web.multipart.MultipartFile> anexos,
             HttpServletRequest http) {
         publicRateLimiter.check("portal-claim-comprovantes", ipDe(http));
@@ -170,13 +216,22 @@ public class PortalController {
                 .body(portalService.uploadComprovantesRetirada(idEvento, idClaim, anexos));
     }
 
-    @PostMapping(value = "/eventos/{idEvento}/claims/{idClaim}/foto", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/eventos/{idEvento}/claims/{idClaim}/foto",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @SecurityRequirements
     @Operation(summary = "Anexar foto ao relato de perda",
-            description = "Endpoint público. JPEG/PNG até 5 MB. Somente claims do tipo PERDA.")
+            description = "Endpoint público com rate limit por IP. "
+                    + "Campo multipart `file`: JPEG/PNG até 5 MB. Somente claims do tipo PERDA.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Foto armazenada"),
+            @ApiResponse(responseCode = "413", description = "Arquivo acima do limite"),
+            @ApiResponse(responseCode = "415", description = "MIME não suportado"),
+            @ApiResponse(responseCode = "429", description = "Rate limit excedido")
+    })
     public ResponseEntity<ArquivoResponse> uploadFotoClaim(
-            @Parameter(description = "ID assinado do evento") @PathVariable String idEvento,
-            @Parameter(description = "ID assinado do claim") @PathVariable String idClaim,
+            @Parameter(description = "ID assinado do evento", required = true) @PathVariable String idEvento,
+            @Parameter(description = "ID assinado do claim", required = true) @PathVariable String idClaim,
+            @Parameter(description = "Arquivo multipart (campo `file`)", required = true)
             @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
             HttpServletRequest http) {
         publicRateLimiter.check("portal-claim-foto", ipDe(http));
@@ -188,17 +243,27 @@ public class PortalController {
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "Listar claims do participante autenticado",
             description = "Exige JWT com ROLE_PARTICIPANTE. O subject do token (e-mail) identifica o participante.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Claims do participante no evento"),
+            @ApiResponse(responseCode = "401", description = "JWT ausente ou inválido"),
+            @ApiResponse(responseCode = "403", description = "Usuário sem ROLE_PARTICIPANTE")
+    })
     public List<ClaimResponse> meusClaims(
-            @Parameter(description = "ID assinado do evento") @PathVariable String idEvento,
+            @Parameter(description = "ID assinado do evento", required = true) @PathVariable String idEvento,
             Authentication auth) {
         return portalService.meusClaims(idEvento, auth.getName());
     }
 
     @PostMapping("/eventos/{idEvento}/criancas")
     @SecurityRequirements
-    @Operation(summary = "Cadastrar criança no portal (público)")
+    @Operation(summary = "Cadastrar criança no portal (público)",
+            description = "Endpoint público com rate limit por IP. Dados sujeitos a LGPD — use apenas o necessário.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Criança cadastrada"),
+            @ApiResponse(responseCode = "429", description = "Rate limit excedido")
+    })
     public ResponseEntity<CriancaResponse> cadastrarCrianca(
-            @Parameter(description = "ID assinado do evento") @PathVariable String idEvento,
+            @Parameter(description = "ID assinado do evento", required = true) @PathVariable String idEvento,
             @Valid @RequestBody CriancaCreateRequest request,
             HttpServletRequest http) {
         publicRateLimiter.check("portal-crianca", ipDe(http));
@@ -207,9 +272,14 @@ public class PortalController {
 
     @PostMapping("/eventos/{idEvento}/criancas/responsaveis")
     @SecurityRequirements
-    @Operation(summary = "Vincular responsável a uma criança (público)")
+    @Operation(summary = "Vincular responsável a uma criança (público)",
+            description = "Endpoint público com rate limit por IP. O `idEvento` na URL identifica o contexto do portal.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Responsável vinculado"),
+            @ApiResponse(responseCode = "429", description = "Rate limit excedido")
+    })
     public ResponseEntity<CriancaResponsavelResponse> vincularResponsavel(
-            @Parameter(description = "ID assinado do evento") @PathVariable String idEvento,
+            @Parameter(description = "ID assinado do evento", required = true) @PathVariable String idEvento,
             @Valid @RequestBody CriancaResponsavelCreateRequest request,
             HttpServletRequest http) {
         publicRateLimiter.check("portal-responsavel", ipDe(http));
@@ -219,7 +289,13 @@ public class PortalController {
     @PostMapping("/auth/registro")
     @SecurityRequirements
     @Operation(summary = "Registrar participante do portal",
-            description = "Endpoint público. Cria usuário com perfil de participante para autenticar e consultar seus claims.")
+            description = "Endpoint público com rate limit por IP. "
+                    + "Cria usuário com perfil de participante para autenticar e consultar seus claims.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Participante registrado"),
+            @ApiResponse(responseCode = "409", description = "E-mail já cadastrado"),
+            @ApiResponse(responseCode = "429", description = "Rate limit excedido")
+    })
     public ResponseEntity<UsuarioResponse> registrarParticipante(
             @Valid @RequestBody PortalParticipanteRegisterRequest request,
             HttpServletRequest http) {
@@ -230,24 +306,39 @@ public class PortalController {
     @GetMapping("/respostas/{token}")
     @SecurityRequirements
     @Operation(summary = "Contexto público do link de resposta",
-            description = "Valida o token do e-mail e retorna dados mínimos (sem PII sensível).")
+            description = "Endpoint público com rate limit por IP. "
+                    + "Valida o token do e-mail e retorna dados mínimos (sem PII sensível).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Contexto válido"),
+            @ApiResponse(responseCode = "410", description = "Token expirado ou já utilizado"),
+            @ApiResponse(responseCode = "429", description = "Rate limit excedido")
+    })
     public PortalRespostaContextResponse contextoResposta(
-            @PathVariable String token,
+            @Parameter(description = "Token opaco enviado por e-mail", required = true) @PathVariable String token,
             HttpServletRequest http) {
         publicRateLimiter.check("portal-resposta-get", ipDe(http));
         return claimMensagemService.contextoPublico(token);
     }
 
     @PostMapping(value = "/respostas/{token}", consumes = {
-            org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE,
-            org.springframework.http.MediaType.APPLICATION_FORM_URLENCODED_VALUE
+            MediaType.MULTIPART_FORM_DATA_VALUE,
+            MediaType.APPLICATION_FORM_URLENCODED_VALUE
     })
     @SecurityRequirements
     @Operation(summary = "Enviar resposta pública pelo link do e-mail",
-            description = "Texto obrigatório; imagens JPEG/PNG opcionais (até 5 arquivos de 5 MB).")
+            description = "Endpoint público com rate limit por IP. "
+                    + "`dsMensagem` obrigatório; `imagens` opcionais (até 5 arquivos JPEG/PNG de 5 MB).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Resposta registrada"),
+            @ApiResponse(responseCode = "410", description = "Token expirado ou já utilizado"),
+            @ApiResponse(responseCode = "413", description = "Arquivo acima do limite"),
+            @ApiResponse(responseCode = "415", description = "MIME não suportado"),
+            @ApiResponse(responseCode = "429", description = "Rate limit excedido")
+    })
     public PortalRespostaSubmitResponse enviarResposta(
-            @PathVariable String token,
-            @RequestParam("dsMensagem") String dsMensagem,
+            @Parameter(description = "Token opaco enviado por e-mail", required = true) @PathVariable String token,
+            @Parameter(description = "Texto da resposta", required = true) @RequestParam("dsMensagem") String dsMensagem,
+            @Parameter(description = "Imagens opcionais (campo `imagens`)")
             @RequestParam(value = "imagens", required = false) List<org.springframework.web.multipart.MultipartFile> imagens,
             HttpServletRequest http) {
         publicRateLimiter.check("portal-resposta-post", ipDe(http));

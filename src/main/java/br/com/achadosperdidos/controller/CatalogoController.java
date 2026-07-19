@@ -2,6 +2,8 @@ package br.com.achadosperdidos.controller;
 
 import br.com.achadosperdidos.controller.dto.*;
 import br.com.achadosperdidos.service.CatalogoService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -15,7 +17,7 @@ import java.util.List;
 /** Catálogos (cor, marca, modelo) — selects da coleta + CRUD da tela /caracteristicas. */
 @RestController
 @RequestMapping("/api/v1/catalogo")
-@Tag(name = "Catálogo")
+@Tag(name = "Catálogo", description = "Cores, marcas e modelos usados na coleta e na tela de características.")
 @SecurityRequirement(name = "bearerAuth")
 public class CatalogoController {
     private final CatalogoService catalogoService;
@@ -23,84 +25,135 @@ public class CatalogoController {
 
     // ---- Selects (somente nomes) ----
 
-    @GetMapping("/cores") @PreAuthorize("@authz.pode('item.listar')")
+    @GetMapping("/cores")
+    @PreAuthorize("@authz.pode('item.listar')")
+    @Operation(summary = "Listar nomes de cores",
+            description = "Retorna apenas nomes ativos para selects da coleta.")
     public List<String> cores() { return catalogoService.listarCores(); }
 
-    @GetMapping("/marcas") @PreAuthorize("@authz.pode('item.listar')")
+    @GetMapping("/marcas")
+    @PreAuthorize("@authz.pode('item.listar')")
+    @Operation(summary = "Listar nomes de marcas",
+            description = "Retorna apenas nomes ativos para selects da coleta.")
     public List<String> marcas() { return catalogoService.listarMarcas(); }
 
-    @GetMapping("/modelos") @PreAuthorize("@authz.pode('item.listar')")
-    public List<String> modelos(@RequestParam(required = false) String marca) {
+    @GetMapping("/modelos")
+    @PreAuthorize("@authz.pode('item.listar')")
+    @Operation(summary = "Listar nomes de modelos",
+            description = "Quando `marca` é informada, filtra os modelos dessa marca.")
+    public List<String> modelos(
+            @Parameter(description = "Nome da marca para filtrar modelos") @RequestParam(required = false) String marca) {
         return catalogoService.listarModelos(marca);
     }
 
     // ---- CRUD admin: marcas ----
 
-    @GetMapping("/marcas/itens") @PreAuthorize("@authz.pode('categoria.listar')")
-    public List<MarcaResponse> marcasAdmin(@RequestParam(required = false, defaultValue = "false") boolean incluirInativos) {
+    @GetMapping("/marcas/itens")
+    @PreAuthorize("@authz.pode('categoria.listar')")
+    @Operation(summary = "Listar marcas (admin)",
+            description = "Listagem completa para a tela /caracteristicas.")
+    public List<MarcaResponse> marcasAdmin(
+            @Parameter(description = "Inclui marcas inativas quando `true`")
+            @RequestParam(required = false, defaultValue = "false") boolean incluirInativos) {
         return catalogoService.listarMarcasAdmin(incluirInativos);
     }
 
-    @PostMapping("/marcas") @PreAuthorize("@authz.pode('categoria.gerenciar')")
+    @PostMapping("/marcas")
+    @PreAuthorize("@authz.pode('categoria.gerenciar')")
+    @Operation(summary = "Criar marca")
     public ResponseEntity<MarcaResponse> criarMarca(@Valid @RequestBody MarcaCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(catalogoService.criarMarca(request));
     }
 
-    @PutMapping("/marcas/{id}") @PreAuthorize("@authz.pode('categoria.gerenciar')")
-    public MarcaResponse atualizarMarca(@PathVariable String id, @Valid @RequestBody MarcaUpdateRequest request) {
+    @PutMapping("/marcas/{id}")
+    @PreAuthorize("@authz.pode('categoria.gerenciar')")
+    @Operation(summary = "Atualizar marca")
+    public MarcaResponse atualizarMarca(
+            @Parameter(description = "ID assinado da marca") @PathVariable String id,
+            @Valid @RequestBody MarcaUpdateRequest request) {
         return catalogoService.atualizarMarca(id, request);
     }
 
-    @DeleteMapping("/marcas/{id}") @PreAuthorize("@authz.pode('categoria.gerenciar')")
-    public ResponseEntity<Void> excluirMarca(@PathVariable String id) {
+    @DeleteMapping("/marcas/{id}")
+    @PreAuthorize("@authz.pode('categoria.gerenciar')")
+    @Operation(summary = "Excluir marca", description = "Exclusão lógica.")
+    public ResponseEntity<Void> excluirMarca(
+            @Parameter(description = "ID assinado da marca") @PathVariable String id) {
         catalogoService.excluirMarca(id);
         return ResponseEntity.noContent().build();
     }
 
     // ---- CRUD admin: modelos ----
 
-    @GetMapping("/modelos/itens") @PreAuthorize("@authz.pode('categoria.listar')")
+    @GetMapping("/modelos/itens")
+    @PreAuthorize("@authz.pode('categoria.listar')")
+    @Operation(summary = "Listar modelos (admin)",
+            description = "Listagem completa; opcionalmente filtrada por marca.")
     public List<ModeloResponse> modelosAdmin(
+            @Parameter(description = "Inclui modelos inativos quando `true`")
             @RequestParam(required = false, defaultValue = "false") boolean incluirInativos,
-            @RequestParam(required = false) String idMarca) {
+            @Parameter(description = "ID assinado da marca") @RequestParam(required = false) String idMarca) {
         return catalogoService.listarModelosAdmin(incluirInativos, idMarca);
     }
 
-    @PostMapping("/modelos") @PreAuthorize("@authz.pode('categoria.gerenciar')")
+    @PostMapping("/modelos")
+    @PreAuthorize("@authz.pode('categoria.gerenciar')")
+    @Operation(summary = "Criar modelo")
     public ResponseEntity<ModeloResponse> criarModelo(@Valid @RequestBody ModeloCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(catalogoService.criarModelo(request));
     }
 
-    @PutMapping("/modelos/{id}") @PreAuthorize("@authz.pode('categoria.gerenciar')")
-    public ModeloResponse atualizarModelo(@PathVariable String id, @Valid @RequestBody ModeloUpdateRequest request) {
+    @PutMapping("/modelos/{id}")
+    @PreAuthorize("@authz.pode('categoria.gerenciar')")
+    @Operation(summary = "Atualizar modelo")
+    public ModeloResponse atualizarModelo(
+            @Parameter(description = "ID assinado do modelo") @PathVariable String id,
+            @Valid @RequestBody ModeloUpdateRequest request) {
         return catalogoService.atualizarModelo(id, request);
     }
 
-    @DeleteMapping("/modelos/{id}") @PreAuthorize("@authz.pode('categoria.gerenciar')")
-    public ResponseEntity<Void> excluirModelo(@PathVariable String id) {
+    @DeleteMapping("/modelos/{id}")
+    @PreAuthorize("@authz.pode('categoria.gerenciar')")
+    @Operation(summary = "Excluir modelo", description = "Exclusão lógica.")
+    public ResponseEntity<Void> excluirModelo(
+            @Parameter(description = "ID assinado do modelo") @PathVariable String id) {
         catalogoService.excluirModelo(id);
         return ResponseEntity.noContent().build();
     }
 
     // ---- CRUD admin: cores ----
 
-    @GetMapping("/cores/itens") @PreAuthorize("@authz.pode('categoria.listar')")
-    public List<CorResponse> coresAdmin(@RequestParam(required = false, defaultValue = "false") boolean incluirInativos) {
+    @GetMapping("/cores/itens")
+    @PreAuthorize("@authz.pode('categoria.listar')")
+    @Operation(summary = "Listar cores (admin)",
+            description = "Listagem completa para a tela /caracteristicas.")
+    public List<CorResponse> coresAdmin(
+            @Parameter(description = "Inclui cores inativas quando `true`")
+            @RequestParam(required = false, defaultValue = "false") boolean incluirInativos) {
         return catalogoService.listarCoresAdmin(incluirInativos);
     }
 
-    @PostMapping("/cores") @PreAuthorize("@authz.pode('categoria.gerenciar')")
+    @PostMapping("/cores")
+    @PreAuthorize("@authz.pode('categoria.gerenciar')")
+    @Operation(summary = "Criar cor")
     public ResponseEntity<CorResponse> criarCor(@Valid @RequestBody CorCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(catalogoService.criarCor(request));
     }
 
-    @PutMapping("/cores/{id}") @PreAuthorize("@authz.pode('categoria.gerenciar')")
-    public CorResponse atualizarCor(@PathVariable String id, @Valid @RequestBody CorUpdateRequest request) {
+    @PutMapping("/cores/{id}")
+    @PreAuthorize("@authz.pode('categoria.gerenciar')")
+    @Operation(summary = "Atualizar cor")
+    public CorResponse atualizarCor(
+            @Parameter(description = "ID assinado da cor") @PathVariable String id,
+            @Valid @RequestBody CorUpdateRequest request) {
         return catalogoService.atualizarCor(id, request);
     }
 
-    @DeleteMapping("/cores/{id}") @PreAuthorize("@authz.pode('categoria.gerenciar')")
-    public ResponseEntity<Void> excluirCor(@PathVariable String id) {
+    @DeleteMapping("/cores/{id}")
+    @PreAuthorize("@authz.pode('categoria.gerenciar')")
+    @Operation(summary = "Excluir cor", description = "Exclusão lógica.")
+    public ResponseEntity<Void> excluirCor(
+            @Parameter(description = "ID assinado da cor") @PathVariable String id) {
         catalogoService.excluirCor(id);
         return ResponseEntity.noContent().build();
     }

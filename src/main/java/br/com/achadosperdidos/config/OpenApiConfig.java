@@ -20,12 +20,20 @@ import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
 import io.swagger.v3.oas.models.tags.Tag;
+import org.springdoc.core.models.GroupedOpenApi;
 import org.springdoc.core.customizers.OperationCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.method.HandlerMethod;
 
+import java.lang.reflect.Method;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,12 +45,57 @@ public class OpenApiConfig {
 
     public static final String BEARER_SCHEME = "bearerAuth";
 
-    private static final Pattern AUTHZ_PODE = Pattern.compile("@authz\\.pode\\('([^']+)'\\)");
+    private static final Pattern AUTHZ_PODE = Pattern.compile("@authz\\.pode(?:Qualquer)?\\(([^)]+)\\)");
+    private static final Pattern PERMISSAO_LITERAL = Pattern.compile("'([^']+)'");
     private static final Pattern HAS_ROLE = Pattern.compile("hasRole\\('([^']+)'\\)");
+    private static final java.util.Set<String> NAO_ID_ASSINADO = java.util.Set.of(
+            "idRegistro", "nrLacre", "page", "limit", "dias", "nivel");
+    private static final Map<String, String> METHOD_SUMMARIES = Map.ofEntries(
+            Map.entry("create", "Cadastrar"),
+            Map.entry("criar", "Cadastrar"),
+            Map.entry("findAll", "Listar"),
+            Map.entry("listar", "Listar"),
+            Map.entry("findById", "Consultar por ID"),
+            Map.entry("detalhar", "Detalhar"),
+            Map.entry("update", "Atualizar"),
+            Map.entry("atualizar", "Atualizar"),
+            Map.entry("delete", "Excluir"),
+            Map.entry("excluir", "Excluir"),
+            Map.entry("softDelete", "Excluir logicamente"),
+            Map.entry("resumo", "Consultar resumo"),
+            Map.entry("filtros", "Consultar opções de filtro"),
+            Map.entry("findByEvento", "Listar por evento"),
+            Map.entry("findByItem", "Listar por item"),
+            Map.entry("findByClaim", "Listar por claim"),
+            Map.entry("findByEntidade", "Listar por entidade"),
+            Map.entry("salvar", "Salvar"),
+            Map.entry("testar", "Testar configuração"),
+            Map.entry("aprovar", "Aprovar"),
+            Map.entry("reprovar", "Reprovar"),
+            Map.entry("iniciar", "Iniciar"),
+            Map.entry("concluir", "Concluir"),
+            Map.entry("historico", "Consultar histórico"),
+            Map.entry("mensagens", "Listar mensagens"),
+            Map.entry("enviarMensagem", "Enviar mensagem"));
 
     private static final String API_DESCRIPTION = """
             API REST para gestão operacional de **Achados e Perdidos** em eventos \
             (coleta, triagem, estoque, claims, devoluções, portal do participante e analytics).
+
+            ## Documentações por frontend
+            Use o seletor no topo do Swagger UI:
+
+            - **01 — Painel Administrativo:** autenticação e todos os módulos internos consumidos pelo painel.
+            - **02 — Portal Público:** catálogo, relatos, solicitações de retirada, anexos e respostas públicas.
+
+            ## Exportar especificação JSON
+            Use o botão **Exportar JSON** na barra superior, ou baixe diretamente:
+
+            - [Painel Administrativo](/api-docs/01-painel-administrativo?export=1)
+            - [Portal Público](/api-docs/02-portal-publico?export=1)
+            - [Spec completa (default)](/api-docs?export=1)
+
+            Cada operação informa resumo, descrição, parâmetros, schemas, segurança, permissão RBAC e respostas de erro.
 
             ## Autenticação
             1. `POST /api/v1/auth/login` — retorna `accessToken` + `refreshToken` (`tipoToken: Bearer`).
@@ -137,19 +190,57 @@ public class OpenApiConfig {
                                         "integridade", "Operação conflita com dados existentes.",
                                         "transicao", "Transição de status inválida.",
                                         "email", "E-mail já está em uso.")))
-                        .addResponses("TooManyRequests", tooManyRequestsResponse()));
+                        .addResponses("PayloadTooLarge", problemResponse(413, "Conteúdo muito grande",
+                                "Arquivo ou requisição excede o limite configurado.", Map.of()))
+                        .addResponses("UnsupportedMediaType", problemResponse(415, "Tipo de mídia não suportado",
+                                "Tipo de arquivo ou Content-Type não permitido.", Map.of()))
+                        .addResponses("InternalServerError", problemResponse(500, "Erro interno",
+                                "Ocorreu um erro interno inesperado.", Map.of()))
+                        .addResponses("TooManyRequests", tooManyRequestsResponse())
+                        .addResponses("PublicTooManyRequests", publicTooManyRequestsResponse()));
+    }
+
+    @Bean
+    public GroupedOpenApi painelAdminOpenApi(OperationCustomizer openApiOperationCustomizer) {
+        return GroupedOpenApi.builder()
+                .group("01-painel-administrativo")
+                .displayName("01 — Painel Administrativo")
+                .pathsToMatch("/api/v1/**")
+                .pathsToExclude("/api/v1/portal/**")
+                .addOperationCustomizer(openApiOperationCustomizer)
+                .build();
+    }
+
+    @Bean
+    public GroupedOpenApi portalPublicoOpenApi(OperationCustomizer openApiOperationCustomizer) {
+        return GroupedOpenApi.builder()
+                .group("02-portal-publico")
+                .displayName("02 — Portal Público")
+                .pathsToMatch("/api/v1/portal/**")
+                .addOperationCustomizer(openApiOperationCustomizer)
+                .build();
     }
 
     @Bean
     public OperationCustomizer openApiOperationCustomizer() {
         return (Operation operation, HandlerMethod handlerMethod) -> {
+            ensureOperationId(operation, handlerMethod);
             ensureSummary(operation, handlerMethod);
+            ensureDescription(operation, handlerMethod);
             enrichWithPermission(operation, handlerMethod);
-            enrichSignedIdParameters(operation);
+            enrichParameters(operation);
             ensureCommonResponses(operation, handlerMethod);
+            ensureSuccessResponses(operation, handlerMethod);
             clearSecurityForPublicAuth(operation, handlerMethod);
             return operation;
         };
+    }
+
+    private static void ensureOperationId(Operation operation, HandlerMethod handlerMethod) {
+        if (operation.getOperationId() == null || operation.getOperationId().isBlank()) {
+            String controller = handlerMethod.getBeanType().getSimpleName().replace("Controller", "");
+            operation.setOperationId(lowerFirst(controller) + "_" + handlerMethod.getMethod().getName());
+        }
     }
 
     private static void ensureSummary(Operation operation, HandlerMethod handlerMethod) {
@@ -157,6 +248,11 @@ public class OpenApiConfig {
             return;
         }
         String name = handlerMethod.getMethod().getName();
+        String action = METHOD_SUMMARIES.get(name);
+        if (action != null) {
+            operation.setSummary(action + " — " + controllerTag(handlerMethod));
+            return;
+        }
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < name.length(); i++) {
             char c = name.charAt(i);
@@ -166,6 +262,36 @@ public class OpenApiConfig {
             sb.append(i == 0 ? Character.toUpperCase(c) : c);
         }
         operation.setSummary(sb.toString());
+    }
+
+    private static void ensureDescription(Operation operation, HandlerMethod handlerMethod) {
+        if (operation.getDescription() != null && !operation.getDescription().isBlank()) {
+            return;
+        }
+        String tag = controllerTag(handlerMethod);
+        Method method = handlerMethod.getMethod();
+        String action;
+        if (method.isAnnotationPresent(GetMapping.class)) {
+            action = "Consulta dados sem alterar o estado do sistema.";
+        } else if (method.isAnnotationPresent(PostMapping.class)) {
+            action = "Cria um recurso ou executa uma ação de negócio.";
+        } else if (method.isAnnotationPresent(PutMapping.class)) {
+            action = "Atualiza integralmente os dados informados de forma idempotente.";
+        } else if (method.isAnnotationPresent(PatchMapping.class)) {
+            action = "Atualiza parcialmente o recurso informado.";
+        } else if (method.isAnnotationPresent(DeleteMapping.class)) {
+            action = "Remove ou inativa logicamente o recurso, conforme a regra do módulo.";
+        } else {
+            action = "Executa uma operação de negócio.";
+        }
+        boolean multipart = isMultipart(method);
+        String upload = multipart
+                ? "\n\n**Conteúdo:** `multipart/form-data`. Respeite os limites de quantidade, tamanho e MIME descritos nos parâmetros."
+                : "";
+        operation.setDescription(action
+                + "\n\n**Módulo:** " + tag + "."
+                + "\n\nIDs de recursos são tokens assinados `s2.*`; use os valores retornados pelas consultas."
+                + upload);
     }
 
     private static void enrichWithPermission(Operation operation, HandlerMethod handlerMethod) {
@@ -178,14 +304,28 @@ public class OpenApiConfig {
         }
         String expr = pre.value();
         StringBuilder extra = new StringBuilder();
+        java.util.LinkedHashSet<String> permissoes = new java.util.LinkedHashSet<>();
         Matcher pode = AUTHZ_PODE.matcher(expr);
-        if (pode.find()) {
-            extra.append("**Permissão exigida:** `").append(pode.group(1)).append("`");
+        while (pode.find()) {
+            Matcher lit = PERMISSAO_LITERAL.matcher(pode.group(1));
+            while (lit.find()) {
+                permissoes.add(lit.group(1));
+            }
+        }
+        if (!permissoes.isEmpty()) {
+            boolean qualquer = expr.contains("podeQualquer") || expr.contains(" or ");
+            extra.append(qualquer ? "**Permissões (qualquer uma):** " : "**Permissão exigida:** ");
+            extra.append(permissoes.stream().map(p -> "`" + p + "`").reduce((a, b) -> a + ", " + b).orElse(""));
         }
         Matcher role = HAS_ROLE.matcher(expr);
-        if (role.find()) {
+        java.util.LinkedHashSet<String> roles = new java.util.LinkedHashSet<>();
+        while (role.find()) {
+            roles.add(role.group(1));
+        }
+        if (!roles.isEmpty()) {
             if (!extra.isEmpty()) extra.append("  \n");
-            extra.append("**Role exigida:** `ROLE_").append(role.group(1)).append("`");
+            extra.append("**Role exigida:** ");
+            extra.append(roles.stream().map(r -> "`ROLE_" + r + "`").reduce((a, b) -> a + ", " + b).orElse(""));
         }
         if (extra.isEmpty()) {
             extra.append("**Autorização:** `").append(expr).append("`");
@@ -196,20 +336,21 @@ public class OpenApiConfig {
                 : current + "\n\n" + extra);
     }
 
-    private static void enrichSignedIdParameters(Operation operation) {
+    private static void enrichParameters(Operation operation) {
         if (operation.getParameters() == null) {
             return;
         }
         for (Parameter parameter : operation.getParameters()) {
             String name = parameter.getName();
             if (name == null) continue;
+            enrichKnownParameter(parameter, name);
+            if (NAO_ID_ASSINADO.contains(name)) {
+                continue;
+            }
             boolean looksLikeSignedId = "id".equals(name)
-                    || name.startsWith("id")
-                    || name.endsWith("Id")
-                    || "idEvento".equals(name)
-                    || "idItem".equals(name)
-                    || "idDeposito".equals(name);
-            if (!looksLikeSignedId || "page".equals(name) || "limit".equals(name)) {
+                    || (name.startsWith("id") && name.length() > 2 && Character.isUpperCase(name.charAt(2)))
+                    || (name.endsWith("Id") && !name.equals("idRegistro"));
+            if (!looksLikeSignedId) {
                 continue;
             }
             if (parameter.getDescription() == null || parameter.getDescription().isBlank()) {
@@ -224,23 +365,106 @@ public class OpenApiConfig {
         }
     }
 
+    private static void enrichKnownParameter(Parameter parameter, String name) {
+        if (parameter.getDescription() != null && !parameter.getDescription().isBlank()) return;
+        switch (name) {
+            case "page" -> {
+                parameter.setDescription("Página baseada em 1. O padrão é `1`.");
+                parameter.setExample(1);
+            }
+            case "limit" -> {
+                parameter.setDescription("Quantidade de registros por página. O padrão é `20`; máximo conforme política da API.");
+                parameter.setExample(20);
+            }
+            case "q", "pesquisa" -> parameter.setDescription(
+                    "Texto livre para busca. Espaços nas extremidades são ignorados.");
+            case "status" -> parameter.setDescription("Filtra pelo nome ou código do status.");
+            case "data", "inicio", "fim" -> parameter.setDescription("Data no formato ISO-8601 (`yyyy-MM-dd`).");
+            case "tipo" -> parameter.setDescription("Tipo de registro aceito pelo domínio do endpoint.");
+            case "fgAtivo", "incluirInativos" -> parameter.setDescription(
+                    "Quando informado, inclui ou filtra recursos inativos/ativos.");
+            case "idRegistro" -> parameter.setDescription(
+                    "Identificador interno numérico do registro auditado (não é token `s2.*`).");
+            case "nrLacre" -> parameter.setDescription("Número físico do lacre (texto livre, não é ID assinado).");
+            case "nivel" -> parameter.setDescription(
+                    "Nível de endereçamento: `SETOR`, `ESTANTE`, `PRATELEIRA`, `CAIXA` ou `POSICAO`.");
+            case "provider" -> parameter.setDescription("Provedor de armazenamento a testar: `LOCAL` ou `S3`.");
+            default -> {
+                // IDs e parâmetros específicos são tratados pelas anotações do controller ou abaixo.
+            }
+        }
+    }
+
     private static void ensureCommonResponses(Operation operation, HandlerMethod handlerMethod) {
         ApiResponses responses = operation.getResponses();
         if (responses == null) {
             responses = new ApiResponses();
             operation.setResponses(responses);
         }
-        responses.addApiResponse("400", new ApiResponse().$ref("#/components/responses/BadRequest"));
-        responses.addApiResponse("401", new ApiResponse().$ref("#/components/responses/Unauthorized"));
-        responses.addApiResponse("403", new ApiResponse().$ref("#/components/responses/Forbidden"));
-        responses.addApiResponse("404", new ApiResponse().$ref("#/components/responses/NotFound"));
-        responses.addApiResponse("409", new ApiResponse().$ref("#/components/responses/Conflict"));
+        responses.putIfAbsent("400", new ApiResponse().$ref("#/components/responses/BadRequest"));
+        boolean publicEndpoint = isPublicEndpoint(handlerMethod);
+        Method method = handlerMethod.getMethod();
+        if (!publicEndpoint) {
+            responses.putIfAbsent("401", new ApiResponse().$ref("#/components/responses/Unauthorized"));
+            responses.putIfAbsent("403", new ApiResponse().$ref("#/components/responses/Forbidden"));
+        } else if ("PortalController".equals(handlerMethod.getBeanType().getSimpleName())) {
+            responses.putIfAbsent("403", new ApiResponse().$ref("#/components/responses/Forbidden"));
+        }
+        boolean hasPathId = java.util.Arrays.stream(method.getParameters())
+                .anyMatch(p -> p.isAnnotationPresent(org.springframework.web.bind.annotation.PathVariable.class));
+        if (hasPathId || method.isAnnotationPresent(PutMapping.class)
+                || method.isAnnotationPresent(DeleteMapping.class)
+                || method.isAnnotationPresent(PatchMapping.class)) {
+            responses.putIfAbsent("404", new ApiResponse().$ref("#/components/responses/NotFound"));
+        }
+        if (method.isAnnotationPresent(PostMapping.class)
+                || method.isAnnotationPresent(PutMapping.class)
+                || method.isAnnotationPresent(PatchMapping.class)
+                || method.isAnnotationPresent(DeleteMapping.class)) {
+            responses.putIfAbsent("409", new ApiResponse().$ref("#/components/responses/Conflict"));
+        }
+        responses.putIfAbsent("500", new ApiResponse().$ref("#/components/responses/InternalServerError"));
 
         String className = handlerMethod.getBeanType().getSimpleName();
         if ("AuthController".equals(className)
                 && handlerMethod.getMethod().getName().equals("login")) {
-            responses.addApiResponse("429", new ApiResponse().$ref("#/components/responses/TooManyRequests"));
+            responses.putIfAbsent("429", new ApiResponse().$ref("#/components/responses/TooManyRequests"));
         }
+        if ("PortalController".equals(className)) {
+            responses.putIfAbsent("429", new ApiResponse().$ref("#/components/responses/PublicTooManyRequests"));
+        }
+        if (isMultipart(method)) {
+            responses.putIfAbsent("413", new ApiResponse().$ref("#/components/responses/PayloadTooLarge"));
+            responses.putIfAbsent("415", new ApiResponse().$ref("#/components/responses/UnsupportedMediaType"));
+        }
+        if ("PortalController".equals(className)
+                && "enviarResposta".equals(method.getName())) {
+            responses.putIfAbsent("410", new ApiResponse()
+                    .description("Token de resposta expirado ou já utilizado."));
+        }
+    }
+
+    private static void ensureSuccessResponses(Operation operation, HandlerMethod handlerMethod) {
+        ApiResponses responses = operation.getResponses();
+        if (responses == null) {
+            responses = new ApiResponses();
+            operation.setResponses(responses);
+        }
+        Method method = handlerMethod.getMethod();
+        Class<?> returnType = method.getReturnType();
+        boolean isVoid = returnType.equals(Void.TYPE) || returnType.equals(Void.class)
+                || (ResponseEntity.class.isAssignableFrom(returnType)
+                && method.getGenericReturnType().getTypeName().contains("Void"));
+        if (method.isAnnotationPresent(DeleteMapping.class) || isVoid) {
+            responses.putIfAbsent("204", new ApiResponse().description("Operação concluída sem corpo de resposta."));
+            return;
+        }
+        if (method.isAnnotationPresent(PostMapping.class)) {
+            responses.putIfAbsent("201", new ApiResponse().description("Recurso criado com sucesso."));
+            responses.putIfAbsent("200", new ApiResponse().description("Operação concluída com sucesso."));
+            return;
+        }
+        responses.putIfAbsent("200", new ApiResponse().description("Consulta ou atualização concluída com sucesso."));
     }
 
     private static void clearSecurityForPublicAuth(Operation operation, HandlerMethod handlerMethod) {
@@ -255,6 +479,33 @@ public class OpenApiConfig {
                 operation.setSecurity(List.of());
             }
         }
+    }
+
+    private static boolean isPublicEndpoint(HandlerMethod handlerMethod) {
+        String className = handlerMethod.getBeanType().getSimpleName();
+        if ("AuthController".equals(className)) return true;
+        if (!"PortalController".equals(className)) return false;
+        return handlerMethod.getMethodAnnotation(PreAuthorize.class) == null;
+    }
+
+    private static String controllerTag(HandlerMethod handlerMethod) {
+        io.swagger.v3.oas.annotations.tags.Tag annotation =
+                handlerMethod.getBeanType().getAnnotation(io.swagger.v3.oas.annotations.tags.Tag.class);
+        if (annotation != null && annotation.name() != null && !annotation.name().isBlank()) {
+            return annotation.name();
+        }
+        return handlerMethod.getBeanType().getSimpleName().replace("Controller", "");
+    }
+
+    private static String lowerFirst(String value) {
+        return value == null || value.isEmpty()
+                ? value
+                : Character.toLowerCase(value.charAt(0)) + value.substring(1);
+    }
+
+    private static boolean isMultipart(Method method) {
+        return java.util.Arrays.stream(method.getGenericParameterTypes())
+                .anyMatch(type -> type.getTypeName().contains("MultipartFile"));
     }
 
     private static SecurityScheme bearerScheme() {
@@ -311,6 +562,18 @@ public class OpenApiConfig {
                                 .example(body)));
     }
 
+    private static ApiResponse publicTooManyRequestsResponse() {
+        Map<String, Object> body = problemExample(429, "Muitas requisições",
+                "Limite de requisições públicas excedido. Tente novamente em breve.");
+        body.put("retryAfterSeconds", 60);
+        return new ApiResponse()
+                .description("Proteção antiabuso do portal público por IP e ação")
+                .content(new Content().addMediaType("application/problem+json",
+                        new MediaType()
+                                .schema(new Schema<>().$ref("#/components/schemas/ProblemDetail"))
+                                .example(body)));
+    }
+
     private static Map<String, Object> problemExample(int status, String title, String detail) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("type", "about:blank");
@@ -333,6 +596,7 @@ public class OpenApiConfig {
                 tag("Catálogo", "Cores, marcas e modelos auxiliares."),
                 tag("Categorias", "Árvore de categorias de itens."),
                 tag("Claims", "Pedidos de devolução e workflow (análise, aprovar, reprovar, solicitar info)."),
+                tag("Configuração de Armazenamento", "Seleção e teste do provedor Local/AWS S3 para novos uploads."),
                 tag("Configuração de E-mail", "SMTP e parâmetros de templates de e-mail do workflow de claims."),
                 tag("Contatos", "Contatos vinculados a claims/itens."),
                 tag("Crianças", "Cadastro operacional de crianças e responsáveis (backoffice)."),
@@ -341,6 +605,7 @@ public class OpenApiConfig {
                 tag("Devoluções", "Registro e status de devoluções."),
                 tag("Empresas", "Empresas organizadoras vinculadas aos eventos."),
                 tag("Equipes", "Equipes e membros por evento/local."),
+                tag("Estados", "Estados de conservação e apresentação dos itens."),
                 tag("Etiqueta", "Geração/consulta de etiqueta do item."),
                 tag("Eventos", "CRUD de eventos e configuração operacional."),
                 tag("Itens", "Coleta, estoque, movimentação e exclusão lógica de achados."),
@@ -354,6 +619,7 @@ public class OpenApiConfig {
                 tag("Relatórios", "Relatórios gerenciais. Permissão: `relatorio.visualizar`."),
                 tag("SLA", "Regras e pendências de SLA."),
                 tag("Status", "Status possíveis de item."),
+                tag("Tags", "Características pesquisáveis vinculadas às subcategorias."),
                 tag("Transferências", "Transferência de itens entre depósitos/locais."),
                 tag("Triagem", "Fila e conclusão de triagem de itens."),
                 tag("Usuários", "Usuários internos, permissões efetivas e CRUD."),

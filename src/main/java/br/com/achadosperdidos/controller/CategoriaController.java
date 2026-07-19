@@ -4,6 +4,8 @@ import br.com.achadosperdidos.controller.dto.CategoriaCreateRequest;
 import br.com.achadosperdidos.controller.dto.CategoriaResponse;
 import br.com.achadosperdidos.controller.dto.CategoriaUpdateRequest;
 import br.com.achadosperdidos.service.CategoriaService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -15,43 +17,66 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/categorias")
-@Tag(name = "Categorias")
+@Tag(name = "Categorias", description = "Categorias-pai e subcategorias do catálogo de itens.")
 @SecurityRequirement(name = "bearerAuth")
 public class CategoriaController {
     private final CategoriaService categoriaService;
     public CategoriaController(CategoriaService categoriaService) { this.categoriaService = categoriaService; }
 
-    @GetMapping @PreAuthorize("@authz.pode('categoria.listar')")
-    public List<CategoriaResponse> findAll(@RequestParam(required = false, defaultValue = "false") boolean incluirInativos,
-                                           @RequestParam(required = false) String idPai) {
-        // Com idPai -> subcategorias (filhos). Sem idPai -> apenas categorias-pai (topo).
+    @GetMapping
+    @PreAuthorize("@authz.pode('categoria.listar')")
+    @Operation(summary = "Listar categorias raiz ou filhos",
+            description = "Sem `idPai` retorna apenas categorias-pai. Com `idPai` retorna as subcategorias desse pai.")
+    public List<CategoriaResponse> findAll(
+            @Parameter(description = "Inclui categorias inativas quando `true`")
+            @RequestParam(required = false, defaultValue = "false") boolean incluirInativos,
+            @Parameter(description = "ID assinado da categoria-pai; quando informado, lista filhos")
+            @RequestParam(required = false) String idPai) {
         return (idPai != null && !idPai.isBlank())
                 ? categoriaService.findSubcategorias(idPai, incluirInativos)
                 : categoriaService.findAll(incluirInativos);
     }
 
-    /** Todas as subcategorias (qualquer pai) — tela /caracteristicas. */
-    @GetMapping("/subcategorias") @PreAuthorize("@authz.pode('categoria.listar')")
+    @GetMapping("/subcategorias")
+    @PreAuthorize("@authz.pode('categoria.listar')")
+    @Operation(summary = "Listar todas as subcategorias",
+            description = "Retorna subcategorias de qualquer pai — usado na tela /caracteristicas.")
     public List<CategoriaResponse> findAllSubcategorias(
+            @Parameter(description = "Inclui subcategorias inativas quando `true`")
             @RequestParam(required = false, defaultValue = "false") boolean incluirInativos) {
         return categoriaService.findAllSubcategorias(incluirInativos);
     }
 
-    @GetMapping("/{id}") @PreAuthorize("@authz.pode('categoria.listar')")
-    public CategoriaResponse findById(@PathVariable String id) { return categoriaService.findById(id); }
+    @GetMapping("/{id}")
+    @PreAuthorize("@authz.pode('categoria.listar')")
+    @Operation(summary = "Detalhar categoria")
+    public CategoriaResponse findById(
+            @Parameter(description = "ID assinado da categoria") @PathVariable String id) {
+        return categoriaService.findById(id);
+    }
 
-    @PostMapping @PreAuthorize("@authz.pode('categoria.gerenciar')")
+    @PostMapping
+    @PreAuthorize("@authz.pode('categoria.gerenciar')")
+    @Operation(summary = "Criar categoria ou subcategoria",
+            description = "Informe `idPai` no body para criar subcategoria; omita para categoria-raiz.")
     public ResponseEntity<CategoriaResponse> create(@Valid @RequestBody CategoriaCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(categoriaService.create(request));
     }
 
-    @PutMapping("/{id}") @PreAuthorize("@authz.pode('categoria.gerenciar')")
-    public CategoriaResponse update(@PathVariable String id, @Valid @RequestBody CategoriaUpdateRequest request) {
+    @PutMapping("/{id}")
+    @PreAuthorize("@authz.pode('categoria.gerenciar')")
+    @Operation(summary = "Atualizar categoria")
+    public CategoriaResponse update(
+            @Parameter(description = "ID assinado da categoria") @PathVariable String id,
+            @Valid @RequestBody CategoriaUpdateRequest request) {
         return categoriaService.update(id, request);
     }
 
-    @DeleteMapping("/{id}") @PreAuthorize("@authz.pode('categoria.gerenciar')")
-    public ResponseEntity<Void> delete(@PathVariable String id) {
+    @DeleteMapping("/{id}")
+    @PreAuthorize("@authz.pode('categoria.gerenciar')")
+    @Operation(summary = "Excluir categoria", description = "Exclusão lógica.")
+    public ResponseEntity<Void> delete(
+            @Parameter(description = "ID assinado da categoria") @PathVariable String id) {
         categoriaService.softDelete(id);
         return ResponseEntity.noContent().build();
     }
