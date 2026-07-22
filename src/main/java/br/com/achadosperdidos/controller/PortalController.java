@@ -65,6 +65,14 @@ public class PortalController {
         return portalService.listarEventosAbertos();
     }
 
+    @GetMapping("/status")
+    @SecurityRequirements
+    @Operation(summary = "Status de liberação do portal público",
+            description = "Indica se o portal já pode ser acessado com base na data/hora de início do evento.")
+    public PortalStatusResponse statusPortal() {
+        return portalService.statusPortal();
+    }
+
     @GetMapping("/eventos/{idEvento}")
     @SecurityRequirements
     @Operation(summary = "Detalhar evento no portal",

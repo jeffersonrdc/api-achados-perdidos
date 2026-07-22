@@ -10,6 +10,7 @@ public record PortalItemDetalheResponse(
         String cdItem,
         String nmTitulo,
         String dsItem,
+        String dsObservacoes,
         String nmCategoria,
         String nmSubcategoria,
         String nmMarca,
@@ -19,8 +20,11 @@ public record PortalItemDetalheResponse(
         LocalDate dtEncontrado,
         LocalTime hrEncontrado,
         String nmLocalEncontrado,
+        String nmPosto,
         String nmLocalAtual,
         String nmStatus,
+        String tpPrioridade,
+        Boolean fgSensivel,
         /** ID assinado da foto principal (compatibilidade). */
         String idFotoPrincipal,
         /** Todas as fotos do item (principal primeiro) — /portal/arquivos/{id}/download */

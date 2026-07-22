@@ -97,9 +97,61 @@ public class PortalService {
                 .toList();
     }
 
+    /**
+     * Indica se o portal público já está liberado (agora ≥ dtInicio e ≤ dtFim, evento ativo).
+     * Usado pela splash do portal após a vinheta.
+     */
+    @Transactional(readOnly = true)
+    public PortalStatusResponse statusPortal() {
+        Evento evento = eventoRepository.findByFgExcluidoFalseAndFgAtivoTrueOrderByDtInicioDesc().stream()
+                .filter(e -> {
+                    EventoConfiguracao cfg = eventoConfiguracaoRepository
+                            .findByEvento_IdAndFgExcluidoFalse(e.getId())
+                            .orElseGet(() -> configPadrao(e));
+                    return Boolean.TRUE.equals(cfg.getFgConsultaPublica())
+                            || Boolean.TRUE.equals(cfg.getFgAceitaClaim());
+                })
+                .findFirst()
+                .orElse(null);
+        if (evento == null) {
+            return new PortalStatusResponse(
+                    false, null, null, null, null,
+                    "Nenhum evento disponível no momento. Volte em breve.");
+        }
+        LocalDateTime agora = LocalDateTime.now();
+        boolean antes = evento.getDtInicio() != null && agora.isBefore(evento.getDtInicio());
+        boolean depois = evento.getDtFim() != null && agora.isAfter(evento.getDtFim());
+        boolean liberado = !antes && !depois;
+        String mensagem;
+        if (antes) {
+            mensagem = "O portal de Achados e Perdidos abre em "
+                    + formatarDataHora(evento.getDtInicio())
+                    + ". Enquanto isso, aproveite o festival — estamos nos preparando para te ajudar.";
+        } else if (depois) {
+            mensagem = "O período de consulta pública deste evento foi encerrado em "
+                    + formatarDataHora(evento.getDtFim()) + ".";
+        } else {
+            mensagem = "Portal liberado para consulta e registro.";
+        }
+        return new PortalStatusResponse(
+                liberado,
+                idCodec.encodeEventoId(evento.getId()),
+                evento.getNmEvento(),
+                evento.getDtInicio(),
+                evento.getDtFim(),
+                mensagem);
+    }
+
+    private static String formatarDataHora(LocalDateTime dt) {
+        if (dt == null) return "";
+        return dt.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy 'às' HH:mm"));
+    }
+
     @Transactional(readOnly = true)
     public PortalEventoResumoResponse detalharEvento(String idEvento) {
-        return toEventoResumo(findEvento(idCodec.decodeEventoIdAssinado(idEvento)));
+        Evento e = findEvento(idCodec.decodeEventoIdAssinado(idEvento));
+        exigirJanelaPortal(e);
+        return toEventoResumo(e);
     }
 
     /** Categorias para os formulários públicos (registro de objeto perdido). */
@@ -375,6 +427,8 @@ public class PortalService {
     }
 
     private void exigirConsultaPublica(String idEvento) {
+        Evento evento = findEvento(idCodec.decodeEventoIdAssinado(idEvento));
+        exigirJanelaPortal(evento);
         EventoConfiguracao cfg = config(idEvento);
         if (!Boolean.TRUE.equals(cfg.getFgConsultaPublica())) {
             throw new PortalIndisponivelException("Consulta pública desabilitada para este evento.");
@@ -382,9 +436,24 @@ public class PortalService {
     }
 
     private void exigirAceitaClaim(String idEvento) {
+        Evento evento = findEvento(idCodec.decodeEventoIdAssinado(idEvento));
+        exigirJanelaPortal(evento);
         EventoConfiguracao cfg = config(idEvento);
         if (!Boolean.TRUE.equals(cfg.getFgAceitaClaim())) {
             throw new PortalIndisponivelException("Registro de objetos perdidos desabilitado para este evento.");
+        }
+    }
+
+    /** Portal só fica utilizável a partir de DT_Inicio até DT_Fim. */
+    private void exigirJanelaPortal(Evento evento) {
+        LocalDateTime agora = LocalDateTime.now();
+        if (evento.getDtInicio() != null && agora.isBefore(evento.getDtInicio())) {
+            throw new PortalIndisponivelException(
+                    "Portal ainda não liberado. Abre em " + formatarDataHora(evento.getDtInicio()) + ".");
+        }
+        if (evento.getDtFim() != null && agora.isAfter(evento.getDtFim())) {
+            throw new PortalIndisponivelException(
+                    "Portal encerrado em " + formatarDataHora(evento.getDtFim()) + ".");
         }
     }
 
@@ -484,6 +553,7 @@ public class PortalService {
                 i.getCdItem(),
                 i.getNmTitulo(),
                 i.getDsItem(),
+                i.getDsObservacoes(),
                 i.getCategoria() != null ? i.getCategoria().getNmCategoria() : null,
                 i.getSubcategoria() != null ? i.getSubcategoria().getNmCategoria() : null,
                 i.getNmMarca(),
@@ -493,8 +563,11 @@ public class PortalService {
                 i.getDtEncontrado(),
                 i.getHrEncontrado(),
                 i.getNmLocalEncontrado(),
+                i.getNmPosto(),
                 i.getLocalAtual() != null ? i.getLocalAtual().getNmLocal() : null,
                 i.getStatus() != null ? i.getStatus().getNmStatus() : null,
+                i.getTpPrioridade(),
+                i.getFgSensivel(),
                 idFoto,
                 idsFotos);
     }

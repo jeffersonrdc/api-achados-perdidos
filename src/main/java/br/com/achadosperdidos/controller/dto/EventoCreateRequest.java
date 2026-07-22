@@ -13,5 +13,7 @@ public record EventoCreateRequest(
         String nmLocal,
         String nmCidade,
         String sgUf,
-        Integer qtDiasRetencao
+        Integer qtDiasRetencao,
+        String urlLogo,
+        String urlHero
 ) {}

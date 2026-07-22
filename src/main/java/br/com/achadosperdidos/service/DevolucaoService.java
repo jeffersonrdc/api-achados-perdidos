@@ -54,15 +54,18 @@ public class DevolucaoService {
     private final ItemRepository itemRepository;
     private final ClaimRepository claimRepository;
     private final WorkflowService workflowService;
+    private final MatchService matchService;
     private final AuditoriaContextService auditoriaContext;
     private final SignedResourceIdCodec idCodec;
 
     public DevolucaoService(DevolucaoRepository devolucaoRepository, ItemRepository itemRepository, ClaimRepository claimRepository,
-                            WorkflowService workflowService, AuditoriaContextService auditoriaContext, SignedResourceIdCodec idCodec) {
+                            WorkflowService workflowService, MatchService matchService,
+                            AuditoriaContextService auditoriaContext, SignedResourceIdCodec idCodec) {
         this.devolucaoRepository = devolucaoRepository;
         this.itemRepository = itemRepository;
         this.claimRepository = claimRepository;
         this.workflowService = workflowService;
+        this.matchService = matchService;
         this.auditoriaContext = auditoriaContext;
         this.idCodec = idCodec;
     }
@@ -75,6 +78,7 @@ public class DevolucaoService {
         Devolucao d = new Devolucao();
         d.setEvento(item.getEvento());
         d.setItem(item);
+        Long claimId = null;
         if (request.idClaim() != null && !request.idClaim().isBlank()) {
             Claim claim = claimRepository.findById(idCodec.decodeClaimId(request.idClaim()))
                     .orElseThrow(() -> new RecursoNaoEncontradoException("Claim não encontrado."));
@@ -82,6 +86,7 @@ public class DevolucaoService {
                 throw new IllegalArgumentException("Claim e item pertencem a eventos diferentes — devolução não permitida.");
             }
             d.setClaim(claim);
+            claimId = claim.getId();
         }
         d.setTpDevolucao(request.tpDevolucao());
         d.setNmRecebedor(request.nmRecebedor());
@@ -102,7 +107,11 @@ public class DevolucaoService {
             // Fecha o ciclo: se o status atual permitir, marca o item como Devolvido.
             workflowService.transitarSePermitido(request.idItem(), "Devolvido", "Devolução concluída ao responsável.");
         }
-        return toResponse(devolucaoRepository.save(d));
+        Devolucao saved = devolucaoRepository.save(d);
+        if (claimId != null) {
+            matchService.confirmarMatch(claimId, item.getId());
+        }
+        return toResponse(saved);
     }
 
     @Transactional(readOnly = true)

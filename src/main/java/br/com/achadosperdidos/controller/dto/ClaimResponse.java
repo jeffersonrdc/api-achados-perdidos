@@ -44,5 +44,8 @@ public record ClaimResponse(
         String dsJustificativaAprovacao,
         String dsJustificativaReprovacao,
         /** Mensagens do solicitante ainda não vistas pelo operador. */
-        Long qtMensagensNaoLidas
+        Long qtMensagensNaoLidas,
+        /** Há candidatos PENDENTE em claim_validacao (match com coleta). */
+        Boolean hasMatch,
+        Long qtMatches
 ) {}

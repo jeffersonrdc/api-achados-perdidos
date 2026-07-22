@@ -17,6 +17,8 @@ public class Evento {
     @Column(name = "NM_Cidade", length = 100) private String nmCidade;
     @Column(name = "SG_UF", length = 2) private String sgUf;
     @Column(name = "QT_DiasRetencao", nullable = false) private Integer qtDiasRetencao = 90;
+    @Column(name = "NM_UrlLogo", columnDefinition = "MEDIUMTEXT") private String nmUrlLogo;
+    @Column(name = "NM_UrlHero", columnDefinition = "MEDIUMTEXT") private String nmUrlHero;
     @Column(name = "DT_Cadastro", nullable = false) private LocalDateTime dtCadastro;
     @Column(name = "DT_Alteracao") private LocalDateTime dtAlteracao;
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Ativo", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgAtivo = true;
@@ -31,6 +33,8 @@ public class Evento {
     public String getNmCidade() { return nmCidade; } public void setNmCidade(String v) { this.nmCidade = v; }
     public String getSgUf() { return sgUf; } public void setSgUf(String v) { this.sgUf = v; }
     public Integer getQtDiasRetencao() { return qtDiasRetencao; } public void setQtDiasRetencao(Integer v) { this.qtDiasRetencao = v; }
+    public String getNmUrlLogo() { return nmUrlLogo; } public void setNmUrlLogo(String v) { this.nmUrlLogo = v; }
+    public String getNmUrlHero() { return nmUrlHero; } public void setNmUrlHero(String v) { this.nmUrlHero = v; }
     public LocalDateTime getDtCadastro() { return dtCadastro; } public void setDtCadastro(LocalDateTime v) { this.dtCadastro = v; }
     public LocalDateTime getDtAlteracao() { return dtAlteracao; } public void setDtAlteracao(LocalDateTime v) { this.dtAlteracao = v; }
     public Boolean getFgAtivo() { return fgAtivo; } public void setFgAtivo(Boolean v) { this.fgAtivo = v; }

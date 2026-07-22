@@ -9,10 +9,12 @@ import br.com.achadosperdidos.controller.dto.ClaimReprovarRequest;
 import br.com.achadosperdidos.controller.dto.ClaimResponse;
 import br.com.achadosperdidos.controller.dto.ClaimSolicitarInfoRequest;
 import br.com.achadosperdidos.controller.dto.ClaimUpdateRequest;
+import br.com.achadosperdidos.controller.dto.MatchCandidatoResponse;
 import br.com.achadosperdidos.pagination.ApiPage;
 import br.com.achadosperdidos.service.ClaimMensagemService;
 import br.com.achadosperdidos.service.ClaimService;
 import br.com.achadosperdidos.service.ClaimWorkflowService;
+import br.com.achadosperdidos.service.MatchService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -33,11 +35,14 @@ public class ClaimController {
     private final ClaimService claimService;
     private final ClaimWorkflowService claimWorkflowService;
     private final ClaimMensagemService claimMensagemService;
+    private final MatchService matchService;
+
     public ClaimController(ClaimService claimService, ClaimWorkflowService claimWorkflowService,
-                           ClaimMensagemService claimMensagemService) {
+                           ClaimMensagemService claimMensagemService, MatchService matchService) {
         this.claimService = claimService;
         this.claimWorkflowService = claimWorkflowService;
         this.claimMensagemService = claimMensagemService;
+        this.matchService = matchService;
     }
 
     @PostMapping
@@ -85,6 +90,22 @@ public class ClaimController {
     @PreAuthorize("@authz.pode('claim.listar')")
     @Operation(summary = "Buscar claim por ID assinado")
     public ClaimResponse findById(@PathVariable String id) { return claimService.findById(id); }
+
+    @GetMapping("/{id}/matches")
+    @PreAuthorize("@authz.pode('claim.listar')")
+    @Operation(summary = "Candidatos da coleta com match pendente para o claim PERDA",
+            description = "Retorna itens sugeridos (score ≥ 55) persistidos em claim_validacao com status PENDENTE.")
+    public List<MatchCandidatoResponse> matches(@PathVariable String id) {
+        return matchService.listarPorClaim(id);
+    }
+
+    @PostMapping("/{id}/matches/recalcular")
+    @PreAuthorize("@authz.podeQualquer('claim.editar', 'claim.criar', 'claim.listar')")
+    @Operation(summary = "Recalcular matches do claim PERDA",
+            description = "Pesquisa novamente na coleta (novos itens podem ter entrado) e atualiza status Match / Aguardando Match.")
+    public ClaimResponse recalcularMatches(@PathVariable String id) {
+        return claimService.recalcularMatches(id);
+    }
 
     @PutMapping("/{id}")
     @PreAuthorize("@authz.podeQualquer('claim.editar', 'claim.criar')")

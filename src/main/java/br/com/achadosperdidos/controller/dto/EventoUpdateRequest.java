@@ -12,5 +12,7 @@ public record EventoUpdateRequest(
         String nmCidade,
         String sgUf,
         Integer qtDiasRetencao,
-        Boolean fgAtivo
+        Boolean fgAtivo,
+        String urlLogo,
+        String urlHero
 ) {}

@@ -44,6 +44,8 @@ public class EventoService {
         evento.setNmCidade(request.nmCidade());
         evento.setSgUf(request.sgUf());
         evento.setQtDiasRetencao(request.qtDiasRetencao() != null ? request.qtDiasRetencao() : 90);
+        evento.setNmUrlLogo(blankToNull(request.urlLogo()));
+        evento.setNmUrlHero(blankToNull(request.urlHero()));
         evento.setDtCadastro(LocalDateTime.now());
         evento.setFgAtivo(true);
         evento.setFgExcluido(false);
@@ -75,6 +77,8 @@ public class EventoService {
         if (request.sgUf() != null) evento.setSgUf(request.sgUf());
         if (request.qtDiasRetencao() != null) evento.setQtDiasRetencao(request.qtDiasRetencao());
         if (request.fgAtivo() != null) evento.setFgAtivo(request.fgAtivo());
+        if (request.urlLogo() != null) evento.setNmUrlLogo(blankToNull(request.urlLogo()));
+        if (request.urlHero() != null) evento.setNmUrlHero(blankToNull(request.urlHero()));
         evento.setDtAlteracao(LocalDateTime.now());
         return toResponse(eventoRepository.save(evento));
     }
@@ -97,6 +101,11 @@ public class EventoService {
     private EventoResponse toResponse(Evento e) {
         return new EventoResponse(
                 idCodec.encodeEventoId(e.getId()), e.getNmEvento(), e.getDsEvento(), e.getDtInicio(), e.getDtFim(),
-                e.getNmLocal(), e.getNmCidade(), e.getSgUf(), e.getQtDiasRetencao(), e.getFgAtivo());
+                e.getNmLocal(), e.getNmCidade(), e.getSgUf(), e.getQtDiasRetencao(), e.getFgAtivo(),
+                e.getNmUrlLogo(), e.getNmUrlHero());
+    }
+
+    private static String blankToNull(String v) {
+        return v == null || v.isBlank() ? null : v.trim();
     }
 }

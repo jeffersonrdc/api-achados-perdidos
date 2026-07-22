@@ -24,6 +24,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -49,6 +50,7 @@ public class ClaimService {
     private final StatusItemService statusItemService;
     private final ClaimValidacaoRepository claimValidacaoRepository;
     private final ClaimMensagemRepository claimMensagemRepository;
+    private final MatchService matchService;
     private final SignedResourceIdCodec idCodec;
 
     public ClaimService(ClaimRepository claimRepository, EventoRepository eventoRepository,
@@ -56,6 +58,7 @@ public class ClaimService {
                         StatusItemService statusItemService,
                         ClaimValidacaoRepository claimValidacaoRepository,
                         ClaimMensagemRepository claimMensagemRepository,
+                        MatchService matchService,
                         SignedResourceIdCodec idCodec) {
         this.claimRepository = claimRepository;
         this.eventoRepository = eventoRepository;
@@ -64,6 +67,7 @@ public class ClaimService {
         this.statusItemService = statusItemService;
         this.claimValidacaoRepository = claimValidacaoRepository;
         this.claimMensagemRepository = claimMensagemRepository;
+        this.matchService = matchService;
         this.idCodec = idCodec;
     }
 
@@ -92,7 +96,9 @@ public class ClaimService {
         claim.setFgExcluido(false);
         claim = claimRepository.save(claim);
         claim.setCdClaim(gerarProtocolo(claim.getId(), claim.getDtCadastro()));
-        return toResponse(claimRepository.save(claim));
+        claim = claimRepository.save(claim);
+        matchService.recalcularMatches(claim);
+        return toResponse(claimRepository.findById(claim.getId()).orElse(claim));
     }
 
     @Transactional
@@ -137,7 +143,17 @@ public class ClaimService {
         if (request.dsObservacao() != null) claim.setDsObservacao(blankToNull(request.dsObservacao()));
         if (request.fgAtivo() != null) claim.setFgAtivo(request.fgAtivo());
         claim.setDtAlteracao(LocalDateTime.now());
-        return toResponse(claimRepository.save(claim));
+        claim = claimRepository.save(claim);
+        matchService.recalcularMatches(claim);
+        return toResponse(claimRepository.findById(claim.getId()).orElse(claim));
+    }
+
+    /** Recalcula candidatos da coleta para o claim PERDA (novos itens podem ter entrado). */
+    @Transactional
+    public ClaimResponse recalcularMatches(String idToken) {
+        Claim claim = findEntity(idCodec.decodeClaimId(idToken));
+        matchService.recalcularMatches(claim);
+        return toResponse(claimRepository.findById(claim.getId()).orElse(claim));
     }
 
     @Transactional(readOnly = true)
@@ -150,6 +166,7 @@ public class ClaimService {
         Long categoriaId = (idCategoria != null && !idCategoria.isBlank()) ? idCodec.decodeCategoriaId(idCategoria) : null;
         LocalDate dataCadastro = parseData(data);
         String tipoNorm = (tipo != null && !tipo.isBlank()) ? normalizarTipo(tipo) : null;
+        boolean priorizarMatch = TIPO_PERDA.equals(tipoNorm);
 
         Specification<Claim> spec = (root, query, cb) -> {
             List<Predicate> ps = new ArrayList<>();
@@ -171,10 +188,21 @@ public class ClaimService {
                         cb.like(cb.lower(root.get("nmLocal")), like),
                         cb.like(cb.lower(root.get("cdClaim")), like)));
             }
+            if (priorizarMatch && query != null && !Long.class.equals(query.getResultType())
+                    && !long.class.equals(query.getResultType())) {
+                Expression<Integer> prioridade = cb.<Integer>selectCase()
+                        .when(cb.equal(root.get("status").get("nmStatus"), MatchService.STATUS_MATCH), 0)
+                        .when(cb.equal(root.get("status").get("nmStatus"), MatchService.STATUS_AGUARDANDO_MATCH), 1)
+                        .when(cb.equal(root.get("status").get("nmStatus"), "Rascunho"), 2)
+                        .otherwise(3);
+                query.orderBy(cb.asc(prioridade), cb.desc(root.get("dtCadastro")));
+            }
             return cb.and(ps.toArray(new Predicate[0]));
         };
-        Page<Claim> result = claimRepository.findAll(spec,
-                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.DESC, "dtCadastro")));
+        PageRequest pageable = priorizarMatch
+                ? PageRequest.of(p - 1, l)
+                : PageRequest.of(p - 1, l, Sort.by(Sort.Direction.DESC, "dtCadastro"));
+        Page<Claim> result = claimRepository.findAll(spec, pageable);
         Map<Long, Long> naoLidas = contarNaoLidas(result.getContent().stream().map(Claim::getId).toList());
         var content = result.getContent().stream()
                 .map(c -> toResponse(c, naoLidas.getOrDefault(c.getId(), 0L)))
@@ -218,9 +246,10 @@ public class ClaimService {
         Long ev = idCodec.decodeEventoId(idEvento);
         String tipoNorm = (tipo != null && !tipo.isBlank()) ? normalizarTipo(tipo) : null;
         long total = claimRepository.countByEventoAndTipo(ev, tipoNorm);
-        long abertos = claimRepository.countByEventoTipoAndStatus(ev, tipoNorm, List.of("Claim Aberto"));
+        long abertos = claimRepository.countByEventoTipoAndStatus(
+                ev, tipoNorm, List.of("Claim Aberto", MatchService.STATUS_AGUARDANDO_MATCH));
         long emAnalise = claimRepository.countByEventoTipoAndStatus(
-                ev, tipoNorm, List.of("Claim em Análise", "Claim Aguardando Info"));
+                ev, tipoNorm, List.of("Claim em Análise", "Claim Aguardando Info", MatchService.STATUS_MATCH));
         long aprovados = claimRepository.countByEventoTipoAndStatus(ev, tipoNorm, List.of("Claim Aprovado"));
         long rejeitados = claimRepository.countByEventoTipoAndStatus(
                 ev, tipoNorm, List.of("Claim Rejeitado", "Claim Cancelado"));
@@ -335,8 +364,20 @@ public class ClaimService {
     }
 
     private ClaimResponse toResponse(Claim c, long qtMensagensNaoLidas) {
-        Item item = claimValidacaoRepository.findByClaim_IdAndFgExcluidoFalseOrderByDtCadastroDesc(c.getId())
-                .stream().map(ClaimValidacao::getItem).filter(java.util.Objects::nonNull).findFirst().orElse(null);
+        List<ClaimValidacao> validacoes = claimValidacaoRepository
+                .findByClaim_IdAndFgExcluidoFalseOrderByDtCadastroDesc(c.getId());
+        Item itemVinculado = validacoes.stream()
+                .filter(v -> MatchService.ST_CONFIRMADO.equalsIgnoreCase(v.getStResultado()))
+                .map(ClaimValidacao::getItem)
+                .filter(java.util.Objects::nonNull)
+                .findFirst()
+                .orElseGet(() -> ClaimService.TIPO_RETIRADA.equalsIgnoreCase(c.getTpClaim())
+                        ? validacoes.stream().map(ClaimValidacao::getItem)
+                        .filter(java.util.Objects::nonNull).findFirst().orElse(null)
+                        : null);
+        long qtMatches = validacoes.stream()
+                .filter(v -> MatchService.ST_PENDENTE.equalsIgnoreCase(v.getStResultado()))
+                .count();
         return new ClaimResponse(
                 idCodec.encodeClaimId(c.getId()),
                 c.getTpClaim(),
@@ -371,11 +412,13 @@ public class ClaimService {
                 c.getDsDetalhesOcultos(),
                 c.getNmOperador(),
                 c.getDsObservacao(),
-                item != null ? idCodec.encodeItemId(item.getId()) : null,
-                item != null ? item.getCdItem() : null,
+                itemVinculado != null ? idCodec.encodeItemId(itemVinculado.getId()) : null,
+                itemVinculado != null ? itemVinculado.getCdItem() : null,
                 c.getDsJustificativaAprovacao(),
                 c.getDsJustificativaReprovacao(),
-                qtMensagensNaoLidas);
+                qtMensagensNaoLidas,
+                qtMatches > 0,
+                qtMatches);
     }
 
     private Map<Long, Long> contarNaoLidas(List<Long> claimIds) {
