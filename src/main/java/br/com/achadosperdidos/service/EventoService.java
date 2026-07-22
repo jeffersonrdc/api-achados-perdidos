@@ -3,6 +3,7 @@ package br.com.achadosperdidos.service;
 import br.com.achadosperdidos.controller.dto.EventoCreateRequest;
 import br.com.achadosperdidos.controller.dto.EventoResponse;
 import br.com.achadosperdidos.controller.dto.EventoUpdateRequest;
+import br.com.achadosperdidos.entity.Arquivo;
 import br.com.achadosperdidos.entity.Empresa;
 import br.com.achadosperdidos.entity.Evento;
 import br.com.achadosperdidos.exception.RecursoNaoEncontradoException;
@@ -11,22 +12,25 @@ import br.com.achadosperdidos.repository.EventoRepository;
 import br.com.achadosperdidos.security.SignedResourceIdCodec;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class EventoService {
     private final EventoRepository eventoRepository;
     private final EmpresaRepository empresaRepository;
+    private final ArquivoService arquivoService;
     private final SignedResourceIdCodec idCodec;
-    private final UsuarioContextService usuarioContextService;
 
     public EventoService(EventoRepository eventoRepository, EmpresaRepository empresaRepository,
-                         SignedResourceIdCodec idCodec, UsuarioContextService usuarioContextService) {
+                         ArquivoService arquivoService, SignedResourceIdCodec idCodec) {
         this.eventoRepository = eventoRepository;
         this.empresaRepository = empresaRepository;
+        this.arquivoService = arquivoService;
         this.idCodec = idCodec;
-        this.usuarioContextService = usuarioContextService;
     }
 
     @Transactional
@@ -44,12 +48,10 @@ public class EventoService {
         evento.setNmCidade(request.nmCidade());
         evento.setSgUf(request.sgUf());
         evento.setQtDiasRetencao(request.qtDiasRetencao() != null ? request.qtDiasRetencao() : 90);
-        evento.setNmUrlLogo(blankToNull(request.urlLogo()));
-        evento.setNmUrlHero(blankToNull(request.urlHero()));
         evento.setDtCadastro(LocalDateTime.now());
         evento.setFgAtivo(true);
         evento.setFgExcluido(false);
-        return toResponse(eventoRepository.save(evento));
+        return toResponse(eventoRepository.save(evento), Map.of());
     }
 
     @Transactional(readOnly = true)
@@ -57,12 +59,17 @@ public class EventoService {
         List<Evento> list = incluirInativos
                 ? eventoRepository.findByFgExcluidoFalseOrderByDtInicioDesc()
                 : eventoRepository.findByFgExcluidoFalseAndFgAtivoTrueOrderByDtInicioDesc();
-        return list.stream().map(this::toResponse).toList();
+        Map<Long, Map<String, Arquivo>> imgs = arquivoService.imagensPorEventos(
+                list.stream().map(Evento::getId).collect(Collectors.toList()));
+        return list.stream().map(e -> toResponse(e, imgs.getOrDefault(e.getId(), Map.of()))).toList();
     }
 
     @Transactional(readOnly = true)
     public EventoResponse findById(String idToken) {
-        return toResponse(findEntity(idCodec.decodeEventoId(idToken)));
+        Evento e = findEntity(idCodec.decodeEventoId(idToken));
+        Map<String, Arquivo> imgs = arquivoService.imagensPorEventos(List.of(e.getId()))
+                .getOrDefault(e.getId(), Map.of());
+        return toResponse(e, imgs);
     }
 
     @Transactional
@@ -77,10 +84,11 @@ public class EventoService {
         if (request.sgUf() != null) evento.setSgUf(request.sgUf());
         if (request.qtDiasRetencao() != null) evento.setQtDiasRetencao(request.qtDiasRetencao());
         if (request.fgAtivo() != null) evento.setFgAtivo(request.fgAtivo());
-        if (request.urlLogo() != null) evento.setNmUrlLogo(blankToNull(request.urlLogo()));
-        if (request.urlHero() != null) evento.setNmUrlHero(blankToNull(request.urlHero()));
         evento.setDtAlteracao(LocalDateTime.now());
-        return toResponse(eventoRepository.save(evento));
+        Evento saved = eventoRepository.save(evento);
+        Map<String, Arquivo> imgs = arquivoService.imagensPorEventos(List.of(saved.getId()))
+                .getOrDefault(saved.getId(), Map.of());
+        return toResponse(saved, imgs);
     }
 
     @Transactional
@@ -98,14 +106,13 @@ public class EventoService {
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Evento não encontrado."));
     }
 
-    private EventoResponse toResponse(Evento e) {
+    private EventoResponse toResponse(Evento e, Map<String, Arquivo> imgs) {
+        Arquivo logo = imgs != null ? imgs.get("LOGO") : null;
+        Arquivo hero = imgs != null ? imgs.get("HERO") : null;
         return new EventoResponse(
                 idCodec.encodeEventoId(e.getId()), e.getNmEvento(), e.getDsEvento(), e.getDtInicio(), e.getDtFim(),
                 e.getNmLocal(), e.getNmCidade(), e.getSgUf(), e.getQtDiasRetencao(), e.getFgAtivo(),
-                e.getNmUrlLogo(), e.getNmUrlHero());
-    }
-
-    private static String blankToNull(String v) {
-        return v == null || v.isBlank() ? null : v.trim();
+                logo != null ? idCodec.encodeArquivoId(logo.getId()) : null,
+                hero != null ? idCodec.encodeArquivoId(hero.getId()) : null);
     }
 }

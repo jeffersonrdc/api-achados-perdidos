@@ -118,6 +118,8 @@ public class SignedResourceIdCodec {
             case "CLAIM_MENSAGEM" -> decodeClaimMensagemId(token);
             case "DEVOLUCAO" -> decodeDevolucaoId(token);
             case "CRIANCA" -> decodeCriancaId(token);
+            case "EVENTO" -> decodeEventoId(token);
+            case "CONTATO" -> decodeContatoId(token);
             default -> decodeNumeric(token);
         };
     }
@@ -129,6 +131,8 @@ public class SignedResourceIdCodec {
             case "CLAIM_MENSAGEM" -> encodeClaimMensagemId(id);
             case "DEVOLUCAO" -> encodeDevolucaoId(id);
             case "CRIANCA" -> encodeCriancaId(id);
+            case "EVENTO" -> encodeEventoId(id);
+            case "CONTATO" -> encodeContatoId(id);
             default -> String.valueOf(id);
         };
     }

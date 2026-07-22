@@ -19,6 +19,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -91,8 +92,11 @@ public class PortalService {
 
     @Transactional(readOnly = true)
     public List<PortalEventoResumoResponse> listarEventosAbertos() {
-        return eventoRepository.findByFgExcluidoFalseAndFgAtivoTrueOrderByDtInicioDesc().stream()
-                .map(this::toEventoResumo)
+        List<Evento> eventos = eventoRepository.findByFgExcluidoFalseAndFgAtivoTrueOrderByDtInicioDesc();
+        Map<Long, Map<String, Arquivo>> imgs = arquivoService.imagensPorEventos(
+                eventos.stream().map(Evento::getId).toList());
+        return eventos.stream()
+                .map(e -> toEventoResumo(e, imgs.getOrDefault(e.getId(), Map.of())))
                 .filter(e -> Boolean.TRUE.equals(e.fgConsultaPublica()) || Boolean.TRUE.equals(e.fgAceitaClaim()))
                 .toList();
     }
@@ -151,7 +155,9 @@ public class PortalService {
     public PortalEventoResumoResponse detalharEvento(String idEvento) {
         Evento e = findEvento(idCodec.decodeEventoIdAssinado(idEvento));
         exigirJanelaPortal(e);
-        return toEventoResumo(e);
+        Map<String, Arquivo> imgs = arquivoService.imagensPorEventos(List.of(e.getId()))
+                .getOrDefault(e.getId(), Map.of());
+        return toEventoResumo(e, imgs);
     }
 
     /** Categorias para os formulários públicos (registro de objeto perdido). */
@@ -488,9 +494,11 @@ public class PortalService {
         return value != null && value.toLowerCase().contains(q);
     }
 
-    private PortalEventoResumoResponse toEventoResumo(Evento e) {
+    private PortalEventoResumoResponse toEventoResumo(Evento e, Map<String, Arquivo> imgs) {
         EventoConfiguracao cfg = eventoConfiguracaoRepository.findByEvento_IdAndFgExcluidoFalse(e.getId())
                 .orElseGet(() -> configPadrao(e));
+        Arquivo logo = imgs != null ? imgs.get("LOGO") : null;
+        Arquivo hero = imgs != null ? imgs.get("HERO") : null;
         return new PortalEventoResumoResponse(
                 idCodec.encodeEventoId(e.getId()),
                 e.getNmEvento(),
@@ -500,7 +508,9 @@ public class PortalService {
                 e.getDtInicio(),
                 e.getDtFim(),
                 cfg.getFgConsultaPublica(),
-                cfg.getFgAceitaClaim());
+                cfg.getFgAceitaClaim(),
+                logo != null ? idCodec.encodeArquivoId(logo.getId()) : null,
+                hero != null ? idCodec.encodeArquivoId(hero.getId()) : null);
     }
 
     private PortalItemCatalogoResponse toCatalogoItem(Item i, Arquivo fotoPrincipal) {

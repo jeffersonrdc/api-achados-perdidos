@@ -13,6 +13,8 @@ public record EventoResponse(
         String sgUf,
         Integer qtDiasRetencao,
         Boolean fgAtivo,
-        String urlLogo,
-        String urlHero
+        /** ID assinado do arquivo LOGO no S3 (via /arquivos/{id}/download). */
+        String idLogo,
+        /** ID assinado do arquivo HERO no S3. */
+        String idHero
 ) {}

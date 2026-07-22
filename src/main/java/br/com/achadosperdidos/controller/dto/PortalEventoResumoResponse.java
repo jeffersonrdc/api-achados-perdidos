@@ -11,5 +11,9 @@ public record PortalEventoResumoResponse(
         LocalDateTime dtInicio,
         LocalDateTime dtFim,
         Boolean fgConsultaPublica,
-        Boolean fgAceitaClaim
+        Boolean fgAceitaClaim,
+        /** ID assinado — GET /portal/arquivos/{id}/download ou /thumbnail */
+        String idLogo,
+        /** ID assinado — GET /portal/arquivos/{id}/download ou /thumbnail */
+        String idHero
 ) {}

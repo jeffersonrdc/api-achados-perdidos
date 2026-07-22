@@ -11,6 +11,7 @@ import br.com.achadosperdidos.repository.ClaimRepository;
 import br.com.achadosperdidos.repository.ContatoRepository;
 import br.com.achadosperdidos.repository.CriancaRepository;
 import br.com.achadosperdidos.repository.DevolucaoRepository;
+import br.com.achadosperdidos.repository.EventoRepository;
 import br.com.achadosperdidos.repository.ItemRepository;
 import br.com.achadosperdidos.security.SignedResourceIdCodec;
 import br.com.achadosperdidos.storage.ArquivoStorage;
@@ -44,6 +45,7 @@ public class ArquivoService {
     private final CriancaRepository criancaRepository;
     private final DevolucaoRepository devolucaoRepository;
     private final ContatoRepository contatoRepository;
+    private final EventoRepository eventoRepository;
     private final SignedResourceIdCodec idCodec;
     private final ArquivoStorageRouter storageRouter;
     private final ImageThumbnailService imageThumbnailService;
@@ -51,11 +53,13 @@ public class ArquivoService {
     private static final Set<String> MIME_PERMITIDOS = Set.of(
             "image/jpeg", "image/pjpeg", "image/png", "image/webp",
             "image/gif", "image/heic", "image/heif", "application/pdf");
+    private static final Set<String> TIPOS_IMAGEM_EVENTO = Set.of("LOGO", "HERO");
 
     public ArquivoService(ArquivoRepository arquivoRepository, ItemRepository itemRepository,
                           ClaimRepository claimRepository, ClaimMensagemRepository claimMensagemRepository,
                           CriancaRepository criancaRepository,
                           DevolucaoRepository devolucaoRepository, ContatoRepository contatoRepository,
+                          EventoRepository eventoRepository,
                           SignedResourceIdCodec idCodec, ArquivoStorageRouter storageRouter,
                           ImageThumbnailService imageThumbnailService) {
         this.arquivoRepository = arquivoRepository;
@@ -65,6 +69,7 @@ public class ArquivoService {
         this.criancaRepository = criancaRepository;
         this.devolucaoRepository = devolucaoRepository;
         this.contatoRepository = contatoRepository;
+        this.eventoRepository = eventoRepository;
         this.idCodec = idCodec;
         this.storageRouter = storageRouter;
         this.imageThumbnailService = imageThumbnailService;
@@ -122,16 +127,20 @@ public class ArquivoService {
                 file.getOriginalFilename() != null ? file.getOriginalFilename() : nomeFisico);
 
         try {
+            String tpArq = tpArquivo != null && !tpArquivo.isBlank() ? tpArquivo.trim().toUpperCase() : "FOTO";
+            if ("EVENTO".equals(tipo) && TIPOS_IMAGEM_EVENTO.contains(tpArq)) {
+                invalidarArquivosEventoAnteriores(idEnt, tpArq);
+            }
             Arquivo a = new Arquivo();
             a.setEvento(evento);
             a.setTpEntidade(tipo);
             a.setIdEntidade(idEnt);
-            a.setTpArquivo(tpArquivo != null && !tpArquivo.isBlank() ? tpArquivo.trim().toUpperCase() : "FOTO");
+            a.setTpArquivo(tpArq);
             a.setNmArquivo(file.getOriginalFilename() != null ? file.getOriginalFilename() : nomeFisico);
             a.setNmPath(relPath);
             a.setTpStorage(provider.name());
             a.setTpMime(file.getContentType());
-            a.setFgPrincipal(Boolean.TRUE.equals(fgPrincipal));
+            a.setFgPrincipal(Boolean.TRUE.equals(fgPrincipal) || TIPOS_IMAGEM_EVENTO.contains(tpArq));
             a.setQtBytes(file.getSize());
             a.setDtCadastro(LocalDateTime.now());
             a.setFgAtivo(true);
@@ -163,18 +172,56 @@ public class ArquivoService {
     }
 
     /**
-     * Download público de foto de item do catálogo (portal).
-     * Só libera se o arquivo for FOTO de ITEM em status público.
+     * Download público (portal): foto de item do catálogo OU logo/hero do evento.
      */
     @Transactional(readOnly = true)
     public ArquivoConteudo carregarConteudoPublicoItem(String idArquivo) {
-        return abrirOriginal(validarArquivoPublicoItem(idArquivo));
+        return abrirOriginal(validarArquivoPublico(idArquivo));
     }
 
-    /** Miniatura pública do catálogo (mesma regra de acesso da foto original). */
+    /** Miniatura pública (mesma regra de acesso do original). */
     @Transactional(readOnly = true)
     public ArquivoConteudo carregarThumbnailPublicoItem(String idArquivo, Integer maxEdge) {
-        return carregarThumbnailDe(validarArquivoPublicoItem(idArquivo), maxEdge);
+        return carregarThumbnailDe(validarArquivoPublico(idArquivo), maxEdge);
+    }
+
+    /** Logo (ou hero) ativo do evento — metadados em `arquivo`, binário no S3/LOCAL. */
+    @Transactional(readOnly = true)
+    public Optional<Arquivo> imagemEvento(Long idEvento, String tpArquivo) {
+        if (idEvento == null || tpArquivo == null) return Optional.empty();
+        return arquivoRepository
+                .findByTpEntidadeAndIdEntidadeAndFgExcluidoFalseOrderByDtCadastroDesc("EVENTO", idEvento)
+                .stream()
+                .filter(a -> tpArquivo.equalsIgnoreCase(a.getTpArquivo()))
+                .findFirst();
+    }
+
+    /** Mapa eventoId → (logo, hero) para listagens sem N+1. */
+    @Transactional(readOnly = true)
+    public Map<Long, Map<String, Arquivo>> imagensPorEventos(Collection<Long> idEventos) {
+        if (idEventos == null || idEventos.isEmpty()) return Map.of();
+        Map<Long, Map<String, Arquivo>> out = new HashMap<>();
+        for (Arquivo a : arquivoRepository.findByTpEntidadeAndIdEntidadeInAndFgExcluidoFalse("EVENTO", idEventos)) {
+            if (!TIPOS_IMAGEM_EVENTO.contains(a.getTpArquivo() == null ? "" : a.getTpArquivo().toUpperCase())) {
+                continue;
+            }
+            out.computeIfAbsent(a.getIdEntidade(), k -> new HashMap<>())
+                    .putIfAbsent(a.getTpArquivo().toUpperCase(), a);
+        }
+        return out;
+    }
+
+    private void invalidarArquivosEventoAnteriores(Long idEvento, String tpArquivo) {
+        LocalDateTime agora = LocalDateTime.now();
+        for (Arquivo old : arquivoRepository
+                .findByTpEntidadeAndIdEntidadeAndFgExcluidoFalseOrderByDtCadastroDesc("EVENTO", idEvento)) {
+            if (tpArquivo.equalsIgnoreCase(old.getTpArquivo())) {
+                old.setFgExcluido(true);
+                old.setFgAtivo(false);
+                old.setDtAlteracao(agora);
+                arquivoRepository.save(old);
+            }
+        }
     }
 
     /** Foto principal do item (para catálogo público). */
@@ -229,10 +276,17 @@ public class ArquivoService {
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Arquivo não encontrado."));
     }
 
-    private Arquivo validarArquivoPublicoItem(String idArquivo) {
+    private Arquivo validarArquivoPublico(String idArquivo) {
         Arquivo a = arquivoRepository.findById(idCodec.decodeArquivoIdAssinado(idArquivo))
                 .filter(x -> !Boolean.TRUE.equals(x.getFgExcluido()))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Arquivo não encontrado."));
+        if ("EVENTO".equalsIgnoreCase(a.getTpEntidade())
+                && TIPOS_IMAGEM_EVENTO.contains(a.getTpArquivo() == null ? "" : a.getTpArquivo().toUpperCase())) {
+            eventoRepository.findById(a.getIdEntidade())
+                    .filter(e -> !Boolean.TRUE.equals(e.getFgExcluido()) && Boolean.TRUE.equals(e.getFgAtivo()))
+                    .orElseThrow(() -> new RecursoNaoEncontradoException("Arquivo não disponível no portal."));
+            return a;
+        }
         if (!"ITEM".equalsIgnoreCase(a.getTpEntidade()) || !"FOTO".equalsIgnoreCase(a.getTpArquivo())) {
             throw new RecursoNaoEncontradoException("Arquivo não disponível no portal.");
         }
@@ -352,6 +406,8 @@ public class ArquivoService {
 
     private Evento resolverEvento(String tpEntidade, Long idEntidade) {
         Evento evento = switch (tpEntidade) {
+            case "EVENTO" -> eventoRepository.findById(idEntidade)
+                    .filter(e -> !Boolean.TRUE.equals(e.getFgExcluido())).orElse(null);
             case "ITEM" -> itemRepository.findById(idEntidade).map(x -> x.getEvento()).orElse(null);
             case "CLAIM" -> claimRepository.findById(idEntidade).map(x -> x.getEvento()).orElse(null);
             case "CLAIM_MENSAGEM" -> claimMensagemRepository.findById(idEntidade)
@@ -361,7 +417,7 @@ public class ArquivoService {
             case "CONTATO" -> contatoRepository.findById(idEntidade).map(x -> x.getEvento()).orElse(null);
             default -> throw new IllegalArgumentException(
                     "Tipo de entidade inválido para arquivo: " + tpEntidade
-                            + ". Use ITEM, CLAIM, CLAIM_MENSAGEM, CRIANCA, DEVOLUCAO ou CONTATO.");
+                            + ". Use EVENTO, ITEM, CLAIM, CLAIM_MENSAGEM, CRIANCA, DEVOLUCAO ou CONTATO.");
         };
         if (evento == null) {
             throw new RecursoNaoEncontradoException(

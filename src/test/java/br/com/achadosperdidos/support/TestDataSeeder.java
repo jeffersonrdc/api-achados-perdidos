@@ -100,6 +100,9 @@ public class TestDataSeeder {
         // "Em estoque" faz parte de STATUS_PORTAL: itens só aparecem no catálogo
         // público depois da triagem, ao chegarem ao estoque.
         StatusItem emEstoque = saveStatus("Em estoque", 3, now);
+        // Status do motor de match (script 052) — usados ao criar/atualizar claim PERDA.
+        saveStatus("Aguardando Match", 91, now);
+        saveStatus("Match", 92, now);
 
         return new SeedData(
                 idCodec.encodeEmpresaId(empresa.getId()),
