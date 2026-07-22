@@ -122,6 +122,20 @@ public class PortalController {
         return portalService.catalogoItens(idEvento, page, limit, pesquisa);
     }
 
+    @GetMapping("/eventos/{idEvento}/itens/{idItem}")
+    @SecurityRequirements
+    @Operation(summary = "Detalhe público de um item do catálogo",
+            description = "Retorna todos os dados públicos do item (descrição, protocolo, foto, etc.).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Item encontrado"),
+            @ApiResponse(responseCode = "404", description = "Item inexistente ou não público")
+    })
+    public PortalItemDetalheResponse detalharItem(
+            @Parameter(description = "ID assinado do evento", required = true) @PathVariable String idEvento,
+            @Parameter(description = "ID assinado do item", required = true) @PathVariable String idItem) {
+        return portalService.detalharItem(idEvento, idItem);
+    }
+
     @GetMapping("/arquivos/{idArquivo}/download")
     @SecurityRequirements
     @Operation(summary = "Baixar foto pública de item do catálogo",
@@ -148,6 +162,40 @@ public class PortalController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
                 .header("X-Content-Type-Options", "nosniff")
                 .header(HttpHeaders.CACHE_CONTROL, "public, max-age=300");
+        if (conteudo.qtBytes() != null && conteudo.qtBytes() >= 0) {
+            builder.contentLength(conteudo.qtBytes());
+        }
+        return builder.body(conteudo.resource());
+    }
+
+    @GetMapping("/arquivos/{idArquivo}/thumbnail")
+    @SecurityRequirements
+    @Operation(summary = "Miniatura da foto pública do catálogo",
+            description = "Endpoint público com rate limit por IP. "
+                    + "Retorna JPEG redimensionado (padrão max 400px no maior lado) para cards/listagens. "
+                    + "Query `max` opcional (64–800).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Stream da miniatura JPEG",
+                    content = @Content(mediaType = "image/jpeg",
+                            schema = @Schema(type = "string", format = "binary"))),
+            @ApiResponse(responseCode = "404", description = "Arquivo inexistente ou não público"),
+            @ApiResponse(responseCode = "429", description = "Rate limit excedido")
+    })
+    public ResponseEntity<Resource> baixarThumbnailPublica(
+            @Parameter(description = "ID assinado do arquivo", required = true) @PathVariable String idArquivo,
+            @Parameter(description = "Maior lado em pixels (padrão 400, máx. 800)")
+            @RequestParam(required = false) Integer max,
+            HttpServletRequest http) {
+        publicRateLimiter.check("portal-foto", ipDe(http));
+        var conteudo = portalService.baixarThumbnailPublica(idArquivo, max);
+        MediaType mime = conteudo.tpMime() != null
+                ? MediaType.parseMediaType(conteudo.tpMime())
+                : MediaType.IMAGE_JPEG;
+        ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
+                .contentType(mime)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
+                .header("X-Content-Type-Options", "nosniff")
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400");
         if (conteudo.qtBytes() != null && conteudo.qtBytes() >= 0) {
             builder.contentLength(conteudo.qtBytes());
         }

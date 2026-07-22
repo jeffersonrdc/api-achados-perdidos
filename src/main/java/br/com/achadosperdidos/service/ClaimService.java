@@ -76,12 +76,17 @@ public class ClaimService {
         claim.setEvento(evento);
         claim.setTpClaim(normalizarTipo(request.tpClaim()));
         aplicarDadosBasicos(claim,
-                request.idCategoria(), request.idSubcategoria(), request.idStatus(),
+                request.idCategoria(), request.idSubcategoria(), request.idStatus(), request.nmStatus(),
                 request.nmNome(), request.nrCpf(), request.nmEmail(), request.nrTelefone(),
                 request.nmObjeto(), request.dsObjeto(), request.nmMarca(), request.nmModelo(),
                 request.nmCor(), request.nmEstado(), request.dsTags(), request.tpPrioridade(),
                 request.fgSensivel(), request.dtPerdeu(), request.hrPerdeu(),
                 request.idLocal(), request.nmLocal());
+        claim.setNmContatoConfianca(blankToNull(request.nmContatoConfianca()));
+        claim.setNrTelefoneConfianca(blankToNull(request.nrTelefoneConfianca()));
+        claim.setDsRelacaoContatoConfianca(blankToNull(request.dsRelacaoContatoConfianca()));
+        claim.setNmOperador(blankToNull(request.nmOperador()));
+        claim.setDsObservacao(blankToNull(request.dsObservacao()));
         claim.setDtCadastro(LocalDateTime.now());
         claim.setFgAtivo(true);
         claim.setFgExcluido(false);
@@ -102,11 +107,18 @@ public class ClaimService {
         }
         if (request.idStatus() != null && !request.idStatus().isBlank()) {
             claim.setStatus(statusItemService.findEntity(idCodec.decodeStatusId(request.idStatus())));
+        } else if (request.nmStatus() != null && !request.nmStatus().isBlank()) {
+            claim.setStatus(statusItemService.findByNomeOrDefault(request.nmStatus(), "Claim Aberto"));
         }
         if (request.nmNome() != null) claim.setNmNome(request.nmNome().trim());
         if (request.nrCpf() != null) claim.setNrCpf(blankToNull(request.nrCpf()));
         if (request.nmEmail() != null) claim.setNmEmail(blankToNull(request.nmEmail()));
         if (request.nrTelefone() != null) claim.setNrTelefone(blankToNull(request.nrTelefone()));
+        if (request.nmContatoConfianca() != null) claim.setNmContatoConfianca(blankToNull(request.nmContatoConfianca()));
+        if (request.nrTelefoneConfianca() != null) claim.setNrTelefoneConfianca(blankToNull(request.nrTelefoneConfianca()));
+        if (request.dsRelacaoContatoConfianca() != null) {
+            claim.setDsRelacaoContatoConfianca(blankToNull(request.dsRelacaoContatoConfianca()));
+        }
         if (request.nmObjeto() != null) claim.setNmObjeto(request.nmObjeto().trim());
         if (request.dsObjeto() != null) claim.setDsObjeto(blankToNull(request.dsObjeto()));
         if (request.nmMarca() != null) claim.setNmMarca(blankToNull(request.nmMarca()));
@@ -121,6 +133,8 @@ public class ClaimService {
         if (request.idLocal() != null || request.nmLocal() != null) {
             aplicarLocal(claim, request.idLocal(), request.nmLocal());
         }
+        if (request.nmOperador() != null) claim.setNmOperador(blankToNull(request.nmOperador()));
+        if (request.dsObservacao() != null) claim.setDsObservacao(blankToNull(request.dsObservacao()));
         if (request.fgAtivo() != null) claim.setFgAtivo(request.fgAtivo());
         claim.setDtAlteracao(LocalDateTime.now());
         return toResponse(claimRepository.save(claim));
@@ -236,13 +250,27 @@ public class ClaimService {
                              String nmCor, String nmEstado, String dsTags, String tpPrioridade,
                              Boolean fgSensivel, LocalDate dtPerdeu, LocalTime hrPerdeu,
                              String idLocal, String nmLocal) {
+        aplicarDadosBasicos(claim, idCategoria, idSubcategoria, idStatus, null,
+                nmNome, nrCpf, nmEmail, nrTelefone, nmObjeto, dsObjeto, nmMarca, nmModelo,
+                nmCor, nmEstado, dsTags, tpPrioridade, fgSensivel, dtPerdeu, hrPerdeu, idLocal, nmLocal);
+    }
+
+    void aplicarDadosBasicos(Claim claim,
+                             String idCategoria, String idSubcategoria, String idStatus, String nmStatus,
+                             String nmNome, String nrCpf, String nmEmail, String nrTelefone,
+                             String nmObjeto, String dsObjeto, String nmMarca, String nmModelo,
+                             String nmCor, String nmEstado, String dsTags, String tpPrioridade,
+                             Boolean fgSensivel, LocalDate dtPerdeu, LocalTime hrPerdeu,
+                             String idLocal, String nmLocal) {
         Categoria categoria = categoriaService.findEntity(idCodec.decodeCategoriaId(idCategoria));
         claim.setCategoria(categoria);
         claim.setSubcategoria(idSubcategoria != null && !idSubcategoria.isBlank()
                 ? resolverSubcategoria(categoria, idSubcategoria) : null);
-        claim.setStatus(idStatus != null && !idStatus.isBlank()
-                ? statusItemService.findEntity(idCodec.decodeStatusId(idStatus))
-                : statusItemService.findByNomeOrDefault(null, "Claim Aberto"));
+        if (idStatus != null && !idStatus.isBlank()) {
+            claim.setStatus(statusItemService.findEntity(idCodec.decodeStatusId(idStatus)));
+        } else {
+            claim.setStatus(statusItemService.findByNomeOrDefault(nmStatus, "Claim Aberto"));
+        }
         claim.setNmNome(nmNome.trim());
         claim.setNrCpf(blankToNull(nrCpf));
         claim.setNmEmail(nmEmail != null ? nmEmail.trim().toLowerCase(Locale.ROOT) : null);
@@ -334,9 +362,15 @@ public class ClaimService {
                 c.getNrCpf(),
                 c.getNmEmail(),
                 c.getNrTelefone(),
+                c.getNmContatoConfianca(),
+                c.getNrTelefoneConfianca(),
+                c.getDsRelacaoContatoConfianca(),
                 c.getLocal() != null ? idCodec.encodeLocalId(c.getLocal().getId()) : null,
                 c.getNmLocal(),
                 c.getDsObjeto(),
+                c.getDsDetalhesOcultos(),
+                c.getNmOperador(),
+                c.getDsObservacao(),
                 item != null ? idCodec.encodeItemId(item.getId()) : null,
                 item != null ? item.getCdItem() : null,
                 c.getDsJustificativaAprovacao(),

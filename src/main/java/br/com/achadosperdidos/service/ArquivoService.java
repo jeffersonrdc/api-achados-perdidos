@@ -26,7 +26,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -42,6 +46,7 @@ public class ArquivoService {
     private final ContatoRepository contatoRepository;
     private final SignedResourceIdCodec idCodec;
     private final ArquivoStorageRouter storageRouter;
+    private final ImageThumbnailService imageThumbnailService;
 
     private static final Set<String> MIME_PERMITIDOS = Set.of(
             "image/jpeg", "image/pjpeg", "image/png", "image/webp",
@@ -51,7 +56,8 @@ public class ArquivoService {
                           ClaimRepository claimRepository, ClaimMensagemRepository claimMensagemRepository,
                           CriancaRepository criancaRepository,
                           DevolucaoRepository devolucaoRepository, ContatoRepository contatoRepository,
-                          SignedResourceIdCodec idCodec, ArquivoStorageRouter storageRouter) {
+                          SignedResourceIdCodec idCodec, ArquivoStorageRouter storageRouter,
+                          ImageThumbnailService imageThumbnailService) {
         this.arquivoRepository = arquivoRepository;
         this.itemRepository = itemRepository;
         this.claimRepository = claimRepository;
@@ -61,6 +67,7 @@ public class ArquivoService {
         this.contatoRepository = contatoRepository;
         this.idCodec = idCodec;
         this.storageRouter = storageRouter;
+        this.imageThumbnailService = imageThumbnailService;
     }
 
     @Transactional
@@ -110,6 +117,9 @@ public class ArquivoService {
         } catch (IOException e) {
             throw new UncheckedIOException("Falha ao ler o arquivo enviado.", e);
         }
+        // Miniatura persistida para listagens (portal/painel) — falha não impede o upload.
+        gerarEPersistirThumb(storage, relPath, file.getContentType(), file.getSize(),
+                file.getOriginalFilename() != null ? file.getOriginalFilename() : nomeFisico);
 
         try {
             Arquivo a = new Arquivo();
@@ -130,6 +140,7 @@ public class ArquivoService {
         } catch (RuntimeException ex) {
             try {
                 storage.delete(relPath);
+                storage.delete(thumbKey(relPath));
             } catch (RuntimeException ignored) {
                 // melhor esforço — evita deixar órfão quando possível
             }
@@ -139,23 +150,86 @@ public class ArquivoService {
 
     @Transactional(readOnly = true)
     public ArquivoConteudo carregarConteudo(String idArquivo) {
-        Arquivo a = arquivoRepository.findById(idCodec.decodeArquivoId(idArquivo))
-                .filter(x -> !Boolean.TRUE.equals(x.getFgExcluido()))
-                .orElseThrow(() -> new RecursoNaoEncontradoException("Arquivo não encontrado."));
-        try {
-            Resource resource = storageRouter.paraLeitura(a.getTpStorage()).open(a.getNmPath());
-            return new ArquivoConteudo(resource, a.getNmArquivo(), a.getTpMime(), a.getQtBytes());
-        } catch (IllegalArgumentException e) {
-            throw new RecursoNaoEncontradoException(e.getMessage());
-        }
+        return abrirOriginal(findArquivoAtivo(idArquivo));
     }
 
     /**
-     * Download público de foto principal de item do catálogo (portal).
+     * Miniatura para listagens: serve arquivo {@code *.thumb.jpg} se existir;
+     * senão gera on-the-fly e tenta persistir (backfill de fotos antigas).
+     */
+    @Transactional(readOnly = true)
+    public ArquivoConteudo carregarThumbnail(String idArquivo, Integer maxEdge) {
+        return carregarThumbnailDe(findArquivoAtivo(idArquivo), maxEdge);
+    }
+
+    /**
+     * Download público de foto de item do catálogo (portal).
      * Só libera se o arquivo for FOTO de ITEM em status público.
      */
     @Transactional(readOnly = true)
     public ArquivoConteudo carregarConteudoPublicoItem(String idArquivo) {
+        return abrirOriginal(validarArquivoPublicoItem(idArquivo));
+    }
+
+    /** Miniatura pública do catálogo (mesma regra de acesso da foto original). */
+    @Transactional(readOnly = true)
+    public ArquivoConteudo carregarThumbnailPublicoItem(String idArquivo, Integer maxEdge) {
+        return carregarThumbnailDe(validarArquivoPublicoItem(idArquivo), maxEdge);
+    }
+
+    /** Foto principal do item (para catálogo público). */
+    @Transactional(readOnly = true)
+    public Optional<Arquivo> fotoPrincipalItem(Long idItem) {
+        return fotosItem(idItem).stream().findFirst();
+    }
+
+    /** Foto principal de vários itens (evita N+1 no catálogo). */
+    @Transactional(readOnly = true)
+    public Map<Long, Arquivo> fotosPrincipaisPorItens(Collection<Long> idItens) {
+        if (idItens == null || idItens.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, Arquivo> mapa = new HashMap<>();
+        for (Arquivo a : arquivoRepository.findByTpEntidadeAndIdEntidadeInAndFgExcluidoFalse("ITEM", idItens)) {
+            if (!"FOTO".equalsIgnoreCase(a.getTpArquivo())) continue;
+            Arquivo atual = mapa.get(a.getIdEntidade());
+            if (atual == null) {
+                mapa.put(a.getIdEntidade(), a);
+                continue;
+            }
+            boolean novoPrincipal = Boolean.TRUE.equals(a.getFgPrincipal());
+            boolean atualPrincipal = Boolean.TRUE.equals(atual.getFgPrincipal());
+            if (novoPrincipal && !atualPrincipal) {
+                mapa.put(a.getIdEntidade(), a);
+            } else if (novoPrincipal == atualPrincipal
+                    && a.getDtCadastro() != null
+                    && (atual.getDtCadastro() == null || a.getDtCadastro().isAfter(atual.getDtCadastro()))) {
+                mapa.put(a.getIdEntidade(), a);
+            }
+        }
+        return mapa;
+    }
+
+    /** Todas as fotos do item (principal primeiro). */
+    @Transactional(readOnly = true)
+    public List<Arquivo> fotosItem(Long idItem) {
+        return arquivoRepository
+                .findByTpEntidadeAndIdEntidadeAndFgExcluidoFalseOrderByDtCadastroDesc("ITEM", idItem)
+                .stream()
+                .filter(a -> "FOTO".equalsIgnoreCase(a.getTpArquivo()))
+                .sorted(Comparator
+                        .comparing((Arquivo a) -> Boolean.TRUE.equals(a.getFgPrincipal())).reversed()
+                        .thenComparing(Arquivo::getDtCadastro, Comparator.nullsLast(Comparator.reverseOrder())))
+                .toList();
+    }
+
+    private Arquivo findArquivoAtivo(String idArquivo) {
+        return arquivoRepository.findById(idCodec.decodeArquivoId(idArquivo))
+                .filter(x -> !Boolean.TRUE.equals(x.getFgExcluido()))
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Arquivo não encontrado."));
+    }
+
+    private Arquivo validarArquivoPublicoItem(String idArquivo) {
         Arquivo a = arquivoRepository.findById(idCodec.decodeArquivoIdAssinado(idArquivo))
                 .filter(x -> !Boolean.TRUE.equals(x.getFgExcluido()))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Arquivo não encontrado."));
@@ -169,20 +243,91 @@ public class ArquivoService {
         if (!List.of("Em estoque", "Com pedido de devolucao", "Aguardando retirada").contains(status)) {
             throw new RecursoNaoEncontradoException("Arquivo não disponível no portal.");
         }
-        return carregarConteudo(idArquivo);
+        return a;
     }
 
-    /** Foto principal do item (para catálogo público). */
-    @Transactional(readOnly = true)
-    public Optional<Arquivo> fotoPrincipalItem(Long idItem) {
-        return arquivoRepository
-                .findByTpEntidadeAndIdEntidadeAndFgExcluidoFalseOrderByDtCadastroDesc("ITEM", idItem)
-                .stream()
-                .filter(a -> "FOTO".equalsIgnoreCase(a.getTpArquivo()))
-                .sorted((a, b) -> Boolean.compare(
-                        Boolean.TRUE.equals(b.getFgPrincipal()),
-                        Boolean.TRUE.equals(a.getFgPrincipal())))
-                .findFirst();
+    private ArquivoConteudo abrirOriginal(Arquivo a) {
+        try {
+            Resource resource = storageRouter.paraLeitura(a.getTpStorage()).open(a.getNmPath());
+            return new ArquivoConteudo(resource, a.getNmArquivo(), a.getTpMime(), a.getQtBytes());
+        } catch (IllegalArgumentException e) {
+            throw new RecursoNaoEncontradoException(e.getMessage());
+        }
+    }
+
+    private ArquivoConteudo carregarThumbnailDe(Arquivo a, Integer maxEdge) {
+        int edge = maxEdge != null ? maxEdge : ImageThumbnailService.DEFAULT_MAX_EDGE;
+        ArquivoStorage storage = storageRouter.paraLeitura(a.getTpStorage());
+        String keyThumb = thumbKey(a.getNmPath());
+        if (storage.exists(keyThumb)) {
+            try {
+                Resource resource = storage.open(keyThumb);
+                return new ArquivoConteudo(resource, nomeThumb(a.getNmArquivo()), "image/jpeg", null);
+            } catch (IllegalArgumentException ignored) {
+                // cai no fallback on-the-fly
+            }
+        }
+        ArquivoConteudo original = abrirOriginal(a);
+        ArquivoConteudo gerada = imageThumbnailService.gerar(original, edge);
+        if (isThumbGerada(gerada)) {
+            persistirThumbBestEffort(storage, keyThumb, gerada);
+        }
+        return gerada;
+    }
+
+    private void gerarEPersistirThumb(ArquivoStorage storage, String relPath, String contentType,
+                                      long size, String nmArquivo) {
+        if (!ehImagem(contentType)) return;
+        try {
+            Resource resource = storage.open(relPath);
+            ArquivoConteudo original = new ArquivoConteudo(resource, nmArquivo, contentType, size);
+            ArquivoConteudo gerada = imageThumbnailService.gerar(original, ImageThumbnailService.DEFAULT_MAX_EDGE);
+            if (isThumbGerada(gerada)) {
+                persistirThumbBestEffort(storage, thumbKey(relPath), gerada);
+            }
+        } catch (RuntimeException ignored) {
+            // upload principal já ok
+        }
+    }
+
+    private static void persistirThumbBestEffort(ArquivoStorage storage, String keyThumb, ArquivoConteudo thumb) {
+        try (InputStream in = thumb.resource().getInputStream()) {
+            long len = thumb.qtBytes() != null ? thumb.qtBytes() : -1;
+            storage.store(keyThumb, in, len, "image/jpeg");
+        } catch (Exception ignored) {
+            // listagem continua via on-the-fly
+        }
+    }
+
+    private static boolean isThumbGerada(ArquivoConteudo c) {
+        return c != null && c.tpMime() != null && c.tpMime().toLowerCase().startsWith("image/jpeg")
+                && c.nmArquivo() != null && c.nmArquivo().endsWith("-thumb.jpg");
+    }
+
+    private static boolean ehImagem(String contentType) {
+        if (contentType == null) return false;
+        String mime = contentType.trim().toLowerCase();
+        int ponto = mime.indexOf(';');
+        if (ponto >= 0) mime = mime.substring(0, ponto).trim();
+        return mime.startsWith("image/") && !mime.contains("pdf");
+    }
+
+    /** Chave física da miniatura: {@code ITEM/1/abc.jpg} → {@code ITEM/1/abc.thumb.jpg}. */
+    static String thumbKey(String nmPath) {
+        String path = LocalArquivoStorage.validar(nmPath);
+        int ponto = path.lastIndexOf('.');
+        int barra = path.lastIndexOf('/');
+        if (ponto > barra) {
+            return path.substring(0, ponto) + ".thumb.jpg";
+        }
+        return path + ".thumb.jpg";
+    }
+
+    private static String nomeThumb(String nmArquivo) {
+        if (nmArquivo == null || nmArquivo.isBlank()) return "thumb.jpg";
+        int ponto = nmArquivo.lastIndexOf('.');
+        String base = ponto > 0 ? nmArquivo.substring(0, ponto) : nmArquivo;
+        return base + "-thumb.jpg";
     }
 
     private static void validarMime(String contentType) {

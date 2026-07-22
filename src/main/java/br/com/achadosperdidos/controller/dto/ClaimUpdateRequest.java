@@ -7,10 +7,15 @@ public record ClaimUpdateRequest(
         String idCategoria,
         String idSubcategoria,
         String idStatus,
+        /** Alternativa a idStatus: nome do status (ex.: "Rascunho", "Claim Aberto"). */
+        String nmStatus,
         String nmNome,
         String nrCpf,
         String nmEmail,
         String nrTelefone,
+        String nmContatoConfianca,
+        String nrTelefoneConfianca,
+        String dsRelacaoContatoConfianca,
         String nmObjeto,
         String dsObjeto,
         String nmMarca,
@@ -24,5 +29,7 @@ public record ClaimUpdateRequest(
         LocalTime hrPerdeu,
         String idLocal,
         String nmLocal,
+        String nmOperador,
+        String dsObservacao,
         Boolean fgAtivo
 ) {}

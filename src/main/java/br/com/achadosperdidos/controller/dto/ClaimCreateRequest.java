@@ -9,12 +9,17 @@ public record ClaimCreateRequest(
         @NotBlank String idCategoria,
         String idSubcategoria,
         String idStatus,
+        /** Alternativa a idStatus: nome do status (ex.: "Rascunho", "Claim Aberto"). */
+        String nmStatus,
         /** PERDA (padrão) ou RETIRADA. */
         String tpClaim,
         @NotBlank String nmNome,
         String nrCpf,
         String nmEmail,
         String nrTelefone,
+        String nmContatoConfianca,
+        String nrTelefoneConfianca,
+        String dsRelacaoContatoConfianca,
         @NotBlank String nmObjeto,
         String dsObjeto,
         String nmMarca,
@@ -27,5 +32,7 @@ public record ClaimCreateRequest(
         LocalDate dtPerdeu,
         LocalTime hrPerdeu,
         String idLocal,
-        String nmLocal
+        String nmLocal,
+        String nmOperador,
+        String dsObservacao
 ) {}

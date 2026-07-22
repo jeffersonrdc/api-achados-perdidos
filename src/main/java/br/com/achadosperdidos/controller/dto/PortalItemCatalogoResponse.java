@@ -4,6 +4,8 @@ import java.time.LocalDate;
 
 public record PortalItemCatalogoResponse(
         String id,
+        /** Protocolo público do item (CD_Item). */
+        String cdItem,
         String nmTitulo,
         String nmCategoria,
         String nmMarca,

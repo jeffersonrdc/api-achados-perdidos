@@ -21,8 +21,13 @@ public class Claim {
     @Column(name = "NR_CPF", length = 11) private String nrCpf;
     @Column(name = "NM_Email", length = 150) private String nmEmail;
     @Column(name = "NR_Telefone", length = 20) private String nrTelefone;
+    @Column(name = "NM_ContatoConfianca", length = 150) private String nmContatoConfianca;
+    @Column(name = "NR_TelefoneConfianca", length = 20) private String nrTelefoneConfianca;
+    @Column(name = "DS_RelacaoContatoConfianca", length = 80) private String dsRelacaoContatoConfianca;
     @Column(name = "NM_Objeto", nullable = false, length = 200) private String nmObjeto;
     @Column(name = "DS_Objeto", columnDefinition = "TEXT") private String dsObjeto;
+    /** Detalhes que só o proprietário saberia (validação de retirada). */
+    @Column(name = "DS_DetalhesOcultos", columnDefinition = "TEXT") private String dsDetalhesOcultos;
     @Column(name = "NM_Marca", length = 100) private String nmMarca;
     @Column(name = "NM_Modelo", length = 100) private String nmModelo;
     @Column(name = "NM_Cor", length = 60) private String nmCor;
@@ -36,6 +41,10 @@ public class Claim {
     @Column(name = "HR_Perdeu") private LocalTime hrPerdeu;
     @Column(name = "NM_Local", length = 200) private String nmLocal;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "IDR_Local") private Local local;
+    /** Operador do painel que registrou/atualizou o relato. */
+    @Column(name = "NM_Operador", length = 150) private String nmOperador;
+    /** Observação interna do operador (não exibida no portal). */
+    @Column(name = "DS_Observacao", columnDefinition = "TEXT") private String dsObservacao;
     @Column(name = "DT_Cadastro", nullable = false) private LocalDateTime dtCadastro;
     @Column(name = "DT_Alteracao") private LocalDateTime dtAlteracao;
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Ativo", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgAtivo = true;
@@ -52,8 +61,12 @@ public class Claim {
     public String getNrCpf() { return nrCpf; } public void setNrCpf(String v) { this.nrCpf = v; }
     public String getNmEmail() { return nmEmail; } public void setNmEmail(String v) { this.nmEmail = v; }
     public String getNrTelefone() { return nrTelefone; } public void setNrTelefone(String v) { this.nrTelefone = v; }
+    public String getNmContatoConfianca() { return nmContatoConfianca; } public void setNmContatoConfianca(String v) { this.nmContatoConfianca = v; }
+    public String getNrTelefoneConfianca() { return nrTelefoneConfianca; } public void setNrTelefoneConfianca(String v) { this.nrTelefoneConfianca = v; }
+    public String getDsRelacaoContatoConfianca() { return dsRelacaoContatoConfianca; } public void setDsRelacaoContatoConfianca(String v) { this.dsRelacaoContatoConfianca = v; }
     public String getNmObjeto() { return nmObjeto; } public void setNmObjeto(String v) { this.nmObjeto = v; }
     public String getDsObjeto() { return dsObjeto; } public void setDsObjeto(String v) { this.dsObjeto = v; }
+    public String getDsDetalhesOcultos() { return dsDetalhesOcultos; } public void setDsDetalhesOcultos(String v) { this.dsDetalhesOcultos = v; }
     public String getNmMarca() { return nmMarca; } public void setNmMarca(String v) { this.nmMarca = v; }
     public String getNmModelo() { return nmModelo; } public void setNmModelo(String v) { this.nmModelo = v; }
     public String getNmCor() { return nmCor; } public void setNmCor(String v) { this.nmCor = v; }
@@ -67,6 +80,8 @@ public class Claim {
     public LocalTime getHrPerdeu() { return hrPerdeu; } public void setHrPerdeu(LocalTime v) { this.hrPerdeu = v; }
     public String getNmLocal() { return nmLocal; } public void setNmLocal(String v) { this.nmLocal = v; }
     public Local getLocal() { return local; } public void setLocal(Local v) { this.local = v; }
+    public String getNmOperador() { return nmOperador; } public void setNmOperador(String v) { this.nmOperador = v; }
+    public String getDsObservacao() { return dsObservacao; } public void setDsObservacao(String v) { this.dsObservacao = v; }
     public LocalDateTime getDtCadastro() { return dtCadastro; } public void setDtCadastro(LocalDateTime v) { this.dtCadastro = v; }
     public LocalDateTime getDtAlteracao() { return dtAlteracao; } public void setDtAlteracao(LocalDateTime v) { this.dtAlteracao = v; }
     public Boolean getFgAtivo() { return fgAtivo; } public void setFgAtivo(Boolean v) { this.fgAtivo = v; }

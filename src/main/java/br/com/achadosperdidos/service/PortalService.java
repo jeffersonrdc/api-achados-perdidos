@@ -137,9 +137,12 @@ public class PortalService {
         // Só aparecem no portal os itens que já passaram pela triagem e chegaram ao estoque.
         Page<Item> result = itemRepository.findByEvento_IdAndFgExcluidoFalseAndFgAtivoTrueAndFgEntregueFalseAndFgDescartadoFalseAndStatus_NmStatusIn(
                 eventoId, STATUS_PORTAL, PageRequest.of(p - 1, l));
-        var content = result.getContent().stream()
+        var filtrados = result.getContent().stream()
                 .filter(i -> pesquisa == null || pesquisa.isBlank() || matchesPesquisa(i, pesquisa))
-                .map(this::toCatalogoItem)
+                .toList();
+        var fotos = arquivoService.fotosPrincipaisPorItens(filtrados.stream().map(Item::getId).toList());
+        var content = filtrados.stream()
+                .map(i -> toCatalogoItem(i, fotos.get(i.getId())))
                 .toList();
         return ApiPage.paged(content, new PaginationMeta(p, l, result.getTotalElements(), result.getTotalPages()));
     }
@@ -161,6 +164,8 @@ public class PortalService {
         claim.setDtCadastro(LocalDateTime.now());
         claim.setFgAtivo(true);
         claim.setFgExcluido(false);
+        aplicarContatoConfianca(claim,
+                request.nmContatoConfianca(), request.nrTelefoneConfianca(), request.dsRelacaoContatoConfianca());
         claim = claimRepository.save(claim);
         claim.setCdClaim(claimService.gerarProtocolo(claim.getId(), claim.getDtCadastro()));
         return claimService.toResponse(claimRepository.save(claim));
@@ -189,7 +194,12 @@ public class PortalService {
         claim.setNmEmail(request.nmEmail().trim().toLowerCase());
         claim.setNrTelefone(request.nrTelefone());
         claim.setNmObjeto(item.getNmTitulo());
-        claim.setDsObjeto(request.dsObservacao());
+        String dsObjeto = blankToNull(request.dsObjeto());
+        if (dsObjeto == null) {
+            dsObjeto = blankToNull(request.dsObservacao());
+        }
+        claim.setDsObjeto(dsObjeto);
+        claim.setDsDetalhesOcultos(blankToNull(request.dsDetalhesOcultos()));
         claim.setNmMarca(item.getNmMarca());
         claim.setNmModelo(item.getNmModelo());
         claim.setNmCor(item.getNmCor());
@@ -201,6 +211,8 @@ public class PortalService {
         claim.setDtCadastro(LocalDateTime.now());
         claim.setFgAtivo(true);
         claim.setFgExcluido(false);
+        aplicarContatoConfianca(claim,
+                request.nmContatoConfianca(), request.nrTelefoneConfianca(), request.dsRelacaoContatoConfianca());
         claim = claimRepository.save(claim);
         claim.setCdClaim(claimService.gerarProtocolo(claim.getId(), claim.getDtCadastro()));
         claim = claimRepository.save(claim);
@@ -422,12 +434,11 @@ public class PortalService {
                 cfg.getFgAceitaClaim());
     }
 
-    private PortalItemCatalogoResponse toCatalogoItem(Item i) {
-        String idFoto = arquivoService.fotoPrincipalItem(i.getId())
-                .map(a -> idCodec.encodeArquivoId(a.getId()))
-                .orElse(null);
+    private PortalItemCatalogoResponse toCatalogoItem(Item i, Arquivo fotoPrincipal) {
+        String idFoto = fotoPrincipal != null ? idCodec.encodeArquivoId(fotoPrincipal.getId()) : null;
         return new PortalItemCatalogoResponse(
                 idCodec.encodeItemId(i.getId()),
+                i.getCdItem(),
                 i.getNmTitulo(),
                 i.getCategoria().getNmCategoria(),
                 i.getNmMarca(),
@@ -438,10 +449,66 @@ public class PortalService {
                 idFoto);
     }
 
+    private static void aplicarContatoConfianca(
+            Claim claim, String nmContato, String nrTelefone, String dsRelacao) {
+        claim.setNmContatoConfianca(blankToNull(nmContato));
+        claim.setNrTelefoneConfianca(blankToNull(nrTelefone));
+        claim.setDsRelacaoContatoConfianca(blankToNull(dsRelacao));
+    }
+
+    private static String blankToNull(String v) {
+        return v == null || v.isBlank() ? null : v.trim();
+    }
+
+    /** Detalhe público completo de um item do catálogo. */
+    @Transactional(readOnly = true)
+    public PortalItemDetalheResponse detalharItem(String idEvento, String idItem) {
+        exigirConsultaPublica(idEvento);
+        Long eventoId = idCodec.decodeEventoIdAssinado(idEvento);
+        Item i = itemRepository.findById(idCodec.decodeItemIdAssinado(idItem))
+                .filter(x -> !Boolean.TRUE.equals(x.getFgExcluido()))
+                .filter(x -> Boolean.TRUE.equals(x.getFgAtivo()))
+                .filter(x -> !Boolean.TRUE.equals(x.getFgEntregue()))
+                .filter(x -> !Boolean.TRUE.equals(x.getFgDescartado()))
+                .filter(x -> x.getEvento().getId().equals(eventoId))
+                .filter(x -> x.getStatus() != null && STATUS_PORTAL.contains(x.getStatus().getNmStatus()))
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Item não encontrado no catálogo público."));
+        String idFoto = arquivoService.fotoPrincipalItem(i.getId())
+                .map(a -> idCodec.encodeArquivoId(a.getId()))
+                .orElse(null);
+        List<String> idsFotos = arquivoService.fotosItem(i.getId()).stream()
+                .map(a -> idCodec.encodeArquivoId(a.getId()))
+                .toList();
+        return new PortalItemDetalheResponse(
+                idCodec.encodeItemId(i.getId()),
+                i.getCdItem(),
+                i.getNmTitulo(),
+                i.getDsItem(),
+                i.getCategoria() != null ? i.getCategoria().getNmCategoria() : null,
+                i.getSubcategoria() != null ? i.getSubcategoria().getNmCategoria() : null,
+                i.getNmMarca(),
+                i.getNmModelo(),
+                i.getNmCor(),
+                i.getNmEstado(),
+                i.getDtEncontrado(),
+                i.getHrEncontrado(),
+                i.getNmLocalEncontrado(),
+                i.getLocalAtual() != null ? i.getLocalAtual().getNmLocal() : null,
+                i.getStatus() != null ? i.getStatus().getNmStatus() : null,
+                idFoto,
+                idsFotos);
+    }
+
     /** Streaming público da foto principal de item do catálogo. */
     @Transactional(readOnly = true)
     public ArquivoService.ArquivoConteudo baixarFotoPublica(String idArquivo) {
         return arquivoService.carregarConteudoPublicoItem(idArquivo);
+    }
+
+    /** Miniatura JPEG leve da foto pública (cards/listagens do portal). */
+    @Transactional(readOnly = true)
+    public ArquivoService.ArquivoConteudo baixarThumbnailPublica(String idArquivo, Integer maxEdge) {
+        return arquivoService.carregarThumbnailPublicoItem(idArquivo, maxEdge);
     }
 
 }

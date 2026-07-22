@@ -78,6 +78,30 @@ public class ArquivoController {
         return builder.body(conteudo.resource());
     }
 
+    @GetMapping("/{id}/thumbnail")
+    @PreAuthorize("@authz.pode('arquivo.listar')")
+    @Operation(summary = "Miniatura JPEG do arquivo (listagens)",
+            description = "Redimensiona on-the-fly (padrão max 400px no maior lado). Query `max` opcional (64–800).")
+    public ResponseEntity<Resource> thumbnail(
+            @Parameter(description = "ID assinado do arquivo") @PathVariable String id,
+            @Parameter(description = "Maior lado em pixels (padrão 400, máx. 800)")
+            @RequestParam(required = false) Integer max) {
+        var conteudo = arquivoService.carregarThumbnail(id, max);
+        MediaType mime = conteudo.tpMime() != null
+                ? MediaType.parseMediaType(conteudo.tpMime())
+                : MediaType.IMAGE_JPEG;
+        String nomeSeguro = sanitizarNomeArquivo(conteudo.nmArquivo());
+        ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
+                .contentType(mime)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + nomeSeguro + "\"")
+                .header("X-Content-Type-Options", "nosniff")
+                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=86400");
+        if (conteudo.qtBytes() != null && conteudo.qtBytes() >= 0) {
+            builder.contentLength(conteudo.qtBytes());
+        }
+        return builder.body(conteudo.resource());
+    }
+
     private static String sanitizarNomeArquivo(String nome) {
         if (nome == null || nome.isBlank()) {
             return "arquivo";

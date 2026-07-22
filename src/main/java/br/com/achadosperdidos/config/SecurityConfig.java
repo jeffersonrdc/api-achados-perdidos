@@ -61,22 +61,17 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/v1/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/portal/eventos/*/meus-claims").hasRole("PARTICIPANTE")
-                        // Catálogo público do portal (sem JWT). Usa /** porque o ID assinado contém '.' 
-                        // e o matcher de um único segmento (*) pode não casar corretamente.
+                        // IDs assinados contêm '.' — usar `/**` (PathPattern/`*` de segmento falha).
                         .requestMatchers(HttpMethod.GET,
                                 "/api/v1/portal/eventos",
-                                "/api/v1/portal/eventos/*/itens",
-                                "/api/v1/portal/eventos/*/locais",
-                                "/api/v1/portal/arquivos/*/download",
+                                "/api/v1/portal/eventos/**",
+                                "/api/v1/portal/arquivos/**",
                                 "/api/v1/portal/categorias",
                                 "/api/v1/portal/categorias/**",
                                 "/api/v1/portal/subcategorias/**",
                                 "/api/v1/portal/respostas/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/portal/eventos/*").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/portal/eventos/*/claims", "/api/v1/portal/eventos/*/claims/item",
-                                "/api/v1/portal/eventos/*/claims/*/foto",
-                                "/api/v1/portal/eventos/*/claims/*/comprovantes",
-                                "/api/v1/portal/eventos/*/criancas", "/api/v1/portal/eventos/*/criancas/responsaveis",
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/v1/portal/eventos/**",
                                 "/api/v1/portal/auth/registro",
                                 "/api/v1/portal/respostas/**").permitAll()
                         .requestMatchers("/api/v1/portal/**").hasRole("PARTICIPANTE")
