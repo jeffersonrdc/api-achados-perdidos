@@ -41,12 +41,14 @@ public class PortalService {
     private final ArquivoRepository arquivoRepository;
     private final TriagemRepository triagemRepository;
     private final ClaimService claimService;
+    private final MatchService matchService;
     private final ArquivoService arquivoService;
     private final CategoriaService categoriaService;
     private final TagService tagService;
     private final LocalService localService;
     private final StatusItemService statusItemService;
     private final CriancaService criancaService;
+    private final CatalogoService catalogoService;
     private final PerfilRepository perfilRepository;
     private final EmpresaRepository empresaRepository;
     private final UsuarioRepository usuarioRepository;
@@ -61,12 +63,14 @@ public class PortalService {
                          ArquivoRepository arquivoRepository,
                          TriagemRepository triagemRepository,
                          ClaimService claimService,
+                         MatchService matchService,
                          ArquivoService arquivoService,
                          CategoriaService categoriaService,
                          TagService tagService,
                          LocalService localService,
                          StatusItemService statusItemService,
                          CriancaService criancaService,
+                         CatalogoService catalogoService,
                          PerfilRepository perfilRepository,
                          EmpresaRepository empresaRepository,
                          UsuarioRepository usuarioRepository,
@@ -80,12 +84,14 @@ public class PortalService {
         this.arquivoRepository = arquivoRepository;
         this.triagemRepository = triagemRepository;
         this.claimService = claimService;
+        this.matchService = matchService;
         this.arquivoService = arquivoService;
         this.categoriaService = categoriaService;
         this.tagService = tagService;
         this.localService = localService;
         this.statusItemService = statusItemService;
         this.criancaService = criancaService;
+        this.catalogoService = catalogoService;
         this.perfilRepository = perfilRepository;
         this.empresaRepository = empresaRepository;
         this.usuarioRepository = usuarioRepository;
@@ -181,6 +187,18 @@ public class PortalService {
         return tagService.findAll(false, idSubcategoria);
     }
 
+    /** Marcas ativas para selects do formulário público. */
+    @Transactional(readOnly = true)
+    public List<String> listarMarcas() {
+        return catalogoService.listarMarcas();
+    }
+
+    /** Modelos ativos da marca (cascata marca → modelo). */
+    @Transactional(readOnly = true)
+    public List<String> listarModelos(String marca) {
+        return catalogoService.listarModelos(marca);
+    }
+
     /** Locais do evento para os selects de localização (slim, público). */
     @Transactional(readOnly = true)
     public List<br.com.achadosperdidos.controller.dto.PortalLocalResponse> listarLocais(String idEvento) {
@@ -229,7 +247,9 @@ public class PortalService {
                 request.nmContatoConfianca(), request.nrTelefoneConfianca(), request.dsRelacaoContatoConfianca());
         claim = claimRepository.save(claim);
         claim.setCdClaim(claimService.gerarProtocolo(claim.getId(), claim.getDtCadastro()));
-        return claimService.toResponse(claimRepository.save(claim));
+        claim = claimRepository.save(claim);
+        matchService.recalcularMatches(claim);
+        return claimService.toResponse(claimRepository.findById(claim.getId()).orElse(claim));
     }
 
     @Transactional

@@ -70,6 +70,8 @@ public class SecurityConfig {
                                 "/api/v1/portal/categorias",
                                 "/api/v1/portal/categorias/**",
                                 "/api/v1/portal/subcategorias/**",
+                                "/api/v1/portal/marcas",
+                                "/api/v1/portal/modelos",
                                 "/api/v1/portal/respostas/**").permitAll()
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/portal/eventos/**",

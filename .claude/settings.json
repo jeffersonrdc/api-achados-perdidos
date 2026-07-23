@@ -190,7 +190,8 @@
       "Bash(command -v ssh)",
       "Bash(npm --version)",
       "Bash(npm install *)",
-      "Bash(echo \"EXIT=$?\")"
+      "Bash(echo \"EXIT=$?\")",
+      "Bash('/c/Program Files/Google/Chrome/Application/chrome.exe' --headless --disable-gpu --no-pdf-header-footer --print-to-pdf=c:/Projetos/MatsersDevs/RockInRio/api/docs/Pipeline-CI-CD-DevOps.pdf file:///C:/Users/jeffe/AppData/Local/Temp/claude/c--Projetos-MatsersDevs-RockInRio-api/baf7d4f4-f80b-46f0-8163-7b7b69575ad7/scratchpad/pipeline.html)"
     ],
     "additionalDirectories": [
       "C:\\Projetos\\MatsersDevs\\api-achados-perdidos\\paineladmin\\src\\app\\shell\\topbar",

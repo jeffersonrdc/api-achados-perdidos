@@ -49,6 +49,7 @@ public class ItemService {
     private final SignedResourceIdCodec idCodec;
     private final UsuarioContextService usuarioContextService;
     private final AuditoriaContextService auditoriaContext;
+    private final MatchService matchService;
 
     private static final Set<String> PRIORIDADES = Set.of("ALTA", "MEDIA", "BAIXA");
     // Status irrelevantes para o filtro de coleta (fluxo de claims).
@@ -62,7 +63,7 @@ public class ItemService {
                        StatusItemService statusItemService, WorkflowService workflowService,
                        LocalizacaoService localizacaoService, LocalRepository localRepository,
                        SignedResourceIdCodec idCodec, UsuarioContextService usuarioContextService,
-                       AuditoriaContextService auditoriaContext) {
+                       AuditoriaContextService auditoriaContext, MatchService matchService) {
         this.itemRepository = itemRepository; this.eventoRepository = eventoRepository;
         this.claimRepository = claimRepository;
         this.categoriaService = categoriaService; this.statusItemService = statusItemService;
@@ -71,6 +72,7 @@ public class ItemService {
         this.localRepository = localRepository;
         this.idCodec = idCodec; this.usuarioContextService = usuarioContextService;
         this.auditoriaContext = auditoriaContext;
+        this.matchService = matchService;
     }
 
     @Transactional
@@ -115,6 +117,7 @@ public class ItemService {
         Item salvo = itemRepository.save(item);
         // Inicia a linha do tempo de status do item (secao 11 do documento).
         workflowService.registrarHistorico(salvo, null, salvo.getStatus(), null);
+        matchService.recalcularMatchesPorItem(salvo);
         return toResponse(salvo);
     }
 
@@ -153,7 +156,9 @@ public class ItemService {
         if (request.fgSensivel() != null) item.setFgSensivel(request.fgSensivel());
         item.setUsuarioAlteracao(usuarioContextService.requireUsuarioLogado());
         item.setDtAlteracao(LocalDateTime.now());
-        return toResponse(itemRepository.save(item));
+        Item salvo = itemRepository.save(item);
+        matchService.recalcularMatchesPorItem(salvo);
+        return toResponse(salvo);
     }
 
     /** Local físico inicial do item: casa o local encontrado; senão, cai no depósito do evento. */

@@ -68,4 +68,18 @@ public interface ClaimRepository extends JpaRepository<Claim, Long>, JpaSpecific
             ORDER BY c.nmLocal
             """)
     java.util.List<String> findDistinctLocais(@Param("ev") Long ev, @Param("tipo") String tipo);
+
+    /** Claims PERDA do evento/categoria elegíveis para o motor de match (exclui rascunho). */
+    @EntityGraph(attributePaths = {"evento", "categoria", "subcategoria", "status", "local"})
+    @Query("""
+            SELECT c FROM Claim c
+            WHERE c.evento.id = :ev AND c.fgExcluido = false
+              AND c.tpClaim = :tipo
+              AND c.categoria.id = :cat
+              AND (c.status IS NULL OR LOWER(c.status.nmStatus) <> 'rascunho')
+            ORDER BY c.dtCadastro ASC
+            """)
+    java.util.List<Claim> findPerdasParaMatch(@Param("ev") Long ev,
+                                              @Param("tipo") String tipo,
+                                              @Param("cat") Long cat);
 }

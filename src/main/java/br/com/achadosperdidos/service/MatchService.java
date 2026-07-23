@@ -17,7 +17,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -26,6 +25,8 @@ import java.util.stream.Collectors;
 
 /**
  * Motor de match claim PERDA ↔ itens da coleta/estoque.
+ * Critérios: mesma categoria (filtro), subcategoria + marca + modelo + cor iguais;
+ * se o claim tiver tags, exige ao menos uma em comum (senão, os demais bastam).
  * Persiste candidatos em {@code claim_validacao} com {@code ST_Resultado=PENDENTE}.
  */
 @Service
@@ -64,7 +65,7 @@ public class MatchService {
         this.idCodec = idCodec;
     }
 
-    /** Recalcula matches do claim (só faz sentido para PERDA fora de Rascunho). */
+    /** Recalcula matches do claim (só faz sentido para PERDA fora de Rascunho). Pode gerar vários candidatos. */
     @Transactional
     public int recalcularMatches(Claim claim) {
         if (claim == null || claim.getId() == null) return 0;
@@ -113,6 +114,32 @@ public class MatchService {
         }
         atualizarStatusMatch(claim, !scored.isEmpty());
         return scored.size();
+    }
+
+    /**
+     * Quando um item da coleta entra/atualiza: recalcula todos os claims PERDA do mesmo evento/categoria
+     * para incluir (ou remover) este item entre os candidatos.
+     */
+    @Transactional
+    public int recalcularMatchesPorItem(Item item) {
+        if (item == null || item.getId() == null) return 0;
+        if (Boolean.TRUE.equals(item.getFgExcluido())
+                || Boolean.TRUE.equals(item.getFgEntregue())
+                || Boolean.TRUE.equals(item.getFgDescartado())) {
+            return 0;
+        }
+        if (item.getEvento() == null || item.getCategoria() == null) return 0;
+        String st = item.getStatus() != null ? item.getStatus().getNmStatus() : "";
+        boolean candidato = STATUS_CANDIDATOS.stream().anyMatch(s -> s.equalsIgnoreCase(st));
+        if (!candidato) return 0;
+
+        List<Claim> claims = claimRepository.findPerdasParaMatch(
+                item.getEvento().getId(), ClaimService.TIPO_PERDA, item.getCategoria().getId());
+        int total = 0;
+        for (Claim claim : claims) {
+            total += recalcularMatches(claim);
+        }
+        return total;
     }
 
     /** Recalcula a partir do id assinado do claim. */
@@ -188,47 +215,41 @@ public class MatchService {
     }
 
     int calcularScore(Claim claim, Item item) {
-        int score = 0;
-        if (claim.getSubcategoria() != null && item.getSubcategoria() != null
-                && Objects.equals(claim.getSubcategoria().getId(), item.getSubcategoria().getId())) {
-            score += 20;
+        // Critérios obrigatórios: subcategoria, marca, modelo e cor.
+        if (claim.getSubcategoria() == null || item.getSubcategoria() == null
+                || !Objects.equals(claim.getSubcategoria().getId(), item.getSubcategoria().getId())) {
+            return 0;
         }
-        if (equalsIgnore(claim.getNmMarca(), item.getNmMarca())) score += 20;
-        if (equalsIgnore(claim.getNmModelo(), item.getNmModelo())) score += 15;
-        if (equalsIgnore(claim.getNmCor(), item.getNmCor())) score += 15;
-        if (equalsIgnore(claim.getNmEstado(), item.getNmEstado())) score += 5;
-        score += scoreTags(claim.getDsTags(), item);
-        score += scoreTitulo(claim.getNmObjeto(), item.getNmTitulo());
+        if (!equalsIgnore(claim.getNmMarca(), item.getNmMarca())) return 0;
+        if (!equalsIgnore(claim.getNmModelo(), item.getNmModelo())) return 0;
+        if (!equalsIgnore(claim.getNmCor(), item.getNmCor())) return 0;
+
+        Set<String> claimTags = splitTags(claim.getDsTags());
+        // Se o claim informou tags, exige ao menos uma em comum com o item.
+        // Se não houver tags no claim, os demais critérios bastam.
+        if (!claimTags.isEmpty() && !temAoMenosUmaTag(claimTags, item)) {
+            return 0;
+        }
+
+        int score = 70; // subcategoria + marca + modelo + cor
+        if (!claimTags.isEmpty()) {
+            score += 15; // ao menos uma tag bateu
+        }
         return Math.min(100, score);
     }
 
-    private static int scoreTags(String dsTags, Item item) {
-        Set<String> tags = splitTags(dsTags);
-        if (tags.isEmpty()) return 0;
+    /** True se alguma tag do claim aparece nas tags do item ou no texto (título/descrição/obs). */
+    private static boolean temAoMenosUmaTag(Set<String> claimTags, Item item) {
         Set<String> itemTags = splitTags(item.getDsTags());
         String hay = ((item.getNmTitulo() == null ? "" : item.getNmTitulo()) + " "
                 + (item.getDsItem() == null ? "" : item.getDsItem()) + " "
                 + (item.getDsObservacoes() == null ? "" : item.getDsObservacoes()) + " "
                 + (item.getDsTags() == null ? "" : item.getDsTags()))
                 .toLowerCase(Locale.ROOT);
-        int hits = 0;
-        for (String tag : tags) {
-            if (itemTags.contains(tag) || hay.contains(tag)) hits++;
+        for (String tag : claimTags) {
+            if (itemTags.contains(tag) || hay.contains(tag)) return true;
         }
-        if (hits == 0) return 0;
-        return (int) Math.round(15.0 * hits / tags.size());
-    }
-
-    private static int scoreTitulo(String objeto, String titulo) {
-        Set<String> a = tokens(objeto);
-        Set<String> b = tokens(titulo);
-        if (a.isEmpty() || b.isEmpty()) return 0;
-        Set<String> inter = new HashSet<>(a);
-        inter.retainAll(b);
-        if (inter.isEmpty()) return 0;
-        Set<String> uni = new HashSet<>(a);
-        uni.addAll(b);
-        return (int) Math.round(10.0 * inter.size() / uni.size());
+        return false;
     }
 
     private static Set<String> splitTags(String raw) {
@@ -236,14 +257,6 @@ public class MatchService {
         return Arrays.stream(raw.split("[,;|]"))
                 .map(s -> s.trim().toLowerCase(Locale.ROOT))
                 .filter(s -> s.length() >= 2)
-                .collect(Collectors.toSet());
-    }
-
-    private static Set<String> tokens(String text) {
-        if (text == null || text.isBlank()) return Set.of();
-        return Arrays.stream(text.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{N}]+"))
-                .map(String::trim)
-                .filter(s -> s.length() >= 3)
                 .collect(Collectors.toSet());
     }
 
