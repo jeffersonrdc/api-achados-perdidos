@@ -29,6 +29,7 @@ class PortalIntegrationTest extends IntegrationTestBase {
         idEvento = criarEvento();
         habilitarPortal(idEvento);
         idItem = criarItem(idEvento);
+        concluirTriagem(idItem);
     }
 
     @Test
@@ -137,5 +138,15 @@ class PortalIntegrationTest extends IntegrationTestBase {
                 .andReturn();
 
         return objectMapper.readTree(result.getResponse().getContentAsString()).get("id").asText();
+    }
+
+    /** Catálogo público exige triagem CONCLUIDA além do status de estoque. */
+    private void concluirTriagem(String idItem) throws Exception {
+        mockMvc.perform(post("/api/v1/triagem/itens/" + idItem + "/concluir")
+                        .header("Authorization", bearer(adminToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tpStatus").value("CONCLUIDA"));
     }
 }
