@@ -205,13 +205,15 @@ public class MatchService {
     private static int scoreTags(String dsTags, Item item) {
         Set<String> tags = splitTags(dsTags);
         if (tags.isEmpty()) return 0;
+        Set<String> itemTags = splitTags(item.getDsTags());
         String hay = ((item.getNmTitulo() == null ? "" : item.getNmTitulo()) + " "
                 + (item.getDsItem() == null ? "" : item.getDsItem()) + " "
-                + (item.getDsObservacoes() == null ? "" : item.getDsObservacoes()))
+                + (item.getDsObservacoes() == null ? "" : item.getDsObservacoes()) + " "
+                + (item.getDsTags() == null ? "" : item.getDsTags()))
                 .toLowerCase(Locale.ROOT);
         int hits = 0;
         for (String tag : tags) {
-            if (hay.contains(tag)) hits++;
+            if (itemTags.contains(tag) || hay.contains(tag)) hits++;
         }
         if (hits == 0) return 0;
         return (int) Math.round(15.0 * hits / tags.size());

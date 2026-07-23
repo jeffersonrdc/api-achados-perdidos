@@ -18,6 +18,7 @@ public record ItemCreateRequest(
         String nmModelo,
         String nmCor,
         String nmEstado,
+        String dsTags,
         @NotNull LocalDate dtEncontrado,
         LocalTime hrEncontrado,
         String nmLocalEncontrado,

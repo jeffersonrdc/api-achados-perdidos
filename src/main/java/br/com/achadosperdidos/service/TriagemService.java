@@ -133,6 +133,11 @@ public class TriagemService {
         if (triagem.getLocalizacaoInicial() != null) {
             item.setLocalizacao(triagem.getLocalizacaoInicial());
         }
+        // Garante local no card do portal quando o posto foi informado na coleta.
+        if ((item.getNmLocalEncontrado() == null || item.getNmLocalEncontrado().isBlank())
+                && item.getNmPosto() != null && !item.getNmPosto().isBlank()) {
+            item.setNmLocalEncontrado(item.getNmPosto().trim());
+        }
         triagem.setTpStatus(STATUS_CONCLUIDA);
         triagem.setDtConclusao(LocalDateTime.now());
         if (triagem.getOperador() == null) triagem.setOperador(usuarioLogadoOuNulo());
@@ -297,7 +302,10 @@ public class TriagemService {
                     : localizacaoService.findEntity(idCodec.decodeLocalizacaoId(r.idLocalizacaoInicial())));
         }
         if (r.nmEstado() != null) triagem.setNmEstado(r.nmEstado());
-        if (r.dsTags() != null) triagem.setDsTags(r.dsTags());
+        if (r.dsTags() != null) {
+            triagem.setDsTags(r.dsTags());
+            item.setDsTags(r.dsTags().isBlank() ? null : r.dsTags().trim());
+        }
         if (r.dsObservacao() != null) triagem.setDsObservacao(r.dsObservacao());
         if (r.dsSugestaoIa() != null) triagem.setDsSugestaoIa(r.dsSugestaoIa());
         if (r.vlConfiancaIa() != null) triagem.setVlConfiancaIa(r.vlConfiancaIa());

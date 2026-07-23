@@ -13,6 +13,7 @@ import br.com.achadosperdidos.repository.CriancaRepository;
 import br.com.achadosperdidos.repository.DevolucaoRepository;
 import br.com.achadosperdidos.repository.EventoRepository;
 import br.com.achadosperdidos.repository.ItemRepository;
+import br.com.achadosperdidos.repository.TriagemRepository;
 import br.com.achadosperdidos.security.SignedResourceIdCodec;
 import br.com.achadosperdidos.storage.ArquivoStorage;
 import br.com.achadosperdidos.storage.ArquivoStorageProvider;
@@ -46,6 +47,7 @@ public class ArquivoService {
     private final DevolucaoRepository devolucaoRepository;
     private final ContatoRepository contatoRepository;
     private final EventoRepository eventoRepository;
+    private final TriagemRepository triagemRepository;
     private final SignedResourceIdCodec idCodec;
     private final ArquivoStorageRouter storageRouter;
     private final ImageThumbnailService imageThumbnailService;
@@ -54,12 +56,14 @@ public class ArquivoService {
             "image/jpeg", "image/pjpeg", "image/png", "image/webp",
             "image/gif", "image/heic", "image/heif", "application/pdf");
     private static final Set<String> TIPOS_IMAGEM_EVENTO = Set.of("LOGO", "HERO");
+    private static final List<String> STATUS_PORTAL = List.of(
+            "Em estoque", "Com pedido de devolucao", "Aguardando retirada");
 
     public ArquivoService(ArquivoRepository arquivoRepository, ItemRepository itemRepository,
                           ClaimRepository claimRepository, ClaimMensagemRepository claimMensagemRepository,
                           CriancaRepository criancaRepository,
                           DevolucaoRepository devolucaoRepository, ContatoRepository contatoRepository,
-                          EventoRepository eventoRepository,
+                          EventoRepository eventoRepository, TriagemRepository triagemRepository,
                           SignedResourceIdCodec idCodec, ArquivoStorageRouter storageRouter,
                           ImageThumbnailService imageThumbnailService) {
         this.arquivoRepository = arquivoRepository;
@@ -70,6 +74,7 @@ public class ArquivoService {
         this.devolucaoRepository = devolucaoRepository;
         this.contatoRepository = contatoRepository;
         this.eventoRepository = eventoRepository;
+        this.triagemRepository = triagemRepository;
         this.idCodec = idCodec;
         this.storageRouter = storageRouter;
         this.imageThumbnailService = imageThumbnailService;
@@ -294,7 +299,13 @@ public class ArquivoService {
                 .filter(i -> !Boolean.TRUE.equals(i.getFgExcluido()))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Item não encontrado."));
         String status = item.getStatus() != null ? item.getStatus().getNmStatus() : "";
-        if (!List.of("Em estoque", "Com pedido de devolucao", "Aguardando retirada").contains(status)) {
+        if (!STATUS_PORTAL.contains(status)) {
+            throw new RecursoNaoEncontradoException("Arquivo não disponível no portal.");
+        }
+        boolean triagemOk = triagemRepository.findByItem_IdAndFgExcluidoFalse(item.getId())
+                .filter(t -> "CONCLUIDA".equalsIgnoreCase(t.getTpStatus()))
+                .isPresent();
+        if (!triagemOk) {
             throw new RecursoNaoEncontradoException("Arquivo não disponível no portal.");
         }
         return a;

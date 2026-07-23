@@ -39,6 +39,7 @@ public class PortalService {
     private final ClaimRepository claimRepository;
     private final ClaimValidacaoRepository claimValidacaoRepository;
     private final ArquivoRepository arquivoRepository;
+    private final TriagemRepository triagemRepository;
     private final ClaimService claimService;
     private final ArquivoService arquivoService;
     private final CategoriaService categoriaService;
@@ -58,6 +59,7 @@ public class PortalService {
                          ClaimRepository claimRepository,
                          ClaimValidacaoRepository claimValidacaoRepository,
                          ArquivoRepository arquivoRepository,
+                         TriagemRepository triagemRepository,
                          ClaimService claimService,
                          ArquivoService arquivoService,
                          CategoriaService categoriaService,
@@ -76,6 +78,7 @@ public class PortalService {
         this.claimRepository = claimRepository;
         this.claimValidacaoRepository = claimValidacaoRepository;
         this.arquivoRepository = arquivoRepository;
+        this.triagemRepository = triagemRepository;
         this.claimService = claimService;
         this.arquivoService = arquivoService;
         this.categoriaService = categoriaService;
@@ -192,8 +195,8 @@ public class PortalService {
         int p = PaginationParams.resolvePage(page);
         int l = PaginationParams.resolveLimit(limit);
         Long eventoId = idCodec.decodeEventoIdAssinado(idEvento);
-        // Só aparecem no portal os itens que já passaram pela triagem e chegaram ao estoque.
-        Page<Item> result = itemRepository.findByEvento_IdAndFgExcluidoFalseAndFgAtivoTrueAndFgEntregueFalseAndFgDescartadoFalseAndStatus_NmStatusIn(
+        // Só aparecem no portal após "Concluir triagem" (triagem CONCLUIDA) e status de estoque/pós-claim.
+        Page<Item> result = itemRepository.findCatalogoPortal(
                 eventoId, STATUS_PORTAL, PageRequest.of(p - 1, l));
         var filtrados = result.getContent().stream()
                 .filter(i -> pesquisa == null || pesquisa.isBlank() || matchesPesquisa(i, pesquisa))
@@ -239,6 +242,7 @@ public class PortalService {
                 .filter(i -> !Boolean.TRUE.equals(i.getFgEntregue()))
                 .filter(i -> !Boolean.TRUE.equals(i.getFgDescartado()))
                 .filter(i -> i.getStatus() != null && STATUS_PORTAL.contains(i.getStatus().getNmStatus()))
+                .filter(this::triagemConcluida)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Item não encontrado no evento."));
 
         Claim claim = new Claim();
@@ -524,8 +528,29 @@ public class PortalService {
                 i.getNmModelo(),
                 i.getNmCor(),
                 i.getDtEncontrado(),
-                i.getNmLocalEncontrado(),
+                localPublico(i),
                 idFoto);
+    }
+
+    /** Local exibido no card: achado → posto → local atual. */
+    private static String localPublico(Item i) {
+        if (i.getNmLocalEncontrado() != null && !i.getNmLocalEncontrado().isBlank()) {
+            return i.getNmLocalEncontrado().trim();
+        }
+        if (i.getNmPosto() != null && !i.getNmPosto().isBlank()) {
+            return i.getNmPosto().trim();
+        }
+        if (i.getLocalAtual() != null && i.getLocalAtual().getNmLocal() != null
+                && !i.getLocalAtual().getNmLocal().isBlank()) {
+            return i.getLocalAtual().getNmLocal().trim();
+        }
+        return null;
+    }
+
+    private boolean triagemConcluida(Item item) {
+        return triagemRepository.findByItem_IdAndFgExcluidoFalse(item.getId())
+                .filter(t -> "CONCLUIDA".equalsIgnoreCase(t.getTpStatus()))
+                .isPresent();
     }
 
     private static void aplicarContatoConfianca(
@@ -551,6 +576,7 @@ public class PortalService {
                 .filter(x -> !Boolean.TRUE.equals(x.getFgDescartado()))
                 .filter(x -> x.getEvento().getId().equals(eventoId))
                 .filter(x -> x.getStatus() != null && STATUS_PORTAL.contains(x.getStatus().getNmStatus()))
+                .filter(this::triagemConcluida)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Item não encontrado no catálogo público."));
         String idFoto = arquivoService.fotoPrincipalItem(i.getId())
                 .map(a -> idCodec.encodeArquivoId(a.getId()))

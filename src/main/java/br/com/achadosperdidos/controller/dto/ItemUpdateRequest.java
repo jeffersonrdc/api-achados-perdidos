@@ -16,6 +16,7 @@ public record ItemUpdateRequest(
         String nmModelo,
         String nmCor,
         String nmEstado,
+        String dsTags,
         LocalDate dtEncontrado,
         LocalTime hrEncontrado,
         String nmLocalEncontrado,

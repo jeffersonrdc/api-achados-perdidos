@@ -27,6 +27,7 @@ public class Item {
     @Column(name = "NM_Modelo", length = 100) private String nmModelo;
     @Column(name = "NM_Cor", length = 60) private String nmCor;
     @Column(name = "NM_Estado", length = 40) private String nmEstado;
+    @Column(name = "DS_Tags", columnDefinition = "TEXT") private String dsTags;
     @Column(name = "DT_Encontrado", nullable = false) private LocalDate dtEncontrado;
     @Column(name = "HR_Encontrado") private LocalTime hrEncontrado;
     @Column(name = "NM_LocalEncontrado", length = 200) private String nmLocalEncontrado;
@@ -58,6 +59,7 @@ public class Item {
     public String getNmModelo() { return nmModelo; } public void setNmModelo(String v) { this.nmModelo = v; }
     public String getNmCor() { return nmCor; } public void setNmCor(String v) { this.nmCor = v; }
     public String getNmEstado() { return nmEstado; } public void setNmEstado(String v) { this.nmEstado = v; }
+    public String getDsTags() { return dsTags; } public void setDsTags(String v) { this.dsTags = v; }
     public LocalDate getDtEncontrado() { return dtEncontrado; } public void setDtEncontrado(LocalDate v) { this.dtEncontrado = v; }
     public LocalTime getHrEncontrado() { return hrEncontrado; } public void setHrEncontrado(LocalTime v) { this.hrEncontrado = v; }
     public String getNmLocalEncontrado() { return nmLocalEncontrado; } public void setNmLocalEncontrado(String v) { this.nmLocalEncontrado = v; }

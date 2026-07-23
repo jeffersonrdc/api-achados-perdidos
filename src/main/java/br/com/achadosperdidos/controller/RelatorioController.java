@@ -37,14 +37,20 @@ public class RelatorioController {
 
     @GetMapping("/itens-por-categoria")
     @Operation(summary = "Itens agrupados por categoria")
-    public List<Map<String, Object>> itensPorCategoria(@Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento) {
-        return relatorioService.itensPorCategoria(idEvento);
+    public List<Map<String, Object>> itensPorCategoria(
+            @Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento,
+            @Parameter(description = "Filtra pelo dia de cadastro (yyyy-MM-dd ou dd/MM/yyyy)")
+            @RequestParam(required = false) String data) {
+        return relatorioService.itensPorCategoria(idEvento, data);
     }
 
     @GetMapping("/itens-pendentes")
     @Operation(summary = "Itens pendentes de devolução")
-    public List<Map<String, Object>> itensPendentes(@Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento) {
-        return relatorioService.itensPendentes(idEvento);
+    public List<Map<String, Object>> itensPendentes(
+            @Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento,
+            @Parameter(description = "Filtra pelo dia de cadastro (yyyy-MM-dd ou dd/MM/yyyy)")
+            @RequestParam(required = false) String data) {
+        return relatorioService.itensPendentes(idEvento, data);
     }
 
     @GetMapping("/itens-devolvidos")
@@ -55,8 +61,11 @@ public class RelatorioController {
 
     @GetMapping("/itens-por-localizacao")
     @Operation(summary = "Itens agrupados por localização")
-    public List<Map<String, Object>> itensPorLocalizacao() {
-        return relatorioService.itensPorLocalizacao();
+    public List<Map<String, Object>> itensPorLocalizacao(
+            @Parameter(description = "ID assinado do evento") @RequestParam(required = false) String idEvento,
+            @Parameter(description = "Filtra pelo dia de cadastro (yyyy-MM-dd ou dd/MM/yyyy)")
+            @RequestParam(required = false) String data) {
+        return relatorioService.itensPorLocalizacao(idEvento, data);
     }
 
     @GetMapping("/tempo-devolucao")
@@ -67,8 +76,11 @@ public class RelatorioController {
 
     @GetMapping("/claims-abertos")
     @Operation(summary = "Claims em aberto")
-    public List<Map<String, Object>> claimsAbertos(@Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento) {
-        return relatorioService.claimsAbertos(idEvento);
+    public List<Map<String, Object>> claimsAbertos(
+            @Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento,
+            @Parameter(description = "Filtra pelo dia de abertura (yyyy-MM-dd ou dd/MM/yyyy)")
+            @RequestParam(required = false) String data) {
+        return relatorioService.claimsAbertos(idEvento, data);
     }
 
     @GetMapping("/sla-estourado")

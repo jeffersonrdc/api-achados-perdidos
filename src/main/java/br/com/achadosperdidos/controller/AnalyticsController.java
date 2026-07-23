@@ -41,21 +41,27 @@ public class AnalyticsController {
     @GetMapping("/eventos/{idEvento}/resumo")
     @Operation(summary = "Resumo operacional do evento",
             description = "Totais de itens, claims, devoluções e indicadores do evento. "
-                    + "`idEvento` deve ser o token assinado retornado pela API (não o ID numérico).")
+                    + "Com `data` (yyyy-MM-dd ou dd/MM/yyyy), restringe ao dia informado "
+                    + "(cadastros/devoluções daquele dia). Sem `data`, retorna o acumulado do evento.")
     public ResumoOperacionalResponse resumoOperacional(
             @Parameter(description = "ID assinado do evento (`s2.*`)", required = true)
-            @PathVariable String idEvento) {
-        return analyticsService.resumoOperacional(idEvento);
+            @PathVariable String idEvento,
+            @Parameter(description = "Data de referência (yyyy-MM-dd ou dd/MM/yyyy)")
+            @RequestParam(required = false) String data) {
+        return analyticsService.resumoOperacional(idEvento, data);
     }
 
     @GetMapping("/eventos/{idEvento}/evolucao")
     @Operation(summary = "Evolução temporal de indicadores",
-            description = "Série diária de métricas do evento para o número de dias informado.")
+            description = "Série diária de métricas. Sem `data`, termina em hoje. "
+                    + "Com `data`, a janela termina nessa data. `dias` controla o tamanho da série (default 14).")
     public List<EvolucaoPontoResponse> evolucao(
             @Parameter(description = "ID assinado do evento (`s2.*`)", required = true)
             @PathVariable String idEvento,
             @Parameter(description = "Quantidade de dias da série (default 14)")
-            @RequestParam(defaultValue = "14") int dias) {
-        return analyticsService.evolucao(idEvento, dias);
+            @RequestParam(defaultValue = "14") int dias,
+            @Parameter(description = "Data final da série (yyyy-MM-dd ou dd/MM/yyyy)")
+            @RequestParam(required = false) String data) {
+        return analyticsService.evolucao(idEvento, dias, data);
     }
 }

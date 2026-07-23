@@ -97,6 +97,7 @@ public class ItemService {
         item.setNmModelo(request.nmModelo());
         item.setNmCor(request.nmCor());
         item.setNmEstado(request.nmEstado());
+        item.setDsTags(blankToNull(request.dsTags()));
         item.setDtEncontrado(request.dtEncontrado());
         item.setHrEncontrado(request.hrEncontrado());
         item.setNmLocalEncontrado(request.nmLocalEncontrado());
@@ -139,6 +140,7 @@ public class ItemService {
         if (request.nmModelo() != null) item.setNmModelo(request.nmModelo());
         if (request.nmCor() != null) item.setNmCor(request.nmCor());
         if (request.nmEstado() != null) item.setNmEstado(request.nmEstado());
+        if (request.dsTags() != null) item.setDsTags(blankToNull(request.dsTags()));
         if (request.dtEncontrado() != null) item.setDtEncontrado(request.dtEncontrado());
         if (request.hrEncontrado() != null) item.setHrEncontrado(request.hrEncontrado());
         if (request.nmLocalEncontrado() != null) item.setNmLocalEncontrado(request.nmLocalEncontrado());
@@ -403,12 +405,16 @@ public class ItemService {
         String operador = i.getUsuarioCadastro() != null ? i.getUsuarioCadastro().getNmUsuario() : i.getNmEncontradoPor();
         return new ItemResponse(
                 idCodec.encodeItemId(i.getId()), i.getCdItem(), i.getNmTitulo(), i.getDsItem(), i.getDsObservacoes(),
-                i.getNmMarca(), i.getNmModelo(), i.getNmCor(), i.getNmEstado(),
+                i.getNmMarca(), i.getNmModelo(), i.getNmCor(), i.getNmEstado(), i.getDsTags(),
                 i.getDtEncontrado(), i.getHrEncontrado(), i.getNmLocalEncontrado(), i.getNmPosto(),
                 i.getNmEncontradoPor(), operador,
                 i.getVlEstimado(), i.getStatus().getNmStatus(), i.getCategoria().getNmCategoria(),
                 i.getSubcategoria() != null ? i.getSubcategoria().getNmCategoria() : null,
                 i.getEvento().getNmEvento(), i.getTpPrioridade(), i.getFgSensivel(),
                 i.getFgEntregue(), i.getFgDescartado(), i.getDtCadastro());
+    }
+
+    private static String blankToNull(String v) {
+        return v == null || v.isBlank() ? null : v.trim();
     }
 }

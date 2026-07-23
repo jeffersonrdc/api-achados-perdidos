@@ -65,11 +65,16 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleHttpMessageNotReadable(HttpMessageNotReadableException ex) {
         log.debug("Corpo HTTP não legível", ex);
         Throwable cause = ex.getMostSpecificCause();
-        String message = cause instanceof UnrecognizedPropertyException
-                ? "O JSON contém campo(s) não permitido(s)."
-                : cause instanceof JsonParseException
-                ? "JSON malformado ou incompleto."
-                : "Não foi possível processar o corpo da requisição.";
+        String message;
+        if (cause instanceof UnrecognizedPropertyException upe) {
+            message = "Campo não permitido no JSON: \"" + upe.getPropertyName() + "\".";
+        } else if (cause instanceof JsonParseException) {
+            message = "JSON malformado ou incompleto.";
+        } else if (cause != null && cause.getMessage() != null && !cause.getMessage().isBlank()) {
+            message = "Não foi possível processar o corpo da requisição: " + cause.getMessage();
+        } else {
+            message = "Não foi possível processar o corpo da requisição.";
+        }
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, message);
         detail.setTitle("JSON inválido");
         return detail;

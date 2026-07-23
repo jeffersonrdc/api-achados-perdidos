@@ -31,6 +31,28 @@ public interface ItemRepository extends JpaRepository<Item, Long>, JpaSpecificat
     Page<Item> findByEvento_IdAndFgExcluidoFalseAndFgAtivoTrueAndFgEntregueFalseAndFgDescartadoFalse(
             Long eventoId, Pageable pageable);
 
+    /** Itens públicos no portal: estoque (ou pós-claim) E triagem já concluída. */
+    @EntityGraph(attributePaths = {"evento", "categoria", "status", "localAtual"})
+    @Query("""
+            SELECT i FROM Item i
+             WHERE i.evento.id = :eventoId
+               AND i.fgExcluido = false
+               AND i.fgAtivo = true
+               AND i.fgEntregue = false
+               AND i.fgDescartado = false
+               AND i.status.nmStatus IN :statuses
+               AND EXISTS (
+                 SELECT 1 FROM Triagem t
+                  WHERE t.item.id = i.id
+                    AND t.fgExcluido = false
+                    AND t.tpStatus = 'CONCLUIDA'
+               )
+            """)
+    Page<Item> findCatalogoPortal(
+            @Param("eventoId") Long eventoId,
+            @Param("statuses") Collection<String> statuses,
+            Pageable pageable);
+
     /** Itens públicos no portal: apenas os que já chegaram ao estoque (não entregues/descartados). */
     @EntityGraph(attributePaths = {"evento", "categoria", "status"})
     Page<Item> findByEvento_IdAndFgExcluidoFalseAndFgAtivoTrueAndFgEntregueFalseAndFgDescartadoFalseAndStatus_NmStatusIn(

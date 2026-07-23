@@ -12,7 +12,9 @@ import jakarta.persistence.TupleElement;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -807,13 +809,46 @@ public class RelatorioService {
     // ------------------------------------------------------------------
 
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> itensPorCategoria(String idEvento) {
-        return porEvento("SELECT * FROM VW_Itens_Categoria WHERE ID_Evento = :ev ORDER BY QT_Itens DESC", idEvento);
+    public List<Map<String, Object>> itensPorCategoria(String idEvento, String data) {
+        LocalDate dia = parseData(data);
+        if (dia == null) {
+            return porEvento("SELECT * FROM VW_Itens_Categoria WHERE ID_Evento = :ev ORDER BY QT_Itens DESC", idEvento);
+        }
+        Long ev = idCodec.decodeEventoId(idEvento);
+        return executar(em.createNativeQuery(
+                        "SELECT c.ID_Categoria AS ID_Categoria, COALESCE(c.NM_Categoria, 'Não informado') AS NM_Categoria, " +
+                                "COUNT(*) AS QT_Itens " +
+                                "FROM item i LEFT JOIN categoria c ON c.ID_Categoria = i.IDR_Categoria " +
+                                "WHERE i.IDR_Evento = :ev AND i.FG_Excluido = 0 AND DATE(i.DT_Cadastro) = :dia " +
+                                "GROUP BY c.ID_Categoria, c.NM_Categoria ORDER BY QT_Itens DESC", Tuple.class)
+                .setParameter("ev", ev)
+                .setParameter("dia", dia)
+                .getResultList());
     }
 
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> itensPendentes(String idEvento) {
-        return porEvento("SELECT * FROM VW_Itens_Pendentes WHERE ID_Evento = :ev ORDER BY QT_DiasArmazenado DESC", idEvento);
+    public List<Map<String, Object>> itensPendentes(String idEvento, String data) {
+        LocalDate dia = parseData(data);
+        if (dia == null) {
+            return porEvento("SELECT * FROM VW_Itens_Pendentes WHERE ID_Evento = :ev ORDER BY QT_DiasArmazenado DESC", idEvento);
+        }
+        Long ev = idCodec.decodeEventoId(idEvento);
+        return executar(em.createNativeQuery(
+                        "SELECT i.ID_Item AS ID_Item, i.CD_Item AS CD_Item, i.NM_Titulo AS NM_Titulo, " +
+                                "COALESCE(c.NM_Categoria, '') AS NM_Categoria, " +
+                                "COALESCE(l.NM_Local, i.NM_LocalEncontrado, '') AS NM_Setor, " +
+                                "DATEDIFF(CURDATE(), COALESCE(i.DT_Encontrado, DATE(i.DT_Cadastro))) AS QT_DiasArmazenado " +
+                                "FROM item i " +
+                                "LEFT JOIN categoria c ON c.ID_Categoria = i.IDR_Categoria " +
+                                "LEFT JOIN local l ON l.ID_Local = i.IDR_LocalAtual " +
+                                "JOIN status_item s ON s.ID_Status = i.IDR_Status " +
+                                "WHERE i.IDR_Evento = :ev AND i.FG_Excluido = 0 AND i.FG_Entregue = 0 AND i.FG_Descartado = 0 " +
+                                "AND s.NM_Status IN ('Em estoque', 'Com pedido de devolucao', 'Aguardando retirada') " +
+                                "AND DATE(i.DT_Cadastro) = :dia " +
+                                "ORDER BY QT_DiasArmazenado DESC", Tuple.class)
+                .setParameter("ev", ev)
+                .setParameter("dia", dia)
+                .getResultList());
     }
 
     @Transactional(readOnly = true)
@@ -832,8 +867,25 @@ public class RelatorioService {
     }
 
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> claimsAbertos(String idEvento) {
-        return porNomeEvento("SELECT * FROM VW_Claims_Abertos WHERE NM_Evento = :ev ORDER BY QT_DiasAberto DESC", idEvento);
+    public List<Map<String, Object>> claimsAbertos(String idEvento, String data) {
+        LocalDate dia = parseData(data);
+        if (dia == null) {
+            return porNomeEvento("SELECT * FROM VW_Claims_Abertos WHERE NM_Evento = :ev ORDER BY QT_DiasAberto DESC", idEvento);
+        }
+        Long ev = idCodec.decodeEventoId(idEvento);
+        return executar(em.createNativeQuery(
+                        "SELECT c.ID_Claim AS ID_Claim, c.NM_Nome AS NM_Nome, c.NM_Objeto AS NM_Objeto, " +
+                                "COALESCE(s.NM_Status, '') AS NM_Status, " +
+                                "DATEDIFF(CURDATE(), DATE(c.DT_Cadastro)) AS QT_DiasAberto " +
+                                "FROM claim c " +
+                                "LEFT JOIN status_item s ON s.ID_Status = c.IDR_Status " +
+                                "WHERE c.IDR_Evento = :ev AND c.FG_Excluido = 0 " +
+                                "AND DATE(c.DT_Cadastro) = :dia " +
+                                "AND (s.NM_Status IS NULL OR s.NM_Status NOT IN ('Devolvido', 'Finalizado', 'Reprovado', 'Cancelado')) " +
+                                "ORDER BY QT_DiasAberto DESC", Tuple.class)
+                .setParameter("ev", ev)
+                .setParameter("dia", dia)
+                .getResultList());
     }
 
     @Transactional(readOnly = true)
@@ -842,9 +894,57 @@ public class RelatorioService {
     }
 
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> itensPorLocalizacao() {
+    public List<Map<String, Object>> itensPorLocalizacao(String idEvento, String data) {
+        LocalDate dia = parseData(data);
+        if (idEvento == null || idEvento.isBlank()) {
+            if (dia == null) {
+                return executar(em.createNativeQuery(
+                        "SELECT * FROM VW_Itens_Localizacao ORDER BY NM_Deposito, NM_Setor", Tuple.class).getResultList());
+            }
+            return executar(em.createNativeQuery(
+                            "SELECT COALESCE(d.NM_Deposito, 'Sem depósito') AS NM_Deposito, " +
+                                    "COALESCE(l.NM_Local, i.NM_LocalEncontrado, i.NM_Posto, 'Sem local') AS NM_Setor, " +
+                                    "COUNT(*) AS QT_Itens " +
+                                    "FROM item i " +
+                                    "LEFT JOIN localizacao loc ON loc.ID_Localizacao = i.IDR_Localizacao " +
+                                    "LEFT JOIN deposito d ON d.ID_Deposito = loc.IDR_Deposito " +
+                                    "LEFT JOIN local l ON l.ID_Local = i.IDR_LocalAtual " +
+                                    "WHERE i.FG_Excluido = 0 AND DATE(i.DT_Cadastro) = :dia " +
+                                    "GROUP BY d.NM_Deposito, COALESCE(l.NM_Local, i.NM_LocalEncontrado, i.NM_Posto, 'Sem local') " +
+                                    "ORDER BY NM_Deposito, NM_Setor", Tuple.class)
+                    .setParameter("dia", dia)
+                    .getResultList());
+        }
+        Long ev = idCodec.decodeEventoId(idEvento);
+        if (dia == null) {
+            return executar(em.createNativeQuery(
+                            "SELECT COALESCE(d.NM_Deposito, 'Sem depósito') AS NM_Deposito, " +
+                                    "COALESCE(l.NM_Local, i.NM_LocalEncontrado, i.NM_Posto, 'Sem local') AS NM_Setor, " +
+                                    "COUNT(*) AS QT_Itens " +
+                                    "FROM item i " +
+                                    "LEFT JOIN localizacao loc ON loc.ID_Localizacao = i.IDR_Localizacao " +
+                                    "LEFT JOIN deposito d ON d.ID_Deposito = loc.IDR_Deposito " +
+                                    "LEFT JOIN local l ON l.ID_Local = i.IDR_LocalAtual " +
+                                    "WHERE i.IDR_Evento = :ev AND i.FG_Excluido = 0 " +
+                                    "GROUP BY d.NM_Deposito, COALESCE(l.NM_Local, i.NM_LocalEncontrado, i.NM_Posto, 'Sem local') " +
+                                    "ORDER BY NM_Deposito, NM_Setor", Tuple.class)
+                    .setParameter("ev", ev)
+                    .getResultList());
+        }
         return executar(em.createNativeQuery(
-                "SELECT * FROM VW_Itens_Localizacao ORDER BY NM_Deposito, NM_Setor", Tuple.class).getResultList());
+                        "SELECT COALESCE(d.NM_Deposito, 'Sem depósito') AS NM_Deposito, " +
+                                "COALESCE(l.NM_Local, i.NM_LocalEncontrado, i.NM_Posto, 'Sem local') AS NM_Setor, " +
+                                "COUNT(*) AS QT_Itens " +
+                                "FROM item i " +
+                                "LEFT JOIN localizacao loc ON loc.ID_Localizacao = i.IDR_Localizacao " +
+                                "LEFT JOIN deposito d ON d.ID_Deposito = loc.IDR_Deposito " +
+                                "LEFT JOIN local l ON l.ID_Local = i.IDR_LocalAtual " +
+                                "WHERE i.IDR_Evento = :ev AND i.FG_Excluido = 0 AND DATE(i.DT_Cadastro) = :dia " +
+                                "GROUP BY d.NM_Deposito, COALESCE(l.NM_Local, i.NM_LocalEncontrado, i.NM_Posto, 'Sem local') " +
+                                "ORDER BY NM_Deposito, NM_Setor", Tuple.class)
+                .setParameter("ev", ev)
+                .setParameter("dia", dia)
+                .getResultList());
     }
 
     // ------------------------------------------------------------------
@@ -879,6 +979,19 @@ public class RelatorioService {
             m.put(e.getAlias(), t.get(e.getAlias()));
         }
         return m;
+    }
+
+    private static LocalDate parseData(String data) {
+        if (data == null || data.isBlank()) return null;
+        String v = data.trim();
+        try {
+            if (v.contains("/")) {
+                return LocalDate.parse(v, DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+            }
+            return LocalDate.parse(v.length() >= 10 ? v.substring(0, 10) : v);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private long count(String sql, Long ev, LocalDateTime ini, LocalDateTime fim) {

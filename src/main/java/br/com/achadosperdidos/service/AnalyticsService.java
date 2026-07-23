@@ -146,13 +146,15 @@ public class AnalyticsService {
     }
 
     @Transactional(readOnly = true)
-    public ResumoOperacionalResponse resumoOperacional(String idEvento) {
+    public ResumoOperacionalResponse resumoOperacional(String idEvento, String data) {
         Long ev = idCodec.decodeEventoId(idEvento);
         Evento evento = eventoRepository.findById(ev)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Evento não encontrado."));
 
-        Map<String, Long> porStatus = contarPorStatus(ev);
+        LocalDate dia = parseData(data);
+        Map<String, Long> porStatus = dia != null ? contarPorStatusNoDia(ev, dia) : contarPorStatus(ev);
         long total = porStatus.values().stream().mapToLong(Long::longValue).sum();
+        LocalDate diaDevolvidos = dia != null ? dia : LocalDate.now(TimeConfig.ZONE_BRASILIA);
 
         return new ResumoOperacionalResponse(
                 idCodec.encodeEventoId(ev),
@@ -169,18 +171,19 @@ public class AnalyticsService {
                 porStatus.getOrDefault("Devolvido", 0L),
                 porStatus.getOrDefault("Finalizado", 0L),
                 porStatus.getOrDefault("Descartado", 0L),
-                contarDevolvidosHoje(ev),
-                contarSensiveis(ev));
+                contarDevolvidosNoDia(ev, diaDevolvidos),
+                dia != null ? contarSensiveisNoDia(ev, dia) : contarSensiveis(ev));
     }
 
-    /** Série temporal (últimos {@code dias} dias) de encontrados, devolvidos e solicitações. */
+    /** Série temporal: janela de {@code dias} terminando em {@code data} (ou hoje). */
     @Transactional(readOnly = true)
-    public List<EvolucaoPontoResponse> evolucao(String idEvento, int dias) {
+    public List<EvolucaoPontoResponse> evolucao(String idEvento, int dias, String data) {
         Long ev = idCodec.decodeEventoId(idEvento);
         eventoRepository.findById(ev)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Evento não encontrado."));
         int janela = Math.max(1, Math.min(dias, 90));
-        LocalDate fim = LocalDate.now(TimeConfig.ZONE_BRASILIA);
+        LocalDate fim = parseData(data);
+        if (fim == null) fim = LocalDate.now(TimeConfig.ZONE_BRASILIA);
         LocalDate inicio = fim.minusDays(janela - 1L);
 
         Map<LocalDate, Long> encontrados = contarPorDia(
@@ -875,12 +878,32 @@ public class AnalyticsService {
         return map;
     }
 
-    private long contarDevolvidosHoje(Long ev) {
+    /** Contagem por status dos itens cadastrados no dia (atividade do dia). */
+    private Map<String, Long> contarPorStatusNoDia(Long ev, LocalDate dia) {
+        List<Tuple> rows = em.createNativeQuery(
+                        "SELECT s.NM_Status AS st, COUNT(*) AS qt " +
+                                "FROM item i JOIN status_item s ON s.ID_Status = i.IDR_Status " +
+                                "WHERE i.IDR_Evento = :ev AND i.FG_Excluido = 0 " +
+                                "AND DATE(i.DT_Cadastro) = :dia " +
+                                "GROUP BY s.NM_Status", Tuple.class)
+                .setParameter("ev", ev)
+                .setParameter("dia", dia)
+                .getResultList();
+        Map<String, Long> map = new HashMap<>();
+        for (Tuple t : rows) {
+            map.put((String) t.get("st"), ((Number) t.get("qt")).longValue());
+        }
+        return map;
+    }
+
+    private long contarDevolvidosNoDia(Long ev, LocalDate dia) {
         Number n = (Number) em.createNativeQuery(
                         "SELECT COUNT(*) FROM devolucao d JOIN item i ON i.ID_Item = d.IDR_Item " +
                                 "WHERE i.IDR_Evento = :ev AND d.FG_Concluido = 1 AND d.FG_Excluido = 0 " +
-                                "AND DATE(d.DT_Devolucao) = CURDATE()")
-                .setParameter("ev", ev).getSingleResult();
+                                "AND DATE(d.DT_Devolucao) = :dia")
+                .setParameter("ev", ev)
+                .setParameter("dia", dia)
+                .getSingleResult();
         return n.longValue();
     }
 
@@ -889,5 +912,29 @@ public class AnalyticsService {
                         "SELECT COUNT(*) FROM item WHERE IDR_Evento = :ev AND FG_Excluido = 0 AND FG_Sensivel = 1")
                 .setParameter("ev", ev).getSingleResult();
         return n.longValue();
+    }
+
+    private long contarSensiveisNoDia(Long ev, LocalDate dia) {
+        Number n = (Number) em.createNativeQuery(
+                        "SELECT COUNT(*) FROM item WHERE IDR_Evento = :ev AND FG_Excluido = 0 AND FG_Sensivel = 1 " +
+                                "AND DATE(DT_Cadastro) = :dia")
+                .setParameter("ev", ev)
+                .setParameter("dia", dia)
+                .getSingleResult();
+        return n.longValue();
+    }
+
+    /** Aceita yyyy-MM-dd ou dd/MM/yyyy; null se vazio/inválido. */
+    private static LocalDate parseData(String data) {
+        if (data == null || data.isBlank()) return null;
+        String v = data.trim();
+        try {
+            if (v.contains("/")) {
+                return LocalDate.parse(v, java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+            }
+            return LocalDate.parse(v.length() >= 10 ? v.substring(0, 10) : v);
+        } catch (Exception e) {
+            return null;
+        }
     }
 }
