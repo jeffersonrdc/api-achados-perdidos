@@ -1,0 +1,13 @@
+---
+description: Não excluir do CI o que deve ser realmente validado
+alwaysApply: true
+---
+
+# CI — não enfraquecer validações reais
+
+Ao corrigir falhas de pipeline (Semgrep, Surefire, Trivy, Docker test stage, etc.):
+
+- **Não** silenciar, ignorar ou excluir código/configuração de produção que o estágio deve validar de fato (`src/main`, `application*.properties`, `Dockerfile`, scripts de deploy, secrets reais, endpoints, testes de integração).
+- Preferir **corrigir a causa** (código, teste, config) em vez de `--exclude`, `.semgrepignore`, skip de teste ou desligar regra.
+- Exclusões só para **falso positivo claro em artefato não executável** (ex.: documentação HTML em `docs/` citando propriedades), e mesmo assim de forma mínima e justificada.
+- Nunca “passar o CI” removendo cobertura de segurança, testes ou health checks que o projeto pretende manter.

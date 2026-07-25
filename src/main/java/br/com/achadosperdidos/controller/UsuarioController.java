@@ -70,6 +70,16 @@ public class UsuarioController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/{id}/reset-senha")
+    @PreAuthorize("@authz.pode('usuario.editar')")
+    @Operation(summary = "Resetar senha",
+            description = "Gera senha aleatória, grava o hash e envia a nova senha por e-mail ao usuário.")
+    public ResponseEntity<Void> resetarSenha(
+            @Parameter(description = "ID assinado do usuário") @PathVariable String id) {
+        usuarioService.resetarSenha(id);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/me/permissoes-efetivas")
     @Operation(summary = "Listar minhas permissões efetivas", description = "Perfil + extras do usuário autenticado.")
     public List<String> minhasPermissoesEfetivas() {

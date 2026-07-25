@@ -17,27 +17,41 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.time.Year;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 @Service
 public class UsuarioService {
+    private static final String TP_CADASTRO = "USUARIO_CADASTRO";
+    private static final String TP_RESET = "USUARIO_RESET_SENHA";
+    private static final String SENHA_CHARS =
+            "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+    private static final int SENHA_TAMANHO = 12;
+    private static final SecureRandom SENHA_RANDOM = new SecureRandom();
+
     private final UsuarioRepository usuarioRepository;
     private final PerfilRepository perfilRepository;
     private final SignedResourceIdCodec idCodec;
     private final PasswordEncoder passwordEncoder;
     private final UsuarioContextService usuarioContextService;
     private final AuditoriaContextService auditoriaContext;
+    private final EmailService emailService;
 
     public UsuarioService(UsuarioRepository usuarioRepository, PerfilRepository perfilRepository,
                           SignedResourceIdCodec idCodec, PasswordEncoder passwordEncoder,
                           UsuarioContextService usuarioContextService,
-                          AuditoriaContextService auditoriaContext) {
+                          AuditoriaContextService auditoriaContext,
+                          EmailService emailService) {
         this.usuarioRepository = usuarioRepository;
         this.perfilRepository = perfilRepository;
         this.idCodec = idCodec;
         this.passwordEncoder = passwordEncoder;
         this.usuarioContextService = usuarioContextService;
         this.auditoriaContext = auditoriaContext;
+        this.emailService = emailService;
     }
 
     @Transactional
@@ -49,17 +63,35 @@ public class UsuarioService {
         Usuario admin = usuarioContextService.requireUsuarioLogado();
         Perfil perfil = perfilRepository.findByNmPerfilIgnoreCaseAndFgExcluidoFalse(request.nmPerfil().trim())
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Perfil não encontrado."));
+        String senhaPlain = request.senha();
         Usuario u = new Usuario();
         u.setEmpresa(admin.getEmpresa());
         u.setPerfil(perfil);
         u.setNmUsuario(request.nmUsuario().trim());
         u.setNmLogin(request.nmLogin().trim());
         u.setNmEmail(request.nmEmail().trim().toLowerCase());
-        u.setNmSenha(passwordEncoder.encode(request.senha()));
+        u.setNmSenha(passwordEncoder.encode(senhaPlain));
         u.setDtCadastro(LocalDateTime.now());
         u.setFgAtivo(true);
         u.setFgExcluido(false);
-        return toResponse(usuarioRepository.save(u));
+        Usuario salvo = usuarioRepository.save(u);
+        enviarCredenciais(salvo, senhaPlain, false);
+        return toResponse(salvo);
+    }
+
+    /**
+     * Gera senha aleatória, persiste o hash e envia por e-mail.
+     * Se o e-mail falhar, a operação é revertida (usuário não fica sem acesso conhecido).
+     */
+    @Transactional
+    public void resetarSenha(String id) {
+        auditoriaContext.marcarContexto();
+        Usuario u = findEntity(idCodec.decodeUsuarioId(id));
+        String senhaPlain = gerarSenhaAleatoria();
+        u.setNmSenha(passwordEncoder.encode(senhaPlain));
+        u.setDtAlteracao(LocalDateTime.now());
+        usuarioRepository.save(u);
+        enviarCredenciais(u, senhaPlain, true);
     }
 
     @Transactional(readOnly = true)
@@ -128,6 +160,42 @@ public class UsuarioService {
                 .or(() -> usuarioRepository.findWithPerfilByNmLogin(identificador))
                 .map(this::toResumo)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Usuário não encontrado."));
+    }
+
+    private void enviarCredenciais(Usuario u, String senhaPlain, boolean reset) {
+        String tpEvento = reset ? TP_RESET : TP_CADASTRO;
+        Map<String, String> vars = new LinkedHashMap<>();
+        vars.put("nomeUsuario", u.getNmUsuario() != null ? u.getNmUsuario() : "");
+        vars.put("login", u.getNmLogin() != null ? u.getNmLogin() : "");
+        vars.put("email", u.getNmEmail() != null ? u.getNmEmail() : "");
+        vars.put("senha", senhaPlain);
+        vars.put("ano", String.valueOf(Year.now().getValue()));
+        if (reset) {
+            vars.put("mensagemCurta", "Sua senha do painel foi redefinida.");
+            vars.put("mensagem",
+                    "Uma nova senha foi gerada para o seu acesso ao painel administrativo de Achados e Perdidos. "
+                            + "Use os dados abaixo para entrar. A senha anterior deixa de valer imediatamente.");
+        } else {
+            vars.put("mensagemCurta", "Seu acesso ao painel foi criado.");
+            vars.put("mensagem",
+                    "Seu usuário no painel administrativo de Achados e Perdidos foi criado. "
+                            + "Use os dados abaixo para acessar o sistema.");
+        }
+        EmailService.Resultado resultado = emailService.enviar(tpEvento, u.getNmEmail(), vars);
+        if (!resultado.enviado()) {
+            String motivo = resultado.erro() != null ? resultado.erro() : "falha desconhecida no SMTP";
+            throw new IllegalArgumentException(
+                    (reset ? "A senha não foi alterada" : "O usuário não foi criado")
+                            + " porque o e-mail com as credenciais não pôde ser enviado: " + motivo);
+        }
+    }
+
+    static String gerarSenhaAleatoria() {
+        StringBuilder sb = new StringBuilder(SENHA_TAMANHO);
+        for (int i = 0; i < SENHA_TAMANHO; i++) {
+            sb.append(SENHA_CHARS.charAt(SENHA_RANDOM.nextInt(SENHA_CHARS.length())));
+        }
+        return sb.toString();
     }
 
     private Usuario findEntity(Long id) {
