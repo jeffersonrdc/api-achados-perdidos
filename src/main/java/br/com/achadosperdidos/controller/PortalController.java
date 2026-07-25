@@ -73,6 +73,55 @@ public class PortalController {
         return portalService.statusPortal();
     }
 
+    @GetMapping("/metricas")
+    @SecurityRequirements
+    @Operation(summary = "Métricas públicas agregadas",
+            description = "Itens registrados, devolvidos, taxa de sucesso e tempo médio de resolução "
+                    + "dos eventos com portal habilitado (cards de /como-funciona).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "KPIs públicos",
+                    content = @Content(schema = @Schema(implementation = PortalMetricasResponse.class)))
+    })
+    public PortalMetricasResponse metricas() {
+        return portalService.metricasPublicas();
+    }
+
+    @PostMapping("/contato")
+    @SecurityRequirements
+    @Operation(summary = "Enviar mensagem do formulário de contato",
+            description = "Endpoint público com rate limit. Envia e-mail para o remetente da conta SMTP "
+                    + "vinculada ao parâmetro PORTAL_CONTATO em Configurações → E-mail / SMTP.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Mensagem enviada",
+                    content = @Content(schema = @Schema(implementation = PortalContatoResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Dados inválidos ou SMTP não configurado"),
+            @ApiResponse(responseCode = "429", description = "Rate limit excedido")
+    })
+    public PortalContatoResponse enviarContato(
+            @Valid @RequestBody PortalContatoRequest request,
+            HttpServletRequest http) {
+        publicRateLimiter.check("portal-contato", ipDe(http));
+        return portalService.enviarContato(request);
+    }
+
+    @GetMapping("/contatos")
+    @SecurityRequirements
+    @Operation(summary = "Canais de contato do portal",
+            description = "Telefone, WhatsApp e e-mail configurados no painel (Configurações → Contatos).")
+    public PortalContatosConfigResponse contatos() {
+        return portalService.contatosPortal();
+    }
+
+    @GetMapping("/eventos/{idEvento}/wallpapers")
+    @SecurityRequirements
+    @Operation(summary = "Wallpapers do evento para o portal",
+            description = "Lista as artes WALLPAPER cadastradas no evento (página /wallpaper).")
+    public List<PortalWallpaperResponse> listarWallpapers(
+            @Parameter(description = "ID assinado do evento (`s2.*`)", required = true)
+            @PathVariable String idEvento) {
+        return portalService.listarWallpapers(idEvento);
+    }
+
     @GetMapping("/eventos/{idEvento}")
     @SecurityRequirements
     @Operation(summary = "Detalhar evento no portal",

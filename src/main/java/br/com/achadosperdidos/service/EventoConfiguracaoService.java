@@ -53,12 +53,17 @@ public class EventoConfiguracaoService {
         if (request.qtMaxFotos() != null) cfg.setQtMaxFotos(request.qtMaxFotos());
         if (request.qtDiasDescarte() != null) cfg.setQtDiasDescarte(request.qtDiasDescarte());
         if (request.qtDiasEsperaAceitavel() != null) cfg.setQtDiasEsperaAceitavel(request.qtDiasEsperaAceitavel());
+        if (request.qtWallpapersDisponiveis() != null) {
+            int qt = request.qtWallpapersDisponiveis();
+            if (qt < 1) throw new IllegalArgumentException("Quantidade de wallpapers deve ser no mínimo 1.");
+            cfg.setQtWallpapersDisponiveis(qt);
+        }
         return toResponse(eventoConfiguracaoRepository.save(cfg));
     }
 
     private EventoConfiguracaoResponse defaultResponse(Long eventoId) {
         return new EventoConfiguracaoResponse(
-                idCodec.encodeEventoId(eventoId), true, true, false, true, true, 10, 180, 15);
+                idCodec.encodeEventoId(eventoId), true, true, false, true, true, 10, 180, 15, 6);
     }
 
     private EventoConfiguracaoResponse toResponse(EventoConfiguracao cfg) {
@@ -67,6 +72,7 @@ public class EventoConfiguracaoService {
                 cfg.getFgRecebeObjetos(), cfg.getFgAceitaClaim(), cfg.getFgConsultaPublica(),
                 cfg.getFgFotoObrigatoria(), cfg.getFgValidacaoObrigatoria(),
                 cfg.getQtMaxFotos(), cfg.getQtDiasDescarte(),
-                cfg.getQtDiasEsperaAceitavel() != null ? cfg.getQtDiasEsperaAceitavel() : 15);
+                cfg.getQtDiasEsperaAceitavel() != null ? cfg.getQtDiasEsperaAceitavel() : 15,
+                cfg.getQtWallpapersDisponiveis() != null ? cfg.getQtWallpapersDisponiveis() : 6);
     }
 }

@@ -11,6 +11,7 @@ import br.com.achadosperdidos.repository.ClaimRepository;
 import br.com.achadosperdidos.repository.ContatoRepository;
 import br.com.achadosperdidos.repository.CriancaRepository;
 import br.com.achadosperdidos.repository.DevolucaoRepository;
+import br.com.achadosperdidos.repository.EventoConfiguracaoRepository;
 import br.com.achadosperdidos.repository.EventoRepository;
 import br.com.achadosperdidos.repository.ItemRepository;
 import br.com.achadosperdidos.repository.TriagemRepository;
@@ -39,6 +40,15 @@ import java.util.UUID;
 
 @Service
 public class ArquivoService {
+    private static final Set<String> MIME_PERMITIDOS = Set.of(
+            "image/jpeg", "image/pjpeg", "image/png", "image/webp",
+            "image/gif", "image/heic", "image/heif", "application/pdf");
+    private static final Set<String> TIPOS_IMAGEM_EVENTO = Set.of("LOGO", "HERO");
+    /** Tipos de arquivo de evento liberados no download público do portal. */
+    private static final Set<String> TIPOS_PUBLICOS_EVENTO = Set.of("LOGO", "HERO", "WALLPAPER");
+    private static final List<String> STATUS_PORTAL = List.of(
+            "Em estoque", "Com pedido de devolucao", "Aguardando retirada");
+
     private final ArquivoRepository arquivoRepository;
     private final ItemRepository itemRepository;
     private final ClaimRepository claimRepository;
@@ -47,23 +57,19 @@ public class ArquivoService {
     private final DevolucaoRepository devolucaoRepository;
     private final ContatoRepository contatoRepository;
     private final EventoRepository eventoRepository;
+    private final EventoConfiguracaoRepository eventoConfiguracaoRepository;
     private final TriagemRepository triagemRepository;
     private final SignedResourceIdCodec idCodec;
     private final ArquivoStorageRouter storageRouter;
     private final ImageThumbnailService imageThumbnailService;
 
-    private static final Set<String> MIME_PERMITIDOS = Set.of(
-            "image/jpeg", "image/pjpeg", "image/png", "image/webp",
-            "image/gif", "image/heic", "image/heif", "application/pdf");
-    private static final Set<String> TIPOS_IMAGEM_EVENTO = Set.of("LOGO", "HERO");
-    private static final List<String> STATUS_PORTAL = List.of(
-            "Em estoque", "Com pedido de devolucao", "Aguardando retirada");
-
     public ArquivoService(ArquivoRepository arquivoRepository, ItemRepository itemRepository,
                           ClaimRepository claimRepository, ClaimMensagemRepository claimMensagemRepository,
                           CriancaRepository criancaRepository,
                           DevolucaoRepository devolucaoRepository, ContatoRepository contatoRepository,
-                          EventoRepository eventoRepository, TriagemRepository triagemRepository,
+                          EventoRepository eventoRepository,
+                          EventoConfiguracaoRepository eventoConfiguracaoRepository,
+                          TriagemRepository triagemRepository,
                           SignedResourceIdCodec idCodec, ArquivoStorageRouter storageRouter,
                           ImageThumbnailService imageThumbnailService) {
         this.arquivoRepository = arquivoRepository;
@@ -74,6 +80,7 @@ public class ArquivoService {
         this.devolucaoRepository = devolucaoRepository;
         this.contatoRepository = contatoRepository;
         this.eventoRepository = eventoRepository;
+        this.eventoConfiguracaoRepository = eventoConfiguracaoRepository;
         this.triagemRepository = triagemRepository;
         this.idCodec = idCodec;
         this.storageRouter = storageRouter;
@@ -133,6 +140,9 @@ public class ArquivoService {
 
         try {
             String tpArq = tpArquivo != null && !tpArquivo.isBlank() ? tpArquivo.trim().toUpperCase() : "FOTO";
+            if ("EVENTO".equals(tipo) && "WALLPAPER".equals(tpArq)) {
+                exigirLimiteWallpapers(idEnt);
+            }
             if ("EVENTO".equals(tipo) && TIPOS_IMAGEM_EVENTO.contains(tpArq)) {
                 invalidarArquivosEventoAnteriores(idEnt, tpArq);
             }
@@ -199,6 +209,29 @@ public class ArquivoService {
                 .stream()
                 .filter(a -> tpArquivo.equalsIgnoreCase(a.getTpArquivo()))
                 .findFirst();
+    }
+
+    /** Wallpapers ativos do evento (ordem de cadastro). */
+    @Transactional(readOnly = true)
+    public List<Arquivo> listarWallpapersEvento(Long idEvento) {
+        if (idEvento == null) return List.of();
+        return arquivoRepository
+                .findByTpEntidadeAndIdEntidadeAndFgExcluidoFalseOrderByDtCadastroDesc("EVENTO", idEvento)
+                .stream()
+                .filter(a -> "WALLPAPER".equalsIgnoreCase(a.getTpArquivo()))
+                .sorted(Comparator.comparing(Arquivo::getDtCadastro, Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList();
+    }
+
+    private void exigirLimiteWallpapers(Long idEvento) {
+        int limite = eventoConfiguracaoRepository.findByEvento_IdAndFgExcluidoFalse(idEvento)
+                .map(c -> c.getQtWallpapersDisponiveis() != null ? c.getQtWallpapersDisponiveis() : 6)
+                .orElse(6);
+        long atuais = listarWallpapersEvento(idEvento).size();
+        if (atuais >= limite) {
+            throw new IllegalArgumentException(
+                    "Limite de " + limite + " wallpaper(s) atingido para este evento.");
+        }
     }
 
     /** Mapa eventoId → (logo, hero) para listagens sem N+1. */
@@ -286,7 +319,7 @@ public class ArquivoService {
                 .filter(x -> !Boolean.TRUE.equals(x.getFgExcluido()))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Arquivo não encontrado."));
         if ("EVENTO".equalsIgnoreCase(a.getTpEntidade())
-                && TIPOS_IMAGEM_EVENTO.contains(a.getTpArquivo() == null ? "" : a.getTpArquivo().toUpperCase())) {
+                && TIPOS_PUBLICOS_EVENTO.contains(a.getTpArquivo() == null ? "" : a.getTpArquivo().toUpperCase())) {
             eventoRepository.findById(a.getIdEntidade())
                     .filter(e -> !Boolean.TRUE.equals(e.getFgExcluido()) && Boolean.TRUE.equals(e.getFgAtivo()))
                     .orElseThrow(() -> new RecursoNaoEncontradoException("Arquivo não disponível no portal."));

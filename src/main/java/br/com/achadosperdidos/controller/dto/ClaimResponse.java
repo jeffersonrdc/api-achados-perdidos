@@ -35,6 +35,7 @@ public record ClaimResponse(
         String idLocal,
         String nmLocal,
         String dsObjeto,
+        String dsWallpaper,
         String dsDetalhesOcultos,
         String nmOperador,
         String dsObservacao,

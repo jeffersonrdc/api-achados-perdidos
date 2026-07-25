@@ -8,5 +8,6 @@ public record EventoConfiguracaoUpdateRequest(
         Boolean fgValidacaoObrigatoria,
         Integer qtMaxFotos,
         Integer qtDiasDescarte,
-        Integer qtDiasEsperaAceitavel
+        Integer qtDiasEsperaAceitavel,
+        Integer qtWallpapersDisponiveis
 ) {}

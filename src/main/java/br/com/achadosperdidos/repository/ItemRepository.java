@@ -58,6 +58,13 @@ public interface ItemRepository extends JpaRepository<Item, Long>, JpaSpecificat
     Page<Item> findByEvento_IdAndFgExcluidoFalseAndFgAtivoTrueAndFgEntregueFalseAndFgDescartadoFalseAndStatus_NmStatusIn(
             Long eventoId, Collection<String> statuses, Pageable pageable);
 
+    // ---- Portal: métricas públicas ----
+    @Query("""
+            SELECT COUNT(i) FROM Item i
+             WHERE i.fgExcluido = false AND i.evento.id IN :ids
+            """)
+    long countAtivosByEventoIds(@Param("ids") Collection<Long> ids);
+
     // ---- Coleta: resumo/KPIs ----
     long countByEvento_IdAndFgExcluidoFalse(Long eventoId);
     long countByEvento_IdAndFgExcluidoFalseAndStatus_NmStatus(Long eventoId, String nmStatus);

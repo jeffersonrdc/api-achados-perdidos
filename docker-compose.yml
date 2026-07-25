@@ -19,3 +19,11 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./arquivos:/app/arquivos
+    # Health check: /actuator/health (restrito, sem detalhes). Alimenta
+    # `docker inspect ... .State.Health.Status` e `docker compose ps` (STATUS=healthy).
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 45s
+      retries: 3

@@ -10,6 +10,9 @@ import java.time.LocalDateTime;
 @Service
 public class SistemaParametroService {
     public static final String ARQUIVO_STORAGE_PROVIDER = "ARQUIVO_STORAGE_PROVIDER";
+    public static final String PORTAL_TELEFONE_CENTRAL = "PORTAL_TELEFONE_CENTRAL";
+    public static final String PORTAL_WHATSAPP = "PORTAL_WHATSAPP";
+    public static final String PORTAL_EMAIL_SUPORTE = "PORTAL_EMAIL_SUPORTE";
 
     private final SistemaParametroRepository repository;
 

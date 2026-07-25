@@ -91,6 +91,7 @@ public class ClaimService {
         claim.setDsRelacaoContatoConfianca(blankToNull(request.dsRelacaoContatoConfianca()));
         claim.setNmOperador(blankToNull(request.nmOperador()));
         claim.setDsObservacao(blankToNull(request.dsObservacao()));
+        claim.setDsWallpaper(blankToNull(request.dsWallpaper()));
         claim.setDtCadastro(LocalDateTime.now());
         claim.setFgAtivo(true);
         claim.setFgExcluido(false);
@@ -127,6 +128,7 @@ public class ClaimService {
         }
         if (request.nmObjeto() != null) claim.setNmObjeto(request.nmObjeto().trim());
         if (request.dsObjeto() != null) claim.setDsObjeto(blankToNull(request.dsObjeto()));
+        if (request.dsWallpaper() != null) claim.setDsWallpaper(blankToNull(request.dsWallpaper()));
         if (request.nmMarca() != null) claim.setNmMarca(blankToNull(request.nmMarca()));
         if (request.nmModelo() != null) claim.setNmModelo(blankToNull(request.nmModelo()));
         if (request.nmCor() != null) claim.setNmCor(blankToNull(request.nmCor()));
@@ -409,6 +411,7 @@ public class ClaimService {
                 c.getLocal() != null ? idCodec.encodeLocalId(c.getLocal().getId()) : null,
                 c.getNmLocal(),
                 c.getDsObjeto(),
+                c.getDsWallpaper(),
                 c.getDsDetalhesOcultos(),
                 c.getNmOperador(),
                 c.getDsObservacao(),

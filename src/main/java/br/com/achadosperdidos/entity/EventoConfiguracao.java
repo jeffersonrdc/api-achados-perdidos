@@ -17,6 +17,7 @@ public class EventoConfiguracao {
     @Column(name = "QT_MaxFotos", nullable = false) private Integer qtMaxFotos = 10;
     @Column(name = "QT_DiasDescarte", nullable = false) private Integer qtDiasDescarte = 180;
     @Column(name = "QT_DiasEsperaAceitavel", nullable = false) private Integer qtDiasEsperaAceitavel = 15;
+    @Column(name = "QT_WallpapersDisponiveis", nullable = false) private Integer qtWallpapersDisponiveis = 6;
     @Column(name = "DT_Cadastro", nullable = false) private LocalDateTime dtCadastro;
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Excluido", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgExcluido = false;
     public Long getId() { return id; } public void setId(Long id) { this.id = id; }
@@ -29,6 +30,7 @@ public class EventoConfiguracao {
     public Integer getQtMaxFotos() { return qtMaxFotos; } public void setQtMaxFotos(Integer v) { this.qtMaxFotos = v; }
     public Integer getQtDiasDescarte() { return qtDiasDescarte; } public void setQtDiasDescarte(Integer v) { this.qtDiasDescarte = v; }
     public Integer getQtDiasEsperaAceitavel() { return qtDiasEsperaAceitavel; } public void setQtDiasEsperaAceitavel(Integer v) { this.qtDiasEsperaAceitavel = v; }
+    public Integer getQtWallpapersDisponiveis() { return qtWallpapersDisponiveis; } public void setQtWallpapersDisponiveis(Integer v) { this.qtWallpapersDisponiveis = v; }
     public LocalDateTime getDtCadastro() { return dtCadastro; } public void setDtCadastro(LocalDateTime v) { this.dtCadastro = v; }
     public Boolean getFgExcluido() { return fgExcluido; } public void setFgExcluido(Boolean v) { this.fgExcluido = v; }
 }

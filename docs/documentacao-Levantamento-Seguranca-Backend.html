@@ -1,0 +1,168 @@
+<meta charset="utf-8">
+<title>Levantamento de Segurança do Backend — API Achados e Perdidos</title>
+<style>
+  :root { --navy:#1f3864; --navy2:#2e4c7e; --line:#c9d3e6; --soft:#eef2f9; --ink:#1a1a1a; --muted:#555; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: "Segoe UI", Calibri, Arial, sans-serif; color: var(--ink); font-size: 10.5pt; line-height: 1.5; margin: 0; }
+  @page { size: A4; margin: 20mm 16mm 18mm 16mm; }
+  h1,h2,h3 { color: var(--navy); font-weight: 700; }
+  h2 { font-size: 14pt; margin: 22px 0 8px; padding-bottom: 4px; border-bottom: 2px solid var(--navy); page-break-after: avoid; }
+  h3 { font-size: 11.5pt; margin: 16px 0 6px; }
+  p { margin: 7px 0; text-align: justify; }
+  code { font-family: "Consolas","Courier New",monospace; background: var(--soft); padding: 0 3px; border-radius: 3px; font-size: 9.4pt; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 9.5pt; page-break-inside: auto; }
+  th, td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+  thead th { background: var(--navy); color: #fff; font-weight: 600; }
+  tbody tr:nth-child(even) { background: var(--soft); }
+  tr { page-break-inside: avoid; }
+  ul { margin: 6px 0 6px 18px; padding: 0; }
+  li { margin: 3px 0; }
+  .cover { text-align: center; padding: 40mm 0 0; page-break-after: always; }
+  .cover .kicker { letter-spacing: 3px; color: var(--muted); font-size: 10pt; text-transform: uppercase; }
+  .cover h1 { font-size: 30pt; margin: 8px 0 2px; line-height: 1.1; }
+  .cover .sub { color: var(--navy2); font-size: 13pt; margin-bottom: 30px; }
+  .cover table { max-width: 460px; margin: 24px auto 0; }
+  .cover td:first-child { width: 38%; font-weight: 600; color: var(--navy); background: var(--soft); }
+  .badge { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 8.6pt; font-weight: 700; color:#fff; }
+  .b-ok { background:#2e7d32; } .b-fix { background:#1565c0; } .b-part { background:#e6a100; } .b-na { background:#6b7280; }
+  .b-crit { background:#b71c1c; } .b-high { background:#e53935; } .b-med { background:#fb8c00; } .b-low { background:#8e8e8e; }
+  .note { background: var(--soft); border-left: 4px solid var(--navy2); padding: 8px 12px; margin: 10px 0; font-size: 9.6pt; }
+  .conf { color:#b71c1c; font-weight:700; }
+  .small { font-size: 9pt; color: var(--muted); }
+</style>
+
+<div class="cover">
+  <div class="kicker">Documento Técnico de Segurança</div>
+  <h1>Levantamento de Segurança do Backend</h1>
+  <div class="sub">Plataforma de Achados e Perdidos para Grandes Eventos — API (Spring Boot)</div>
+  <table>
+    <tr><td>Versão</td><td>1.1</td></tr>
+    <tr><td>Data</td><td>24 de julho de 2026</td></tr>
+    <tr><td>Escopo</td><td>Backend / API REST</td></tr>
+    <tr><td>Referência</td><td>OWASP Top 10 (2021); Relatório DAST XPTO v1.0 (24/07/2026)</td></tr>
+    <tr><td>Classificação</td><td class="conf">Confidencial</td></tr>
+  </table>
+  <p class="small" style="margin-top:26px">Revisão 1.1 — incorpora o cruzamento com o Relatório Técnico de Avaliação de Segurança (DAST) da XPTO e as correções de hardening dele decorrentes.</p>
+</div>
+
+<h2>1. Sumário Executivo</h2>
+<p>Este documento consolida a análise de segurança da camada de backend da plataforma, compara a implementação real com o que a documentação funcional descreve, detalha o tratamento do OWASP Top 10 (2021) presente no código e responde aos questionamentos técnicos levantados pelo cliente sobre arquitetura, persistência/armazenamento e pipeline.</p>
+<p>A avaliação geral é positiva: a base de segurança está acima da média para um MVP, com JWT robusto, proteção a força-bruta, autorização granular por permissão, IDs de recurso assinados (anti-IDOR) e senhas com BCrypt. Durante a revisão foi identificada e já corrigida uma vulnerabilidade de leitura arbitrária de arquivo no módulo de anexos; os demais pontos são recomendações de hardening e de alinhamento entre documentação e implementação.</p>
+<div class="note"><strong>Novidade da revisão 1.1 — cruzamento com o relatório DAST externo (XPTO).</strong> Em 20/07/2026 a XPTO executou varredura dinâmica não autenticada (OWASP ZAP + nuclei) sobre os ativos do projeto e emitiu relatório em 24/07/2026. O único achado Alto (A-01, exposição de PII) foi triado como <strong>falso positivo</strong> (ruído de telemetria do Firefox, fora dos domínios do projeto). Dos cinco achados Médios confirmados, todos recaem sobre <em>hardening</em> de cabeçalhos/exposição e <strong>todos os que tocam o backend já estavam tratados ou foram fechados nesta revisão</strong> — ver a Seção 6 (referência cruzada). Ressalva importante do próprio relatório: a varredura não exercitou os endpoints autenticados da API (o scanner recebeu o <em>fallback</em> HTML da SPA em vez das respostas reais), de modo que autorização em nível de objeto/função (BOLA/BFLA) permanece a ser validada por teste autenticado — item já previsto no roadmap (Seção 5).</div>
+<div class="note"><strong>Destaques já implementados:</strong> autenticação JWT com fail-fast de segredo fraco · rotação e revogação de refresh token · rate limit de login por IP e por conta · autorização por permissão (<code>modulo.acao</code>) · IDs assinados por HMAC · SCA de dependências (Trivy) no pipeline · BCrypt · CORS configurável · auditoria de acesso · cabeçalhos de segurança HTTP (HSTS, CSP, nosniff, frame-options DENY, Referrer-Policy).</div>
+
+<h2>2. Correções Aplicadas</h2>
+<h3>2.1 Revisão 1.0 — módulo de anexos</h3>
+<p>A revisão 1.0 identificou e corrigiu, no módulo de arquivos (<code>ArquivoService</code> / <code>ArquivoController</code>), os seguintes pontos:</p>
+<table>
+  <thead><tr><th style="width:24%">Item</th><th style="width:12%">Sev.</th><th>Descrição e correção</th></tr></thead>
+  <tbody>
+    <tr><td>Path Traversal / leitura de arquivo arbitrário</td><td><span class="badge b-crit">Crítico</span></td><td>O caminho físico do arquivo era resolvido sem confinamento na pasta base, permitindo que um metadado com <code>nmPath</code> absoluto (ex.: <code>/etc/passwd</code>) ou com <code>../</code> lesse arquivos fora do diretório de anexos. <strong>Correção:</strong> método central <code>resolverDentroDaBase()</code> que normaliza e exige que o caminho permaneça dentro de <code>app.arquivos.dir</code>, recusando caminhos absolutos e traversal. Aplicado no upload e no download.</td></tr>
+    <tr><td>XSS armazenado via download</td><td><span class="badge b-high">Alto</span></td><td>O download servia o conteúdo com <code>Content-Disposition: inline</code> e o content-type gravado, permitindo renderizar HTML/SVG malicioso no domínio da API. <strong>Correção:</strong> <code>attachment</code> + header <code>X-Content-Type-Options: nosniff</code> e sanitização do nome do arquivo no cabeçalho.</td></tr>
+    <tr><td>Upload sem validação de tipo</td><td><span class="badge b-med">Médio</span></td><td>Qualquer tipo de arquivo era aceito. <strong>Correção:</strong> allowlist de MIME (JPEG, PNG, WEBP, GIF, HEIC e PDF).</td></tr>
+  </tbody>
+</table>
+
+<h3>2.2 Revisão 1.1 — hardening em resposta ao relatório DAST XPTO</h3>
+<p>Esta revisão fechou, no backend, os dois pontos do relatório XPTO que ainda não eram explícitos no código (M-01 e a verbosidade de erro de M-04). Os demais achados que tocam a API já estavam tratados desde a revisão 1.0 (Seção 6).</p>
+<table>
+  <thead><tr><th style="width:24%">Item</th><th style="width:12%">Ref.</th><th>Descrição e correção</th></tr></thead>
+  <tbody>
+    <tr><td>Content Security Policy ausente</td><td>XPTO M-01</td><td>A API não emitia <code>Content-Security-Policy</code>. <strong>Correção:</strong> política adicionada em <code>SecurityConfig</code> — <code>default-src 'self'</code>, <code>frame-ancestors 'none'</code>, <code>object-src 'none'</code>, <code>base-uri 'self'</code>, <code>form-action 'self'</code>. As diretivas <code>'unsafe-inline'</code> em script/style existem apenas para a UI do Swagger (dev), desligada em produção por <code>SPRINGDOC_ENABLED=false</code>.</td></tr>
+    <tr><td>Verbosidade do handler de erro</td><td>XPTO M-04</td><td>Fixado explicitamente em <code>application.properties</code>: <code>server.error.include-stacktrace=never</code>, <code>include-message=never</code>, <code>include-binding-errors=never</code>, <code>include-exception=false</code>. Nenhum detalhe interno (stacktrace, tipo/mensagem de exceção) vaza ao cliente; o diagnóstico completo fica apenas no log via <code>GlobalExceptionHandler</code>.</td></tr>
+  </tbody>
+</table>
+<p class="small">Correções validadas com <code>mvn compile</code> (BUILD SUCCESS). Arquivos alterados na revisão 1.1: <code>config/SecurityConfig.java</code>, <code>resources/application.properties</code>.</p>
+
+<h2>3. OWASP Top 10 (2021) — Como é Tratado no Backend</h2>
+<p>A tabela abaixo mapeia cada categoria do OWASP Top 10 ao controle correspondente já presente no código, com a evidência (arquivo). Legenda de status: <span class="badge b-ok">Coberto</span> <span class="badge b-part">Parcial / recomendação</span> <span class="badge b-fix">Corrigido/reforçado nesta revisão</span>.</p>
+<table>
+  <thead><tr><th style="width:16%">Categoria</th><th style="width:12%">Status</th><th>Controle implementado &amp; evidência</th></tr></thead>
+  <tbody>
+    <tr><td>A01 — Broken Access Control</td><td><span class="badge b-ok">Coberto</span> <span class="badge b-fix">Fix</span></td><td>Autorização por permissão granular <code>@PreAuthorize("@authz.pode('modulo.acao')")</code> com <code>@EnableMethodSecurity</code>; regras por rota em <code>SecurityConfig</code>; IDs de recurso assinados por HMAC (impedem IDOR/enumeração); path traversal de arquivos confinado. <span class="small">SecurityConfig.java, AuthorizationService.java, SignedResourceIdCodec.java, ArquivoService.java</span></td></tr>
+    <tr><td>A02 — Cryptographic Failures</td><td><span class="badge b-ok">Coberto</span></td><td>Senhas com BCrypt; JWT assinado HS256 com segredo forte obrigatório (fail-fast se ausente/curto/exemplo); IDs assinados com HMAC-SHA256; segredos sem valor default (não sobem sem variável de ambiente). <span class="small">JwtUtil.java, SignedResourceIdCodec.java, application.properties</span></td></tr>
+    <tr><td>A03 — Injection</td><td><span class="badge b-ok">Coberto</span> <span class="badge b-fix">Fix</span></td><td>Acesso a dados via Spring Data JPA parametrizado (sem concatenação de SQL); Bean Validation (<code>@Valid</code>) nas DTOs; <code>fail-on-unknown-properties</code> rejeita campos extras; XSS de download mitigado (attachment + nosniff). <span class="small">repository/*, GlobalExceptionHandler.java, ArquivoController.java</span></td></tr>
+    <tr><td>A04 — Insecure Design</td><td><span class="badge b-ok">Coberto</span></td><td>Tokens tipados (access/refresh) com rotação e revogação de refresh via <code>jti</code> persistido; rate limit aplicado antes da verificação de credenciais; contato de confiança no fluxo de claim. <span class="small">AuthService.java, LoginRateLimiter.java</span></td></tr>
+    <tr><td>A05 — Security Misconfiguration</td><td><span class="badge b-ok">Coberto</span> <span class="badge b-fix">Fix</span></td><td>Recusa de segredos de exemplo; <code>ddl-auto=validate</code>; <code>open-in-view=false</code>; CSRF desabilitado corretamente (API stateless com Bearer); CORS configurável sem curinga com credenciais; Swagger desligável em produção (<code>SPRINGDOC_ENABLED</code>); allowlist de MIME; <strong>cabeçalhos de segurança completos — HSTS, Content-Security-Policy, X-Content-Type-Options nosniff, X-Frame-Options DENY + frame-ancestors 'none', Referrer-Policy</strong>; <strong>handler de erro sem verbosidade</strong> (<code>server.error.include-*=never</code>). Recomenda-se ainda <code>useSSL=true</code> no MySQL. <span class="small">SecurityConfig.java, application.properties, CorsConfig.java</span></td></tr>
+    <tr><td>A06 — Vulnerable &amp; Outdated Components</td><td><span class="badge b-ok">Coberto</span> <span class="badge b-part">Parcial</span></td><td>Stack recente (Spring Boot 4.0.2, JDK 25); pipeline de segurança com SCA (Trivy), SAST (Semgrep) e secret scanning (gitleaks). Jobs visíveis a cada execução (<code>allow_failure</code> na fase de triagem; viram gate bloqueante ao remover o flag). <span class="small">pom.xml, .gitlab-ci.yml</span></td></tr>
+    <tr><td>A07 — Identification &amp; Authentication Failures</td><td><span class="badge b-ok">Coberto</span></td><td>Proteção a força-bruta (Bucket4j) por IP e por conta; mensagem genérica anti-enumeração de usuário; JWT stateless; BCrypt; refresh rotativo e revogável. <span class="small">LoginRateLimiter.java, AuthController.java, AuthService.java</span></td></tr>
+    <tr><td>A08 — Software &amp; Data Integrity Failures</td><td><span class="badge b-ok">Coberto</span> <span class="badge b-fix">Fix</span></td><td>Integridade/anti-adulteração dos IDs via HMAC com comparação em tempo constante (<code>MessageDigest.isEqual</code>); refresh tokens persistidos e revogáveis; validação de MIME no upload; SCA de dependências (cadeia de suprimentos). <span class="small">SignedResourceIdCodec.java, ArquivoService.java, .gitlab-ci.yml</span></td></tr>
+    <tr><td>A09 — Security Logging &amp; Monitoring Failures</td><td><span class="badge b-ok">Coberto</span> <span class="badge b-part">Parcial</span></td><td>Registro de acesso no login (IP, dispositivo, User-Agent); módulo de auditoria de ações. Recomenda-se auditar também o acesso a dados sensíveis (exigência LGPD/documentação). <span class="small">AuthService.java, LoginLogService, entity/Auditoria.java</span></td></tr>
+    <tr><td>A10 — Server-Side Request Forgery (SSRF)</td><td><span class="badge b-low">Baixa exposição</span></td><td>Não há requisições de saída construídas a partir de entrada do usuário — superfície mínima. Ao integrar e-mail transacional/S3, os endpoints devem ser fixados por configuração (nunca derivados de entrada do cliente).</td></tr>
+  </tbody>
+</table>
+
+<h2>4. Respostas aos Questionamentos</h2>
+
+<h3>4.1 "A documentação fala em microsserviços, mas parece monólito."</h3>
+<p><strong>Resposta:</strong> Correto. Tecnicamente, o backend é um monólito modular — uma única aplicação Spring Boot, bem separada em camadas (<code>controller → service → repository → entity</code>), e não um conjunto de microsserviços independentes. A separação "clara entre camadas" existe; o termo "microsserviços" na documentação é impreciso e deve ser ajustado.</p>
+<p>Isso não é uma limitação para o estágio atual, e não impede escala horizontal: a API é stateless (autenticação por JWT, sem sessão em memória), então pode rodar em N réplicas atrás de um load balancer. As fronteiras de módulo já existentes facilitam uma eventual extração para microsserviços no futuro, se o volume justificar.</p>
+<div class="note"><strong>Ressalva de escala:</strong> dois pontos hoje são "stateful" e precisam de atenção antes de escalar para múltiplas réplicas: (1) o rate limit de login é em memória por instância — para um limite global, migrar para um store distribuído (ex.: Redis); (2) os anexos são gravados em disco local — ver 4.2.</div>
+
+<h3>4.2 "Os dados que não vêm do repositório não podem ir para o AWS S3? Isso adiciona muita complexidade de vocês?"</h3>
+<p><strong>Resposta:</strong> Sim, podem — e essa é, inclusive, a abordagem recomendada. Hoje os dados relacionais (itens, claims, usuários, auditoria) ficam no MySQL e continuam lá; o que grava em disco local são apenas os binários (fotos de itens e comprovantes de posse), no diretório <code>app.arquivos.dir</code>. É exatamente isso que obriga a tratar volume persistente (PVC) e prende as réplicas ao mesmo disco.</p>
+<p>Migrar esses binários para AWS S3 (ou compatível, como MinIO) não adiciona complexidade relevante do nosso lado, porque todo o I/O de arquivos já está isolado em um único componente (<code>ArquivoService</code>). A mudança se resume a:</p>
+<ul>
+  <li>Introduzir uma interface <code>StorageService</code> com uma implementação para S3 (AWS SDK v2);</li>
+  <li>Trocar a gravação/leitura em disco por <code>putObject</code> / <code>getObject</code> — o restante do fluxo (autorização, metadados no banco, IDs assinados) permanece idêntico;</li>
+  <li>Opcionalmente, gerar URLs pré-assinadas para download, tirando o tráfego de binários da API e mantendo o mesmo modelo de permissão.</li>
+</ul>
+<p><strong>Ganhos:</strong> réplicas 100% stateless (sem PVC), durabilidade e backup gerenciados pelo S3, e simplificação da infraestrutura de contêiner. <strong>Estimativa de esforço:</strong> baixa — é um adaptador localizado, não uma reescrita. <em>Observação:</em> o único módulo que realmente precisa de armazenamento externo é o de anexos.</p>
+
+<h3>4.3 "Ainda não ficou claro como tratam o OWASP Top 10."</h3>
+<p><strong>Resposta:</strong> O tratamento está detalhado na Seção 3 deste documento, categoria por categoria (A01 a A10), cada uma com o controle correspondente e o arquivo de evidência no código — não é um selo de marketing, e sim controles verificáveis. Em resumo: acesso e autenticação são os pontos mais fortes (JWT, rate limit, autorização granular, IDs assinados); os pontos com recomendação aberta são hardening de configuração (TLS no banco), scan bloqueante no pipeline e auditoria de acesso a dados sensíveis para LGPD. O cruzamento com a varredura DAST externa (Seção 6) confirma esse quadro do lado da configuração HTTP.</p>
+
+<h3>4.4 "Preventivamente, com avaliação contínua de risco: há etapa de validação de código no pipeline?"</h3>
+<p><strong>Resposta:</strong> O pipeline (<code>.gitlab-ci.yml</code>) tem 4 estágios — <code>build → test → security → deploy</code> — e o estágio de segurança foi ampliado. Situação atual:</p>
+<table>
+  <thead><tr><th style="width:30%">Verificação</th><th style="width:16%">Situação</th><th>Observação</th></tr></thead>
+  <tbody>
+    <tr><td>Testes automatizados (gate)</td><td><span class="badge b-ok">Presente + reforçado</span></td><td>O estágio <code>test</code> sobe um MySQL efêmero no CI, então os testes de integração realmente executam. Falha de teste bloqueia o deploy.</td></tr>
+    <tr><td>SCA — dependências (A06)</td><td><span class="badge b-ok">Presente</span></td><td>Trivy (HIGH/CRITICAL) com <code>--exit-code 1</code> — o job fica visível/vermelho quando há CVE.</td></tr>
+    <tr><td>SAST — análise estática (A05/A08)</td><td><span class="badge b-fix">Adicionado</span></td><td>Semgrep com regras públicas de Java, segredos e OWASP Top 10.</td></tr>
+    <tr><td>Secret scanning</td><td><span class="badge b-fix">Adicionado</span></td><td>gitleaks — detecção de chaves/tokens/senhas commitados.</td></tr>
+    <tr><td>DAST</td><td><span class="badge b-part">Parcial (externo)</span></td><td>Varredura DAST executada pela XPTO (ZAP/nuclei) em 20/07/2026 — ver Seção 6. Sugerido integrar OWASP ZAP autenticado contra staging no pipeline em fase posterior.</td></tr>
+  </tbody>
+</table>
+<p><strong>Estratégia de rollout:</strong> os três jobs de segurança (SCA, SAST, secret scanning) entram como <code>allow_failure: true</code> — rodam e ficam visíveis a cada pipeline, mas não bloqueiam a entrega enquanto a equipe faz a primeira triagem. Depois, cada um vira gate bloqueante apenas removendo o <code>allow_failure</code>.</p>
+<p><strong>Validação em execução real &amp; ajustes:</strong> (a) o SCA escaneia o artefato empacotado (fat-jar), de forma offline — evita rate-limit ao resolver o repositório Maven; (b) o secret scanning recebeu allowlist para arquivos de exemplo e placeholders; (c) o SAST apontou dois itens de hardening — um corrigido de imediato (host-header fixo no proxy) e outro registrado como melhoria planejada (contêiner não-root).</p>
+
+<h2>5. Riscos Remanescentes &amp; Roadmap de Hardening</h2>
+<table>
+  <thead><tr><th style="width:40%">Item</th><th style="width:16%">Prioridade</th><th>Ação recomendada</th></tr></thead>
+  <tbody>
+    <tr><td>Teste de autorização autenticado (BOLA/BFLA)</td><td><span class="badge b-high">Alta</span></td><td><strong>Novo (XPTO Seção 6).</strong> A varredura externa não exercitou os endpoints reais da API (recebeu o fallback da SPA). Executar DAST autenticado com sessão por perfil + teste manual de acesso horizontal e vertical sobre claims, itens, devoluções, transferências, usuários e perfis.</td></tr>
+    <tr><td>Cabeçalhos de segurança HTTP</td><td><span class="badge b-ok">Concluído</span></td><td>HSTS, <strong>Content-Security-Policy</strong>, nosniff, frame-options DENY + frame-ancestors 'none' e Referrer-Policy no <code>SecurityConfig</code> (XPTO M-01, M-02, M-05).</td></tr>
+    <tr><td>Verbosidade do handler de erro</td><td><span class="badge b-ok">Concluído</span></td><td><code>server.error.include-*=never</code> (XPTO M-04). Sem stacktrace/mensagem de exceção nas respostas.</td></tr>
+    <tr><td>Exposição do Swagger em produção</td><td><span class="badge b-ok">Concluído</span></td><td><code>SPRINGDOC_ENABLED=false</code> no ambiente de produção (XPTO M-04). Documentação disponível só em dev/homologação.</td></tr>
+    <tr><td>Política CORS do backend</td><td><span class="badge b-ok">Concluído</span></td><td>Origens explícitas e configuráveis por ambiente, sem curinga com credenciais e sem <code>@CrossOrigin</code> local que sobreponha a global (XPTO M-03). Em produção, definir <code>CORS_ALLOWED_ORIGINS</code> com os domínios reais e esvaziar os patterns de localhost.</td></tr>
+    <tr><td>Rate limit distribuído</td><td><span class="badge b-part">Alta ao escalar</span></td><td>Migrar Bucket4j para Redis quando houver múltiplas réplicas (limite global).</td></tr>
+    <tr><td>Armazenamento de anexos em S3</td><td><span class="badge b-med">Média</span></td><td>Ver 4.2 — habilita réplicas stateless e remove dependência de PVC.</td></tr>
+    <tr><td>TLS na conexão com o MySQL</td><td><span class="badge b-med">Média</span></td><td>Trocar <code>useSSL=false</code> por conexão cifrada em produção.</td></tr>
+    <tr><td>Governança do ativo de terceiro</td><td><span class="badge b-med">Média</span></td><td><strong>Novo (XPTO Seção 2).</strong> A API de apoio está hospedada em domínio de fornecedor externo (terceiro). Formalizar avaliação de risco: cláusulas de segurança, notificação de incidentes, direito de auditoria e tratamento de dados pessoais (LGPD).</td></tr>
+    <tr><td>Promover scans de segurança a bloqueantes</td><td><span class="badge b-low">Baixa</span></td><td>Após triagem inicial, remover <code>allow_failure</code> de SCA/SAST/secret. DAST autenticado opcional.</td></tr>
+    <tr><td>LGPD — retenção &amp; dados sensíveis</td><td><span class="badge b-med">Média</span></td><td>Confirmar/implementar rotina de retenção/anonimização, criptografia em repouso de campos sensíveis e auditoria de acesso a esses dados.</td></tr>
+  </tbody>
+</table>
+
+<h2>6. Referência Cruzada — Relatório DAST Externo (XPTO)</h2>
+<p>Esta seção mapeia cada achado do <em>Relatório Técnico de Avaliação de Segurança</em> da XPTO (varredura de 20/07/2026, OWASP ZAP 2.17.0 + nuclei) à situação no backend desta API. O relatório listou 1 achado Alto (reclassificado como falso positivo) e 5 Médios confirmados. Os ativos <code>mvp</code> e <code>painel</code> (frontends Angular/nginx) são tratados fora deste documento; aqui detalha-se apenas o que recai sobre a API.</p>
+<table>
+  <thead><tr><th style="width:8%">ID</th><th style="width:26%">Achado (XPTO)</th><th style="width:12%">Toca a API?</th><th>Situação no backend</th></tr></thead>
+  <tbody>
+    <tr><td>A-01</td><td>PII Disclosure (nº de cartão em resposta HTTP)</td><td><span class="badge b-na">Não</span></td><td><span class="badge b-ok">Falso positivo</span> — instâncias exclusivamente em domínios da Mozilla (telemetria do navegador). Nenhuma sobre a API. Sem ação.</td></tr>
+    <tr><td>M-01</td><td>Ausência de Content Security Policy</td><td><span class="badge b-ok">Sim</span></td><td><span class="badge b-fix">Corrigido (rev. 1.1)</span> — CSP adicionada em <code>SecurityConfig</code> (<code>default-src 'self'</code>, <code>frame-ancestors 'none'</code>, <code>object-src 'none'</code>). Ver 2.2.</td></tr>
+    <tr><td>M-02</td><td>Ausência de proteção contra clickjacking</td><td><span class="badge b-ok">Sim</span></td><td><span class="badge b-ok">Já tratado (rev. 1.0)</span> — <code>frameOptions().deny()</code> (X-Frame-Options: DENY) + <code>frame-ancestors 'none'</code> no CSP. Aplicado a todas as respostas.</td></tr>
+    <tr><td>M-03</td><td>Política CORS permissiva (<code>Allow-Origin: *</code>)</td><td><span class="badge b-ok">Sim</span></td><td><span class="badge b-ok">Já tratado</span> — as instâncias detectadas eram de recursos do Cloudflare (<code>/cdn-cgi/</code>), não da API. Config efetiva: origens explícitas via <code>AppCorsProperties</code>, sem curinga com credenciais e sem <code>@CrossOrigin</code> sobrepondo a global. Em produção, definir os domínios reais.</td></tr>
+    <tr><td>M-04</td><td>Swagger e endpoint de erro expostos</td><td><span class="badge b-ok">Sim</span></td><td><span class="badge b-ok">Já tratado</span> + <span class="badge b-fix">reforçado (rev. 1.1)</span> — Swagger desligável em produção (<code>SPRINGDOC_ENABLED=false</code>); <code>/error</code> agora sem verbosidade (<code>server.error.include-*=never</code>). Spring Actuator está presente apenas para o health check do container, com exposição restrita a <code>/actuator/health</code> e <code>show-details=never</code> — exatamente a opção aceitável indicada pelo relatório. Ver 2.2.</td></tr>
+    <tr><td>M-05</td><td>Ausência de HSTS / conteúdo via HTTP</td><td><span class="badge b-ok">Sim</span></td><td><span class="badge b-ok">Já tratado (rev. 1.0)</span> — HSTS 1 ano com <code>includeSubDomains</code> no <code>SecurityConfig</code>. Redirecionamento HTTP→HTTPS e "Always Use HTTPS" ficam na borda (Cloudflare/nginx). API é stateless por Bearer (sem cookies de sessão).</td></tr>
+  </tbody>
+</table>
+<div class="note"><strong>Limitação relevante do relatório externo.</strong> A XPTO registrou que 87% das respostas do painel retornaram HTML e que os alertas de "XSS potencial" apontavam para a meta tag <code>viewport</code> — sinal de que as requisições aos endpoints <code>/api/v1/*</code> foram atendidas pelo <em>fallback</em> da SPA, não pela API. Portanto, a ausência de achados na camada de API <strong>não</strong> é evidência de segurança dessa camada. As classes não avaliadas (autorização em nível de objeto/função, gestão de sessão, lógica de negócio de claims) estão no roadmap da Seção 5 e devem ser cobertas por DAST autenticado + teste manual de autorização.</div>
+
+<h2>7. Conclusão</h2>
+<p>O backend entrega uma fundação de segurança sólida e coerente com boa parte do que a documentação promete: os controles centrais de autenticação, autorização e integridade estão implementados e são verificáveis no código. A vulnerabilidade mais séria encontrada (leitura arbitrária de arquivo) foi corrigida na revisão 1.0. O cruzamento com a varredura DAST externa da XPTO (Seção 6) não trouxe nenhum achado explorável na API: dos cinco Médios confirmados, os que tocam o backend já estavam tratados ou foram fechados nesta revisão 1.1 (CSP e verbosidade do handler de erro).</p>
+<p>Os itens remanescentes são melhorias de hardening e de maturidade operacional — principalmente o <strong>teste de autorização autenticado</strong> (a lacuna real apontada pela limitação da varredura), armazenamento externo (S3) para escalar sem PVC, rate limit distribuído, TLS no MySQL, a governança do ativo de terceiro e as pendências de LGPD — todos de esforço controlado e sem reescrita de arquitetura. Recomenda-se, ainda, ajustar a documentação funcional para refletir que a solução é um monólito modular stateless, e não microsserviços.</p>
+
+<p class="small" style="margin-top:24px; border-top:1px solid var(--line); padding-top:8px">Documento gerado a partir da análise do código-fonte do backend e do cruzamento com o Relatório Técnico de Avaliação de Segurança da XPTO (v1.0, 24/07/2026). Classificação: <span class="conf">Confidencial</span>.</p>

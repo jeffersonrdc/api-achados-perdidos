@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 
 @Repository
@@ -28,6 +29,13 @@ public interface DevolucaoRepository extends JpaRepository<Devolucao, Long>, Jpa
 
     long countByEvento_IdAndFgExcluidoFalse(Long eventoId);
     long countByEvento_IdAndFgExcluidoFalseAndTpStatus(Long eventoId, String tpStatus);
+
+    @Query("""
+            SELECT COUNT(d) FROM Devolucao d
+             WHERE d.fgExcluido = false AND d.fgConcluido = true
+               AND d.evento.id IN :ids
+            """)
+    long countConcluidasByEventoIds(@Param("ids") Collection<Long> ids);
 
     /** Locais (do item) presentes nas devoluções do evento. */
     @Query("""

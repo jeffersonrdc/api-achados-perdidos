@@ -10,6 +10,8 @@ import br.com.achadosperdidos.pagination.PaginationMeta;
 import br.com.achadosperdidos.pagination.PaginationParams;
 import br.com.achadosperdidos.repository.*;
 import br.com.achadosperdidos.security.SignedResourceIdCodec;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -18,9 +20,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.time.Year;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 public class PortalService {
@@ -36,6 +41,7 @@ public class PortalService {
     private final EventoRepository eventoRepository;
     private final EventoConfiguracaoRepository eventoConfiguracaoRepository;
     private final ItemRepository itemRepository;
+    private final DevolucaoRepository devolucaoRepository;
     private final ClaimRepository claimRepository;
     private final ClaimValidacaoRepository claimValidacaoRepository;
     private final ArquivoRepository arquivoRepository;
@@ -49,15 +55,21 @@ public class PortalService {
     private final StatusItemService statusItemService;
     private final CriancaService criancaService;
     private final CatalogoService catalogoService;
+    private final EmailService emailService;
+    private final PortalContatosConfigService portalContatosConfigService;
     private final PerfilRepository perfilRepository;
     private final EmpresaRepository empresaRepository;
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
     private final SignedResourceIdCodec idCodec;
 
+    @PersistenceContext
+    private EntityManager em;
+
     public PortalService(EventoRepository eventoRepository,
                          EventoConfiguracaoRepository eventoConfiguracaoRepository,
                          ItemRepository itemRepository,
+                         DevolucaoRepository devolucaoRepository,
                          ClaimRepository claimRepository,
                          ClaimValidacaoRepository claimValidacaoRepository,
                          ArquivoRepository arquivoRepository,
@@ -71,6 +83,8 @@ public class PortalService {
                          StatusItemService statusItemService,
                          CriancaService criancaService,
                          CatalogoService catalogoService,
+                         EmailService emailService,
+                         PortalContatosConfigService portalContatosConfigService,
                          PerfilRepository perfilRepository,
                          EmpresaRepository empresaRepository,
                          UsuarioRepository usuarioRepository,
@@ -79,6 +93,7 @@ public class PortalService {
         this.eventoRepository = eventoRepository;
         this.eventoConfiguracaoRepository = eventoConfiguracaoRepository;
         this.itemRepository = itemRepository;
+        this.devolucaoRepository = devolucaoRepository;
         this.claimRepository = claimRepository;
         this.claimValidacaoRepository = claimValidacaoRepository;
         this.arquivoRepository = arquivoRepository;
@@ -92,6 +107,8 @@ public class PortalService {
         this.statusItemService = statusItemService;
         this.criancaService = criancaService;
         this.catalogoService = catalogoService;
+        this.emailService = emailService;
+        this.portalContatosConfigService = portalContatosConfigService;
         this.perfilRepository = perfilRepository;
         this.empresaRepository = empresaRepository;
         this.usuarioRepository = usuarioRepository;
@@ -108,6 +125,115 @@ public class PortalService {
                 .map(e -> toEventoResumo(e, imgs.getOrDefault(e.getId(), Map.of())))
                 .filter(e -> Boolean.TRUE.equals(e.fgConsultaPublica()) || Boolean.TRUE.equals(e.fgAceitaClaim()))
                 .toList();
+    }
+
+    /**
+     * KPIs agregados dos eventos com portal habilitado (cards de /como-funciona).
+     * Taxa = devoluções concluídas / itens registrados; tempo médio = cadastro do item → devolução.
+     */
+    @Transactional(readOnly = true)
+    public PortalMetricasResponse metricasPublicas() {
+        List<Long> ids = idsEventosPortal();
+        if (ids.isEmpty()) {
+            return new PortalMetricasResponse(0, 0, 0, 0);
+        }
+        long registrados = itemRepository.countAtivosByEventoIds(ids);
+        long devolvidos = devolucaoRepository.countConcluidasByEventoIds(ids);
+        int taxa = registrados == 0 ? 0 : (int) Math.min(100, Math.round(100.0 * devolvidos / registrados));
+        int horas = (int) Math.round(Math.max(0, avgHorasResolucao(ids)));
+        return new PortalMetricasResponse(registrados, devolvidos, taxa, horas);
+    }
+
+    private List<Long> idsEventosPortal() {
+        return eventoRepository.findByFgExcluidoFalseAndFgAtivoTrueOrderByDtInicioDesc().stream()
+                .filter(e -> {
+                    EventoConfiguracao cfg = eventoConfiguracaoRepository
+                            .findByEvento_IdAndFgExcluidoFalse(e.getId())
+                            .orElseGet(() -> configPadrao(e));
+                    return Boolean.TRUE.equals(cfg.getFgConsultaPublica())
+                            || Boolean.TRUE.equals(cfg.getFgAceitaClaim());
+                })
+                .map(Evento::getId)
+                .toList();
+    }
+
+    private double avgHorasResolucao(List<Long> ids) {
+        Object raw = em.createNativeQuery(
+                        "SELECT AVG(TIMESTAMPDIFF(MINUTE, i.DT_Cadastro, d.DT_Devolucao) / 60.0) " +
+                                "FROM devolucao d JOIN item i ON i.ID_Item = d.IDR_Item " +
+                                "WHERE d.FG_Excluido = 0 AND d.FG_Concluido = 1 " +
+                                "AND d.IDR_Evento IN (:ids) " +
+                                "AND i.DT_Cadastro IS NOT NULL AND d.DT_Devolucao IS NOT NULL " +
+                                "AND d.DT_Devolucao >= i.DT_Cadastro")
+                .setParameter("ids", ids)
+                .getSingleResult();
+        if (raw == null) return 0;
+        return ((Number) raw).doubleValue();
+    }
+
+    /**
+     * Formulário público /contato: envia e-mail para o remetente da conta SMTP
+     * vinculada ao parâmetro PORTAL_CONTATO (Configurações → E-mail / SMTP).
+     */
+    public PortalContatoResponse enviarContato(PortalContatoRequest request) {
+        String nome = request.nmNome().trim();
+        String email = request.nmEmail().trim().toLowerCase();
+        String mensagem = request.dsMensagem().trim();
+        if (mensagem.isEmpty()) {
+            throw new IllegalArgumentException("Informe a mensagem.");
+        }
+        String protocolo = "CT-" + ThreadLocalRandom.current().nextInt(10000, 100000);
+        String assunto = rotuloAssuntoContato(request.nmAssunto());
+
+        Map<String, String> vars = new HashMap<>();
+        vars.put("nome", nome);
+        vars.put("email", email);
+        vars.put("assunto", assunto);
+        vars.put("mensagem", mensagem);
+        vars.put("protocolo", protocolo);
+        vars.put("ano", String.valueOf(Year.now().getValue()));
+
+        EmailService.Resultado resultado = emailService.enviarParaRemetenteConfigurado(
+                "PORTAL_CONTATO", email, vars);
+        if (!resultado.enviado()) {
+            throw new IllegalArgumentException(resultado.erro() != null
+                    ? resultado.erro()
+                    : "Não foi possível enviar a mensagem. Tente novamente em instantes.");
+        }
+        return new PortalContatoResponse(protocolo, "Mensagem enviada com sucesso.");
+    }
+
+    @Transactional(readOnly = true)
+    public PortalContatosConfigResponse contatosPortal() {
+        return portalContatosConfigService.obter();
+    }
+
+    @Transactional(readOnly = true)
+    public List<PortalWallpaperResponse> listarWallpapers(String idEvento) {
+        Evento e = findEvento(idCodec.decodeEventoIdAssinado(idEvento));
+        return arquivoService.listarWallpapersEvento(e.getId()).stream()
+                .map(a -> {
+                    String id = idCodec.encodeArquivoId(a.getId());
+                    return new PortalWallpaperResponse(
+                            id,
+                            a.getNmArquivo(),
+                            "/api/v1/portal/arquivos/" + id + "/download",
+                            "/api/v1/portal/arquivos/" + id + "/thumbnail?max=600");
+                })
+                .toList();
+    }
+
+    private static String rotuloAssuntoContato(String codigo) {
+        if (codigo == null || codigo.isBlank()) return "Sem assunto";
+        return switch (codigo.trim()) {
+            case "item-perdido" -> "Dúvida sobre item perdido";
+            case "item-achado" -> "Dúvida sobre item achado";
+            case "retirada" -> "Problema com retirada";
+            case "protocolo" -> "Consulta de protocolo";
+            case "elogio" -> "Elogio / feedback";
+            case "outro" -> "Outro assunto";
+            default -> codigo.trim();
+        };
     }
 
     /**
@@ -240,6 +366,7 @@ public class PortalService {
                 request.nmCor(), request.nmEstado(), request.dsTags(), request.tpPrioridade(),
                 request.fgSensivel(), request.dtPerdeu(), request.hrPerdeu(),
                 request.idLocal(), request.nmLocal());
+        claim.setDsWallpaper(blankToNull(request.dsWallpaper()));
         claim.setDtCadastro(LocalDateTime.now());
         claim.setFgAtivo(true);
         claim.setFgExcluido(false);

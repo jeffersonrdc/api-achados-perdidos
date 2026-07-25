@@ -16,6 +16,7 @@ public record PortalClaimCreateRequest(
         String dsRelacaoContatoConfianca,
         @NotBlank String nmObjeto,
         String dsObjeto,
+        String dsWallpaper,
         String nmMarca,
         String nmModelo,
         String nmCor,

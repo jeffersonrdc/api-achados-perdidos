@@ -26,6 +26,8 @@ public class Claim {
     @Column(name = "DS_RelacaoContatoConfianca", length = 80) private String dsRelacaoContatoConfianca;
     @Column(name = "NM_Objeto", nullable = false, length = 200) private String nmObjeto;
     @Column(name = "DS_Objeto", columnDefinition = "TEXT") private String dsObjeto;
+    /** Descrição do wallpaper / tela de bloqueio (útil para celulares). */
+    @Column(name = "DS_Wallpaper", length = 300) private String dsWallpaper;
     /** Detalhes que só o proprietário saberia (validação de retirada). */
     @Column(name = "DS_DetalhesOcultos", columnDefinition = "TEXT") private String dsDetalhesOcultos;
     @Column(name = "NM_Marca", length = 100) private String nmMarca;
@@ -66,6 +68,7 @@ public class Claim {
     public String getDsRelacaoContatoConfianca() { return dsRelacaoContatoConfianca; } public void setDsRelacaoContatoConfianca(String v) { this.dsRelacaoContatoConfianca = v; }
     public String getNmObjeto() { return nmObjeto; } public void setNmObjeto(String v) { this.nmObjeto = v; }
     public String getDsObjeto() { return dsObjeto; } public void setDsObjeto(String v) { this.dsObjeto = v; }
+    public String getDsWallpaper() { return dsWallpaper; } public void setDsWallpaper(String v) { this.dsWallpaper = v; }
     public String getDsDetalhesOcultos() { return dsDetalhesOcultos; } public void setDsDetalhesOcultos(String v) { this.dsDetalhesOcultos = v; }
     public String getNmMarca() { return nmMarca; } public void setNmMarca(String v) { this.nmMarca = v; }
     public String getNmModelo() { return nmModelo; } public void setNmModelo(String v) { this.nmModelo = v; }

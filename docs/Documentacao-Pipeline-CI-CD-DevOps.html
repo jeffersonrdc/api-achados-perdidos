@@ -1,0 +1,556 @@
+<meta charset="utf-8">
+<title>Runbook CI/CD — Rock in Rio Backend</title>
+<style>
+  :root { --navy:#12233d; --navy2:#274b7d; --accent:#c8102e; --line:#c9d3e6; --soft:#eef2f8; --ink:#1a1a1a; --muted:#5a6472; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: "Segoe UI", Calibri, Arial, sans-serif; color: var(--ink); font-size: 10.3pt; line-height: 1.48; margin: 0; }
+  @page { size: A4; margin: 18mm 15mm 16mm 15mm; }
+  h1,h2,h3 { color: var(--navy); }
+  h2 { font-size: 13.5pt; margin: 20px 0 7px; padding-bottom: 4px; border-bottom: 2px solid var(--navy); page-break-after: avoid; }
+  h3 { font-size: 11pt; margin: 14px 0 5px; color: var(--navy2); }
+  p { margin: 6px 0; text-align: justify; }
+  code { font-family: "Consolas","Courier New",monospace; background: var(--soft); padding: 0 3px; border-radius: 3px; font-size: 9.1pt; }
+  pre { background: #0f1b2d; color: #e6edf6; padding: 10px 12px; border-radius: 5px; font-family: "Consolas","Courier New",monospace; font-size: 8.7pt; line-height: 1.4; overflow-x: auto; white-space: pre-wrap; page-break-inside: avoid; }
+  pre .c { color: #8aa2c2; }
+  table { width: 100%; border-collapse: collapse; margin: 9px 0; font-size: 9.2pt; }
+  th, td { border: 1px solid var(--line); padding: 5px 7px; text-align: left; vertical-align: top; }
+  thead th { background: var(--navy); color: #fff; font-weight: 600; }
+  tbody tr:nth-child(even) { background: var(--soft); }
+  tr { page-break-inside: avoid; }
+  ul,ol { margin: 5px 0 5px 18px; padding: 0; }
+  li { margin: 2px 0; }
+  .cover { padding: 30mm 0 0; page-break-after: always; }
+  .cover .kicker { letter-spacing: 4px; color: var(--accent); font-size: 10pt; font-weight: 700; text-transform: uppercase; }
+  .cover h1 { font-size: 27pt; margin: 6px 0 2px; line-height: 1.05; }
+  .cover .sub { color: var(--navy2); font-size: 12.5pt; margin-bottom: 22px; max-width: 70%; }
+  .cover table { max-width: 620px; }
+  .cover td:first-child { width: 30%; font-weight: 600; color: var(--navy); background: var(--soft); }
+  .note { background: var(--soft); border-left: 4px solid var(--navy2); padding: 7px 11px; margin: 9px 0; font-size: 9.4pt; }
+  .warn { background: #fff4f4; border-left: 4px solid var(--accent); padding: 7px 11px; margin: 9px 0; font-size: 9.4pt; }
+  .new { background: #f2f8f2; border-left: 4px solid #2e7d32; padding: 7px 11px; margin: 9px 0; font-size: 9.4pt; }
+  .badge { display:inline-block; padding:1px 7px; border-radius:10px; font-size:8.4pt; font-weight:700; color:#fff; }
+  .b-ok{background:#2e7d32;} .b-new{background:#1565c0;} .b-req{background:#b71c1c;} .b-opt{background:#6b7280;} .b-part{background:#e6a100;}
+  .small { font-size: 8.8pt; color: var(--muted); }
+  .toc td { border: none; padding: 2px 6px; }
+  .toc td:first-child { width: 32px; color: var(--accent); font-weight: 700; }
+</style>
+
+<div class="cover">
+  <div class="kicker">XPTO — DevOps Runbook</div>
+  <h1>Pipeline CI/CD — Rock in Rio Backend</h1>
+  <div class="sub">Documentação operacional completa de build, teste, segurança e deploy da API Achados &amp; Perdidos (Spring Boot + Docker + GitLab CI).</div>
+  <table>
+    <tr><td>Aplicação</td><td><code>api-achados-perdidos</code> — Spring Boot 4.0.2 / Java 25</td></tr>
+    <tr><td>Orquestração CI/CD</td><td>GitLab CI/CD — runner com tag <code>deploy</code></td></tr>
+    <tr><td>Ambientes</td><td><code>develop</code> → Development · <code>main</code> → Production</td></tr>
+    <tr><td>Público-alvo</td><td>Equipe DevOps / SRE responsável pela execução e manutenção do pipeline</td></tr>
+    <tr><td>Emissão</td><td>24/07/2026 — Versão 1.1</td></tr>
+  </table>
+  <div class="new" style="margin-top:20px"><strong>Revisão 1.1.</strong> Acrescenta: seção consolidada de dependências externas (§2.4) e o <strong>health check agora implementado</strong> no container (Dockerfile + compose + Actuator restrito a <code>/health</code>) — §10.3 e §15.</div>
+</div>
+
+<h2>Sumário</h2>
+<table class="toc">
+  <tr><td>01</td><td>Sumário executivo e visão geral</td></tr>
+  <tr><td>02</td><td>Stack, topologia e dependências externas</td></tr>
+  <tr><td>03</td><td>Pré-requisitos de infraestrutura (runner e VPS)</td></tr>
+  <tr><td>04</td><td>Variáveis de ambiente e gestão de segredos</td></tr>
+  <tr><td>05</td><td>Anatomia do pipeline — <code>.gitlab-ci.yml</code></td></tr>
+  <tr><td>06</td><td>Stage build — imagem e extração do fat-jar</td></tr>
+  <tr><td>07</td><td>Stage test — MySQL efêmero e gate real</td></tr>
+  <tr><td>08</td><td>Stage security — SCA, SAST e secret scanning</td></tr>
+  <tr><td>09</td><td>Stage deploy — publicação em dev e produção</td></tr>
+  <tr><td>10</td><td>Dockerfile multi-stage, runtime e health check</td></tr>
+  <tr><td>11</td><td>Nginx, Cloudflare e exposição da API</td></tr>
+  <tr><td>12</td><td>Banco de dados e migrations SQL</td></tr>
+  <tr><td>13</td><td>Procedimento de bootstrap (primeiro deploy)</td></tr>
+  <tr><td>14</td><td>Deploy contínuo, rollback e limpeza</td></tr>
+  <tr><td>15</td><td>Observabilidade, health check e troubleshooting</td></tr>
+  <tr><td>16</td><td>Checklist operacional e hardening</td></tr>
+</table>
+
+<h2>1. Sumário executivo e visão geral</h2>
+<p>Este runbook descreve, de ponta a ponta, como o backend da aplicação Achados &amp; Perdidos (Rock in Rio) é construído, testado, auditado e implantado automaticamente pelo GitLab CI/CD. O objetivo é permitir que qualquer pessoa da equipe DevOps execute, diagnostique e evolua o pipeline sem depender de conhecimento tácito.</p>
+<ul>
+  <li><strong>4 estágios sequenciais:</strong> build → test → security → deploy.</li>
+  <li><strong>2 ambientes por branch:</strong> <code>develop</code> (dev) e <code>main</code> (produção).</li>
+  <li><strong>3 scanners de segurança:</strong> Trivy (SCA), Semgrep (SAST), Gitleaks (segredos).</li>
+  <li><strong>1 Dockerfile multi-stage:</strong> base → test → build → runtime.</li>
+</ul>
+
+<h3>1.1 Fluxo macro do pipeline</h3>
+<table>
+  <thead><tr><th>git push</th><th>BUILD</th><th>TEST</th><th>SECURITY</th><th>DEPLOY</th></tr></thead>
+  <tbody>
+    <tr><td>develop / main dispara o pipeline</td><td>build + extrai <code>app.jar</code></td><td>MySQL efêmero + <code>mvn test</code></td><td>SCA/SAST/Secrets — paralelo, não bloqueia*</td><td>rsync + compose (dev ou prod)</td></tr>
+  </tbody>
+</table>
+<p class="small">* Os jobs de segurança rodam com <code>allow_failure: true</code> — são visíveis mas não bloqueiam o deploy até que a equipe faça a primeira triagem de findings (ver §8).</p>
+
+<h3>1.2 Princípios de design adotados</h3>
+<ul>
+  <li><strong>Gate de teste real:</strong> os testes de integração dependem de um MySQL de verdade. Sem banco, a suíte é pulada (<code>assumeTrue</code>) e o gate não validaria nada — por isso o CI sobe um MySQL efêmero antes de testar.</li>
+  <li><strong>Build reprodutível e offline no SCA:</strong> o Trivy escaneia o fat-jar já construído, sem re-resolver o Maven Central (evita rate-limit HTTP 429).</li>
+  <li><strong>Deploy imutável por commit:</strong> cada imagem é etiquetada com <code>ci-${CI_COMMIT_SHORT_SHA}</code>, permitindo rastreabilidade e rollback.</li>
+  <li><strong>Segurança por camadas (OWASP):</strong> SCA (A06), SAST (A05/A08), secret scanning, além de rate-limiting, JWT com fail-fast e CORS restritivo na aplicação.</li>
+  <li><strong>Isolamento por ambiente:</strong> <code>resource_group</code> serializa deploys concorrentes por ambiente, evitando corrida entre pipelines.</li>
+</ul>
+
+<h2>2. Stack, topologia e dependências externas</h2>
+
+<h3>2.1 Stack da aplicação</h3>
+<table>
+  <thead><tr><th style="width:22%">Camada</th><th style="width:30%">Tecnologia</th><th>Observações</th></tr></thead>
+  <tbody>
+    <tr><td>Linguagem / Runtime</td><td>Java 25</td><td>Compilado e executado sobre Eclipse Temurin 25</td></tr>
+    <tr><td>Framework</td><td>Spring Boot 4.0.2</td><td>Web MVC, Data JPA, Security, Validation, Mail</td></tr>
+    <tr><td>Segurança</td><td>Spring Security + JWT (jjwt 0.12.6)</td><td>IDs opacos assinados, Bucket4j para rate-limit</td></tr>
+    <tr><td>Persistência</td><td>MySQL 8 · Hibernate</td><td>Banco <code>achados_perdidos</code>; <code>ddl-auto=validate</code> em produção</td></tr>
+    <tr><td>Armazenamento</td><td>Disco local ou AWS S3</td><td>SDK AWS 2.31.78; provider configurável em <code>/configuracoes</code></td></tr>
+    <tr><td>Documentação</td><td>springdoc-openapi 3.0.2 (Swagger UI)</td><td>Desligável via <code>SPRINGDOC_ENABLED=false</code> em prod</td></tr>
+    <tr><td>Health / observabilidade</td><td>Spring Boot Actuator</td><td><span class="badge b-new">rev. 1.1</span> Somente <code>/actuator/health</code> exposto (restrito, sem detalhes) — §10.3</td></tr>
+    <tr><td>Build</td><td>Maven 3.9</td><td><code>finalName=app</code> → artefato <code>target/app.jar</code></td></tr>
+  </tbody>
+</table>
+
+<h3>2.2 Topologia de produção</h3>
+<pre>Internet
+   │  (HTTPS / TLS terminado no edge)
+   ▼
+Cloudflare  ──  edge HTTPS → origin HTTP
+   │  HTTP :80
+   ▼
+VPS (Nginx reverse proxy)
+   server_name api_rockinrio.xpto.com.br
+   proxy_pass → 127.0.0.1:8203
+   │  loopback
+   ▼
+Docker: container "rockinrio-backend"
+   HOST_PORT:8203 → :8080 (Spring Boot)
+   volume ./arquivos:/app/arquivos
+   │  host.docker.internal
+   ▼
+MySQL 8 (na VPS, porta 3306)</pre>
+<div class="note"><strong>Domínio com underscore.</strong> <code>api_rockinrio.xpto.com.br</code> contém <code>_</code>, que o Tomcat rejeita no header <code>Host</code> (HTTP 400). O Nginx envia ao upstream um <code>Host</code> válido com hífen (<code>api-rockinrio…</code>) e preserva o domínio real em <code>X-Forwarded-Host</code>. <code>X-Forwarded-Proto: https</code> informa à aplicação que o TLS foi terminado no Cloudflare.</div>
+
+<h3>2.3 Diretórios-chave no repositório</h3>
+<table>
+  <thead><tr><th style="width:36%">Caminho</th><th>Papel no pipeline</th></tr></thead>
+  <tbody>
+    <tr><td><code>.gitlab-ci.yml</code></td><td>Definição completa do pipeline (stages, jobs, rules)</td></tr>
+    <tr><td><code>Dockerfile</code></td><td>Build multi-stage: base → test → build → runtime</td></tr>
+    <tr><td><code>docker-compose.yml</code></td><td>Runtime do container no servidor de deploy</td></tr>
+    <tr><td><code>.dockerignore</code> / <code>.gitleaks.toml</code></td><td>Contexto de build enxuto / allowlist de secret scanning</td></tr>
+    <tr><td><code>scripts/*.sql</code></td><td>Migrations versionadas (018 … 056) aplicadas ao MySQL</td></tr>
+    <tr><td><code>scripts/ci-docker-cleanup.sh</code></td><td>Limpeza pós-deploy (imagens/cache antigos)</td></tr>
+    <tr><td><code>deploy/nginx/*.conf</code></td><td>Vhost do reverse proxy (referência de configuração)</td></tr>
+    <tr><td><code>.env</code> (no servidor)</td><td>Segredos e configuração de runtime — <strong>NÃO</strong> versionado</td></tr>
+  </tbody>
+</table>
+
+<h3>2.4 Dependências externas <span class="badge b-new">rev. 1.1</span></h3>
+<p>Consolidação das dependências externas — de runtime (produção) e de CI (rede de saída do runner). "Obrigatória" bloqueia a operação/pipeline se ausente.</p>
+<table>
+  <thead><tr><th style="width:24%">Dependência</th><th style="width:14%">Tipo</th><th style="width:14%">Criticidade</th><th>Como é consumida</th></tr></thead>
+  <tbody>
+    <tr><td>MySQL 8</td><td>Runtime</td><td><span class="badge b-req">Obrigatória</span></td><td>Banco <code>achados_perdidos</code> na VPS (3306), alcançado via <code>host.docker.internal</code>. Sem ele a app falha na validação de schema.</td></tr>
+    <tr><td>Cloudflare</td><td>Runtime</td><td><span class="badge b-req">Obrigatória (prod)</span></td><td>Edge HTTPS/TLS e WAF. <code>X-Forwarded-Proto: https</code> informa TLS terminado na borda.</td></tr>
+    <tr><td>Nginx (VPS)</td><td>Runtime</td><td><span class="badge b-req">Obrigatória</span></td><td>Reverse proxy → <code>127.0.0.1:8203</code>; ajusta o header <code>Host</code> (underscore) — §11.</td></tr>
+    <tr><td>Servidor SMTP</td><td>Runtime</td><td><span class="badge b-part">Condicional</span></td><td>E-mail transacional do workflow de claims (Spring Mail). <strong>Configurado em <code>/configuracoes</code> (persistido no banco), não por variável de ambiente.</strong> Necessário apenas quando o envio de e-mail é habilitado.</td></tr>
+    <tr><td>AWS S3 (ou MinIO)</td><td>Runtime</td><td><span class="badge b-opt">Opcional</span></td><td>Provider de armazenamento de anexos, selecionável em <code>/configuracoes</code>. Credenciais via <code>AWS_*</code> ou IAM role — nunca no banco.</td></tr>
+    <tr><td>Registro Docker / imagens base</td><td>CI</td><td><span class="badge b-req">Obrigatória</span></td><td><code>maven:3.9-eclipse-temurin-25</code>, <code>eclipse-temurin:25-jre-alpine</code>, <code>mysql:8.0</code>, <code>docker:24-cli</code>.</td></tr>
+    <tr><td>Maven Central</td><td>CI</td><td><span class="badge b-req">Obrigatória</span></td><td><code>mvn dependency:go-offline</code> no estágio <code>base</code> do Dockerfile.</td></tr>
+    <tr><td>Trivy DB · Semgrep · Gitleaks</td><td>CI</td><td><span class="badge b-part">Recomendada</span></td><td>Imagens <code>aquasec/trivy</code>, <code>semgrep/semgrep</code> (regras <code>p/java,p/secrets,p/owasp-top-ten</code>), <code>zricethezav/gitleaks</code>. Jobs <code>allow_failure</code> — não bloqueiam.</td></tr>
+  </tbody>
+</table>
+<p class="small">O runner precisa de acesso de saída à internet para baixar essas imagens/bases (§3.1). Recomenda-se fixar digests das imagens <code>:latest</code> dos scanners para builds reprodutíveis (§16.2).</p>
+
+<h2>3. Pré-requisitos de infraestrutura</h2>
+<h3>3.1 GitLab Runner</h3>
+<p>Todos os jobs declaram <code>tags: [deploy]</code>. É obrigatório existir ao menos um runner registrado com essa tag, com acesso ao Docker daemon.</p>
+<ul>
+  <li><strong>Executor:</strong> Shell ou Docker com socket montado — o pipeline invoca <code>docker build</code>, <code>docker run</code>, <code>docker compose</code> diretamente.</li>
+  <li><strong>Imagem default dos jobs:</strong> <code>docker:24-cli</code> com <code>pull_policy: if-not-present</code>.</li>
+  <li>Docker Engine + plugin Compose v2 (o pipeline usa <code>docker compose</code>, não <code>docker-compose</code>).</li>
+  <li><strong>Localização:</strong> o mesmo runner que testa também faz o deploy — precisa enxergar <code>/opt/rockinrio-backend</code> na VPS e o MySQL de produção.</li>
+  <li><strong>Rede:</strong> acesso de saída à internet (Trivy DB, Semgrep, Gitleaks, MySQL, Temurin, Maven Central).</li>
+</ul>
+<div class="note"><strong>Por que o runner é local à VPS.</strong> O template de deploy faz <code>rsync</code> do repositório para <code>/opt/rockinrio-backend</code> e sobe o compose na própria máquina do runner. Ou seja, o runner com a tag <code>deploy</code> deve rodar no servidor de destino (ou ter diretório/daemon compartilhados). O stage <code>test</code> usa <code>--network host</code>, pressupondo runner Linux com host networking.</div>
+
+<h3>3.2 Servidor de deploy (VPS)</h3>
+<table>
+  <thead><tr><th style="width:26%">Requisito</th><th>Detalhe</th></tr></thead>
+  <tbody>
+    <tr><td>Sistema</td><td>Linux com Docker Engine 24+ e Compose v2</td></tr>
+    <tr><td>Diretório de deploy</td><td><code>/opt/rockinrio-backend</code> (variável <code>DEPLOY_DIR</code>)</td></tr>
+    <tr><td>Arquivo de segredos</td><td><code>/opt/rockinrio-backend/.env</code> — criado manualmente antes do 1º deploy</td></tr>
+    <tr><td>MySQL</td><td>Instância acessível via <code>host.docker.internal</code> (mapeado por <code>host-gateway</code>) na porta 3306</td></tr>
+    <tr><td>Nginx</td><td>Reverse proxy para <code>127.0.0.1:8203</code> (produção) — §11</td></tr>
+    <tr><td>Portas</td><td>3306 ocupada pelo banco; o container publica em <code>HOST_PORT</code> (dev 8080, prod 8203)</td></tr>
+    <tr><td>Ferramentas</td><td><code>rsync</code> (instalado automaticamente pelo <code>before_script</code> se ausente)</td></tr>
+  </tbody>
+</table>
+
+<h2>4. Variáveis de ambiente e gestão de segredos</h2>
+<h3>4.1 Variáveis definidas no pipeline</h3>
+<table>
+  <thead><tr><th style="width:26%">Variável</th><th style="width:30%">Valor</th><th>Papel</th></tr></thead>
+  <tbody>
+    <tr><td><code>DEPLOY_DIR</code></td><td><code>/opt/rockinrio-backend</code></td><td>Destino do rsync e raiz do compose no servidor</td></tr>
+    <tr><td><code>COMPOSE_PROJECT_NAME</code></td><td><code>rockinrio-backend</code></td><td>Namespace do projeto Docker Compose</td></tr>
+    <tr><td><code>IMAGE_CI</code></td><td><code>rockinrio-backend:ci-${CI_COMMIT_SHORT_SHA}</code></td><td>Tag da imagem por commit (build/cleanup)</td></tr>
+    <tr><td><code>IT_MYSQL_PORT</code></td><td><code>13306</code></td><td>Porta de host do MySQL efêmero de teste (3306 já usada pela VPS)</td></tr>
+  </tbody>
+</table>
+
+<h3>4.2 O arquivo <code>.env</code> no servidor (runtime)</h3>
+<p>O <code>.env</code> vive apenas em <code>/opt/rockinrio-backend/.env</code>, fora do git e preservado pelo rsync (<code>--exclude .env</code>). É a fonte de todos os segredos de runtime consumidos pelo <code>docker-compose.yml</code> via <code>env_file</code>. Base em <code>.env.example</code>:</p>
+<table>
+  <thead><tr><th style="width:18%">Grupo</th><th style="width:40%">Chaves</th><th>Notas críticas</th></tr></thead>
+  <tbody>
+    <tr><td>Banco</td><td><code>DB_HOST</code>, <code>DB_PORT</code>, <code>DB_NAME</code>, <code>DB_URL</code>, <code>DB_USERNAME</code>, <code>DB_PASSWORD</code></td><td>No compose, <code>DB_HOST</code> é sobrescrito para <code>host.docker.internal</code></td></tr>
+    <tr><td>Segredos (obrigatórios)</td><td><code>JWT_SECRET</code>, <code>RESOURCE_ID_SECRET</code></td><td>Mín. 32 chars. A app <strong>NÃO</strong> sobe sem eles (fail-fast). Gerar com <code>openssl rand -base64 48</code></td></tr>
+    <tr><td>JWT</td><td><code>JWT_EXPIRATION_MS</code>, <code>JWT_REFRESH_EXPIRATION_MS</code></td><td>Access 24h / refresh 30d por padrão</td></tr>
+    <tr><td>Swagger</td><td><code>SPRINGDOC_ENABLED</code></td><td><code>false</code> em produção</td></tr>
+    <tr><td>Rate limit</td><td><code>LOGIN_RATE_LIMIT_*</code>, <code>PUBLIC_RATE_LIMIT_*</code></td><td>Anti força-bruta (login) e anti-abuso (portal público)</td></tr>
+    <tr><td>CORS</td><td><code>CORS_ALLOWED_ORIGINS</code>, <code>CORS_ALLOWED_ORIGIN_PATTERNS</code>, <code>CORS_ALLOW_CREDENTIALS</code></td><td>Em prod: domínios REAIS e esvaziar patterns de localhost</td></tr>
+    <tr><td>Arquivos</td><td><code>APP_ARQUIVOS_DIR</code>, <code>MULTIPART_MAX_REQUEST_SIZE</code></td><td>Dir montado como volume <code>./arquivos</code></td></tr>
+    <tr><td>S3 (opcional)</td><td><code>APP_S3_*</code>, <code>AWS_ACCESS_KEY_ID</code>, <code>AWS_SECRET_ACCESS_KEY</code></td><td>Credenciais via env ou IAM role; nunca no banco</td></tr>
+    <tr><td>Runtime</td><td><code>HOST_PORT</code></td><td>Porta publicada pelo container (dev 8080 · prod 8203)</td></tr>
+  </tbody>
+</table>
+<div class="warn"><strong>Fail-fast de segredos.</strong> Em <code>application.properties</code>, <code>app.jwt.secret</code> e <code>app.resource-id.secret</code> não têm valor default. Se o <code>.env</code> não os fornecer, a aplicação não inicia — o container entra em loop de restart. Sempre validar o <code>.env</code> antes de subir.</div>
+
+<h3>4.3 Como o segredo NÃO vaza no CI</h3>
+<ul>
+  <li>O <code>.env</code> é excluído do rsync e do contexto de build (<code>.dockerignore</code>) — nunca entra na imagem.</li>
+  <li>Gitleaks escaneia o histórico e a árvore; <code>.gitleaks.toml</code> mantém allowlist só para placeholders de exemplo.</li>
+  <li>Credenciais de produção devem viver como CI/CD variables mascaradas/protegidas no GitLab, ou diretamente no <code>.env</code> do servidor.</li>
+</ul>
+
+<h2>5. Anatomia do pipeline — <code>.gitlab-ci.yml</code></h2>
+<h3>5.1 Estágios e ordem de execução</h3>
+<pre>stages:
+  - build     <span class="c"># 1. Constrói a imagem e extrai o fat-jar</span>
+  - test      <span class="c"># 2. Gate de testes com MySQL efêmero</span>
+  - security  <span class="c"># 3. SCA + SAST + secret scanning (paralelo)</span>
+  - deploy    <span class="c"># 4. rsync + docker compose up (dev/prod)</span></pre>
+
+<h3>5.2 Regras de branch (quando o pipeline roda)</h3>
+<p>Uma âncora YAML reutilizável restringe a execução às branches <code>main</code> e <code>develop</code>. Qualquer outra branch (feature, hotfix) não dispara build/test/security.</p>
+<pre>.branch_main_develop: &amp;branch_main_develop
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"</pre>
+
+<h3>5.3 Grafo de dependências (<code>needs</code>)</h3>
+<table>
+  <thead><tr><th>Job</th><th>needs</th><th>Roda em</th></tr></thead>
+  <tbody>
+    <tr><td><code>build</code></td><td>—</td><td>main, develop</td></tr>
+    <tr><td><code>test</code></td><td>build</td><td>main, develop</td></tr>
+    <tr><td><code>sca_dependencias</code> · <code>sast_semgrep</code> · <code>secret_detection</code></td><td>build</td><td>main, develop</td></tr>
+    <tr><td><code>deploy_development</code></td><td>test</td><td>develop</td></tr>
+    <tr><td><code>deploy_production</code></td><td>test</td><td>main</td></tr>
+  </tbody>
+</table>
+<div class="note"><strong>Observação importante.</strong> O deploy depende apenas de <code>test</code> (não dos jobs de segurança). Como os jobs de segurança são <code>allow_failure</code>, o deploy prossegue mesmo com findings — até a equipe promovê-los a gate bloqueante (§8.4).</div>
+
+<h2>6. Stage BUILD — imagem e extração do fat-jar</h2>
+<pre>build:
+  stage: build
+  tags: [deploy]
+  &lt;&lt;: *branch_main_develop
+  script:
+    - docker build -t "${IMAGE_CI}" .
+    <span class="c"># Extrai o fat-jar para o SCA (Trivy) escanear offline</span>
+    - docker rm -f "ci-extract-${CI_JOB_ID}" &gt;/dev/null 2&gt;&amp;1 || true
+    - docker create --name "ci-extract-${CI_JOB_ID}" "${IMAGE_CI}"
+    - docker cp "ci-extract-${CI_JOB_ID}:/app/app.jar" ./app.jar
+    - docker rm -f "ci-extract-${CI_JOB_ID}" &gt;/dev/null 2&gt;&amp;1 || true
+  artifacts:
+    paths: [ app.jar ]
+    expire_in: 1 hour</pre>
+<ol>
+  <li><code>docker build</code> executa o Dockerfile até o estágio final (runtime), produzindo <code>rockinrio-backend:ci-&lt;sha&gt;</code>. Nesse processo o estágio <code>build</code> roda <code>mvn -DskipTests package</code>, gerando <code>target/app.jar</code>.</li>
+  <li>Um container temporário é criado (não iniciado) só para copiar o artefato de dentro dele.</li>
+  <li><code>docker cp</code> extrai <code>/app/app.jar</code> para o workspace do CI.</li>
+  <li>O container temporário é removido; o <code>app.jar</code> vira artefato (validade 1h) consumido pelo SCA.</li>
+</ol>
+<div class="note"><strong>Por que extrair o jar?</strong> O Trivy escaneia o fat-jar offline — todas as dependências já estão embarcadas. Isso evita re-resolver o Maven Central (HTTP 429), tornando o SCA determinístico e rápido.</div>
+
+<h2>7. Stage TEST — MySQL efêmero e gate real</h2>
+<pre>test:
+  stage: test
+  tags: [deploy]
+  needs: [build]
+  variables:
+    IT_MYSQL_PORT: "13306"  <span class="c"># 3306 já usada pelo banco da VPS</span>
+  script:
+    - docker run -d --name "it-mysql-${CI_JOB_ID}" -e MYSQL_ALLOW_EMPTY_PASSWORD=1
+        -e MYSQL_DATABASE=achados_perdidos_it -p ${IT_MYSQL_PORT}:3306 mysql:8.0
+        --default-authentication-plugin=mysql_native_password
+    - for i in $(seq 1 40); do docker exec ... mysqladmin ping ... &amp;&amp; break; sleep 2; done
+    - docker build --target test --network host
+        --build-arg TEST_DB_URL="jdbc:mysql://127.0.0.1:${IT_MYSQL_PORT}/achados_perdidos_it?..."
+        -t "rockinrio-backend-test:${CI_COMMIT_SHORT_SHA}" .
+  after_script:
+    - docker rm -f "it-mysql-${CI_JOB_ID}" &gt;/dev/null 2&gt;&amp;1 || true</pre>
+<p>A base de testes (<code>IntegrationTestBase</code>) usa <code>assumeTrue(canConnect(), …)</code> no <code>@BeforeAll</code>. Sem banco alcançável, os testes de integração são pulados silenciosamente — o gate ficaria verde sem validar nada. Por isso o CI sobe um <code>mysql:8.0</code> descartável na porta 13306, aguarda via <code>mysqladmin ping</code> (até 40×2s = 80s), roda <code>docker build --target test</code> (dispara <code>mvn -B test</code>) com <code>--network host</code>, e remove o MySQL no <code>after_script</code>.</p>
+<div class="warn"><strong>Este é o gate bloqueante.</strong> Se qualquer teste falhar, o <code>docker build --target test</code> retorna erro e o stage <code>test</code> falha, impedindo o deploy (que depende de <code>test</code>). É o principal portão de qualidade do pipeline.</div>
+
+<h2>8. Stage SECURITY — SCA, SAST e secret scanning</h2>
+<p>Três jobs rodam em paralelo, todos com <code>needs: [build]</code> e <code>allow_failure: true</code>. São uma "avaliação contínua de risco": ficam visíveis (vermelhos quando há achados) mas não bloqueiam o deploy até a triagem inicial.</p>
+<h3>8.1 SCA — Trivy (A06)</h3>
+<pre>sca_dependencias:
+  image: aquasec/trivy:latest
+  cache: { key: trivy-db, paths: [ .trivycache/ ] }
+  script:
+    - trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 --format table app.jar
+  allow_failure: true</pre>
+<h3>8.2 SAST — Semgrep (A05/A08)</h3>
+<pre>sast_semgrep:
+  image: semgrep/semgrep:latest
+  script:
+    - semgrep scan --error --config "p/java" --config "p/secrets" --config "p/owasp-top-ten"
+        --exclude-rule dockerfile.security.missing-user.missing-user .
+  allow_failure: true</pre>
+<p class="small">A regra <code>missing-user</code> (container como root) é excluída por ora: o compose faz bind-mount de <code>./arquivos</code>, e rodar como não-root exigiria ajustar permissões do volume no servidor.</p>
+<h3>8.3 Secret scanning — Gitleaks</h3>
+<pre>secret_detection:
+  image: zricethezav/gitleaks:latest
+  script:
+    - gitleaks detect --source . --config .gitleaks.toml --redact --verbose --exit-code 1
+  allow_failure: true</pre>
+<div class="note"><strong>8.4 Como promover um job a GATE bloqueante.</strong> Após a primeira triagem, remova <code>allow_failure: true</code> do job. A partir daí, um HIGH/CRITICAL faz o pipeline falhar. Recomenda-se começar por <code>secret_detection</code> (tolerância zero) e depois SCA.</div>
+
+<h2>9. Stage DEPLOY — publicação em dev e produção</h2>
+<pre>.deploy_template: &amp;deploy_template
+  stage: deploy
+  before_script:
+    - <span class="c"># instala rsync (apk/apt) se ausente</span>
+  script:
+    - mkdir -p "${DEPLOY_DIR}"
+    - rsync -a --delete --no-owner --no-group
+        --exclude .env --exclude .git --exclude target
+        --exclude arquivos --exclude paineladmin --exclude portalpublico ./ "${DEPLOY_DIR}/"
+    - cd "${DEPLOY_DIR}"
+    - test -f .env || (echo "ERRO - crie .env..." &amp;&amp; exit 1)
+    - docker compose down --remove-orphans --timeout 30 || true
+    - docker rm -f rockinrio-backend 2&gt;/dev/null || true
+    - docker compose up -d --build --remove-orphans --force-recreate
+    - docker compose ps
+    - IMAGE_CI="${IMAGE_CI}" sh scripts/ci-docker-cleanup.sh</pre>
+<p>O rsync sincroniza o repositório para <code>/opt/rockinrio-backend</code> (excluindo <code>.env</code>, uploads, build local e frontends), valida a presença do <code>.env</code>, para a stack atual, sobe a nova versão com <code>--build --force-recreate</code>, imprime <code>docker compose ps</code> e executa a limpeza.</p>
+<h3>9.2 Jobs concretos por ambiente</h3>
+<table>
+  <thead><tr><th style="width:26%">&nbsp;</th><th>deploy_development</th><th>deploy_production</th></tr></thead>
+  <tbody>
+    <tr><td>Branch (rule)</td><td><code>develop</code></td><td><code>main</code></td></tr>
+    <tr><td><code>resource_group</code></td><td><code>rockinrio-backend-dev</code></td><td><code>rockinrio-backend-prod</code></td></tr>
+    <tr><td>Environment</td><td>development</td><td>production (Swagger desligado)</td></tr>
+    <tr><td><code>HOST_PORT</code> típico</td><td>8080</td><td>8203</td></tr>
+  </tbody>
+</table>
+<div class="warn"><strong>Estratégia de indisponibilidade.</strong> O deploy usa <code>down → up --build</code>: há uma janela de downtime enquanto a imagem é reconstruída e o container reinicia. Planeje deploys em horários de baixo tráfego. Blue-green não está implementado neste pipeline. O <strong>health check</strong> (§10.3) reduz o risco ao permitir que orquestrador/operador só considerem o container pronto quando <code>healthy</code>.</div>
+
+<h2>10. Dockerfile multi-stage, runtime e health check</h2>
+<pre>FROM maven:3.9-eclipse-temurin-25 AS base
+WORKDIR /app
+COPY pom.xml .
+RUN mvn -B dependency:go-offline          <span class="c"># camada cacheável de dependências</span>
+COPY src ./src
+
+FROM base AS test                         <span class="c"># usado só no stage "test" do CI</span>
+ARG TEST_DB_URL                           <span class="c"># falha aqui = gate de teste vermelho</span>
+ENV TEST_DB_URL=${TEST_DB_URL} ...
+RUN mvn -B test
+
+FROM base AS build                        <span class="c"># gera target/app.jar</span>
+RUN mvn -B -DskipTests package
+
+FROM eclipse-temurin:25-jre-alpine        <span class="c"># runtime enxuto (JRE only)</span>
+WORKDIR /app
+ENV SERVER_PORT=8080
+COPY --from=build /app/target/app.jar app.jar
+RUN mkdir -p arquivos
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
+  CMD wget -q -O - "http://127.0.0.1:${SERVER_PORT}/actuator/health" | grep -q '"status":"UP"' || exit 1
+CMD ["java", "-jar", "app.jar"]</pre>
+<p>O uso de JRE Alpine no estágio final reduz drasticamente o tamanho e a superfície de ataque (sem Maven, sem JDK, sem código-fonte). O <code>wget</code> usado no health check vem do busybox da própria imagem Alpine.</p>
+
+<h3>10.2 Runtime — <code>docker-compose.yml</code></h3>
+<pre>services:
+  backend:
+    build: .
+    image: rockinrio-backend:latest
+    container_name: rockinrio-backend
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-8080}:8080"
+    env_file: [ .env ]
+    environment:
+      SERVER_PORT: "8080"
+      DB_HOST: host.docker.internal      <span class="c"># alcança o MySQL da VPS</span>
+      APP_ARQUIVOS_DIR: /app/arquivos
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./arquivos:/app/arquivos          <span class="c"># uploads persistidos no host</span>
+    healthcheck:                          <span class="c"># rev. 1.1 — ver §10.3</span>
+      test: ["CMD","wget","-q","-O","-","http://127.0.0.1:8080/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 45s
+      retries: 3</pre>
+
+<h3>10.3 Health check <span class="badge b-new">rev. 1.1</span></h3>
+<p>O container expõe um endpoint de saúde dedicado, consumido pelo Docker/orquestrador e por eventual load balancer:</p>
+<ul>
+  <li><strong>Endpoint:</strong> <code>GET /actuator/health</code> (Spring Boot Actuator). Retorna <code>{"status":"UP"}</code> quando aplicação e dependências essenciais (incl. datasource) estão saudáveis; <code>503</code> caso contrário.</li>
+  <li><strong>Exposição restrita:</strong> apenas <code>health</code> é publicado (<code>management.endpoints.web.exposure.include=health</code>), <strong>sem detalhes</strong> (<code>show-details=never</code>) — nenhuma informação de diagnóstico vaza, alinhado ao relatório de segurança (M-04 / A05). Liberado sem autenticação no <code>SecurityConfig</code>; os demais endpoints de management não são expostos.</li>
+  <li><strong>Definição:</strong> <code>HEALTHCHECK</code> no Dockerfile (imagem auto-descritiva) e bloco <code>healthcheck</code> no compose (runtime da VPS). <code>start-period</code> de 45s cobre o boot da JVM/Spring; 3 tentativas de 30s antes de marcar <code>unhealthy</code>.</li>
+  <li><strong>Efeito operacional:</strong> <code>docker compose ps</code> passa a exibir <code>STATUS = healthy</code> e <code>docker inspect … {{.State.Health.Status}}</code> (§15.1) retorna o estado real — antes retornava vazio por não haver health check definido.</li>
+</ul>
+<p class="small">Validação manual: <code>curl -fsS http://127.0.0.1:8203/actuator/health</code> na VPS deve retornar <code>{"status":"UP"}</code> com HTTP 200.</p>
+
+<h2>11. Nginx, Cloudflare e exposição da API</h2>
+<p>Referência em <code>deploy/nginx/api_rockinrio.xpto.com.br.conf</code>. Instalar em <code>/etc/nginx/sites-available/</code> com symlink em <code>sites-enabled/</code>.</p>
+<pre>server {
+  listen 80;
+  server_name api_rockinrio.xpto.com.br;
+  location / {
+    proxy_pass http://127.0.0.1:8203;                         <span class="c"># HOST_PORT do container (prod)</span>
+    proxy_http_version 1.1;
+    proxy_set_header Host              api-rockinrio.xpto.com.br;  <span class="c"># hífen: Tomcat rejeita "_"</span>
+    proxy_set_header X-Forwarded-Host  api_rockinrio.xpto.com.br;  <span class="c"># domínio real</span>
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;                 <span class="c"># TLS terminado no Cloudflare</span>
+    proxy_read_timeout 60s;
+    client_max_body_size 20m;
+  }
+}</pre>
+<pre>sudo ln -s /etc/nginx/sites-available/api-rockinrio.conf /etc/nginx/sites-enabled/
+sudo nginx -t            <span class="c"># valida a sintaxe</span>
+sudo systemctl reload nginx</pre>
+<div class="note"><strong>Consistência de portas e limites.</strong> Alinhe <code>HOST_PORT</code> (.env), <code>proxy_pass</code> (Nginx) e a porta física livre na VPS. Além disso, <code>client_max_body_size</code> (20m) deve acompanhar <code>MULTIPART_MAX_REQUEST_SIZE</code> — senão uploads grandes tomam 413 no proxy antes de chegar à aplicação. A app confia em headers de proxy via <code>server.forward-headers-strategy=NATIVE</code> (RemoteIpValve), refletindo o IP real sem aceitar spoofing (rate-limit e auditoria).</div>
+
+<h2>12. Banco de dados e migrations SQL</h2>
+<div class="warn"><strong>As migrations NÃO são aplicadas pelo pipeline.</strong> A aplicação roda com <code>spring.jpa.hibernate.ddl-auto=validate</code> em produção — o Hibernate valida que o schema bate com as entidades, mas não cria nem altera tabelas. Os scripts <code>scripts/0XX_*.sql</code> devem ser aplicados manualmente ao MySQL, em ordem numérica, antes de subir a versão que os requer. Se o schema divergir, a aplicação não inicia.</div>
+<p>Os scripts vão de <code>018_Fluxo_Processos_Documento.sql</code> a <code>056_Auditoria_Snapshots_Completos.sql</code> (numeração incremental). Contêm DDL (tabelas, índices, FKs), seeds e correções. Aplicar na ordem do número, cada um uma única vez.</p>
+<ol>
+  <li>Backup antes de qualquer alteração: <code>mysqldump achados_perdidos &gt; backup_$(date +%F).sql</code></li>
+  <li>Identifique o último script já aplicado (mantenha um registro/tabela de controle).</li>
+  <li>Aplique os novos em ordem: <code>mysql achados_perdidos &lt; scripts/0XX_*.sql</code></li>
+  <li>Só então faça o merge/push que dispara o deploy da nova versão.</li>
+</ol>
+<div class="warn"><strong>Regra de ouro: migration primeiro, deploy depois.</strong> Como o deploy é automático no push para <code>main</code>/<code>develop</code>, aplique o SQL no banco antes do merge. Caso contrário, o novo container falha na validação de schema e entra em loop de restart.</div>
+
+<h2>13. Procedimento de bootstrap (primeiro deploy)</h2>
+<p>Execute uma única vez ao preparar um ambiente novo (dev ou prod). Depois, os deploys são automáticos via push.</p>
+<ol>
+  <li>Provisionar a VPS: Docker Engine 24+, Compose v2, MySQL 8 acessível, Nginx.</li>
+  <li>Registrar o GitLab Runner com a tag <code>deploy</code>, com acesso ao Docker daemon e ao diretório de deploy.</li>
+  <li>Criar o diretório: <code>sudo mkdir -p /opt/rockinrio-backend</code></li>
+  <li>Criar o banco (<code>CREATE DATABASE achados_perdidos;</code>) e aplicar as migrations 018…056 em ordem (§12).</li>
+  <li>Criar o <code>.env</code> em <code>/opt/rockinrio-backend/.env</code> a partir do <code>.env.example</code>, com valores REAIS:</li>
+</ol>
+<pre>JWT_SECRET=$(openssl rand -base64 48)
+RESOURCE_ID_SECRET=$(openssl rand -base64 48)
+DB_PASSWORD=&lt;senha real do MySQL&gt;
+SPRINGDOC_ENABLED=false                 <span class="c"># produção</span>
+CORS_ALLOWED_ORIGINS=https://painel_rockinrio...,https://app_rockinrio...
+CORS_ALLOWED_ORIGIN_PATTERNS=           <span class="c"># vazio em produção</span>
+HOST_PORT=8203                          <span class="c"># produção</span></pre>
+<ol start="6">
+  <li>Definir a senha do admin (BCrypt) no banco: <code>UPDATE usuario SET NM_Senha='$2a$10$...' WHERE NM_Login='admin';</code></li>
+  <li>Configurar o Nginx (§11) e recarregar.</li>
+  <li>Disparar o primeiro deploy: push/merge para <code>develop</code> (dev) ou <code>main</code> (prod).</li>
+  <li>Validar (§15): <code>docker compose ps</code> (esperado <code>healthy</code>), logs, e <code>curl</code> ao <code>/actuator/health</code> através do Nginx.</li>
+</ol>
+<div class="note"><strong>Checklist de sanidade pré-primeiro-deploy.</strong> <code>.env</code> existe com JWT/RESOURCE secrets ≥32 chars · banco criado e migrations aplicadas · MySQL alcançável via <code>host.docker.internal</code> · porta <code>HOST_PORT</code> livre · Nginx apontando para a porta certa · runner com tag <code>deploy</code> online.</div>
+
+<h2>14. Deploy contínuo, rollback e limpeza</h2>
+<h3>14.1 Deploy contínuo (dia a dia)</h3>
+<ol>
+  <li>(Se houver mudança de schema) aplicar migrations no banco — §12.</li>
+  <li><code>git push</code> para <code>develop</code> → deploy automático em Development.</li>
+  <li>Após validação em dev, merge para <code>main</code> → deploy automático em Production.</li>
+  <li>Acompanhar o job de deploy no GitLab e a saída de <code>docker compose ps</code> (status <code>healthy</code>).</li>
+</ol>
+<h3>14.2 Rollback</h3>
+<p>O pipeline não tem botão de rollback nativo; use uma das estratégias:</p>
+<table>
+  <thead><tr><th style="width:26%">Estratégia</th><th>Como</th><th>Quando</th></tr></thead>
+  <tbody>
+    <tr><td>Revert de commit</td><td><code>git revert &lt;sha&gt;</code> + push → redeploy da versão anterior</td><td>Regressão de código; forma mais limpa</td></tr>
+    <tr><td>Re-run de pipeline antigo</td><td>No GitLab, re-executar o pipeline de um commit estável anterior</td><td>Quando o código anterior já passou pelo gate</td></tr>
+    <tr><td>Imagem CI anterior</td><td><code>docker tag rockinrio-backend:ci-&lt;sha_antigo&gt; …</code> e subir manualmente</td><td>Emergência; a imagem ainda existe (cleanup mantém as 3 últimas)</td></tr>
+  </tbody>
+</table>
+<div class="warn"><strong>Rollback e banco.</strong> Se o release avançou o schema, o rollback de código pode falhar na validação contra o schema novo. Migrations idealmente são retrocompatíveis (aditivas). Reverter schema exige script de down manual e backup — planeje antes.</div>
+<h3>14.3 Limpeza automática pós-deploy</h3>
+<p><code>scripts/ci-docker-cleanup.sh</code> roda ao fim de todo deploy: remove containers parados &gt;24h e imagens dangling; mantém as <code>KEEP_CI_IMAGES</code> (default 3) imagens <code>ci-*</code> mais recentes; poda cache de build &gt;168h e redes órfãs. <strong>Nunca remove volumes nem imagens em uso</strong> — uploads e banco estão seguros.</p>
+
+<h2>15. Observabilidade, health check e troubleshooting</h2>
+<h3>15.1 Comandos de diagnóstico no servidor</h3>
+<pre>cd /opt/rockinrio-backend
+docker compose ps                                <span class="c"># estado do container (agora com healthy/unhealthy)</span>
+docker compose logs -f --tail=200 backend        <span class="c"># logs em tempo real</span>
+docker inspect rockinrio-backend --format '{{.State.Health.Status}} {{.State.Status}}'
+docker stats rockinrio-backend --no-stream       <span class="c"># CPU/memória</span>
+curl -fsS http://127.0.0.1:8203/actuator/health  <span class="c"># health (prod) → {"status":"UP"}</span></pre>
+<h3>15.2 Matriz de sintomas</h3>
+<table>
+  <thead><tr><th style="width:28%">Sintoma</th><th style="width:34%">Causa provável</th><th>Ação</th></tr></thead>
+  <tbody>
+    <tr><td>Container em loop de restart / <code>unhealthy</code></td><td><code>JWT_SECRET</code>/<code>RESOURCE_ID_SECRET</code> ausentes ou &lt;32 chars</td><td>Corrigir <code>.env</code>, <code>docker compose up -d --force-recreate</code></td></tr>
+    <tr><td><code>unhealthy</code> mas app "sobe"</td><td>MySQL inacessível → <code>/actuator/health</code> = DOWN (datasource)</td><td>Verificar <code>extra_hosts</code>/MySQL; ver logs. É o health check cumprindo o papel.</td></tr>
+    <tr><td>App sobe e cai — erro de schema</td><td>Migration não aplicada (<code>ddl-auto=validate</code>)</td><td>Aplicar SQL pendente (§12) e recriar</td></tr>
+    <tr><td>HTTP 400 no Nginx</td><td>Header <code>Host</code> com underscore chegando ao Tomcat</td><td>Conferir <code>proxy_set_header Host</code> com hífen</td></tr>
+    <tr><td>HTTP 413 em upload</td><td><code>client_max_body_size</code> &lt; tamanho do arquivo</td><td>Alinhar Nginx e <code>MULTIPART_MAX_REQUEST_SIZE</code></td></tr>
+    <tr><td>CORS bloqueado no frontend</td><td>Origem não listada em <code>CORS_ALLOWED_ORIGINS</code></td><td>Adicionar domínio real; recriar container</td></tr>
+    <tr><td>Deploy trava</td><td><code>resource_group</code> serializando</td><td>Aguardar o pipeline anterior concluir</td></tr>
+    <tr><td>Stage test falha só às vezes</td><td>MySQL efêmero não subiu no timeout (80s)</td><td>Re-executar; verificar carga do runner</td></tr>
+  </tbody>
+</table>
+<h3>15.3 Onde olhar primeiro</h3>
+<ol>
+  <li>Log do job GitLab — falha de build/test/deploy.</li>
+  <li><code>docker compose logs</code> — falha de runtime (schema, secret, banco).</li>
+  <li><code>/actuator/health</code> e <code>docker inspect … Health</code> — prontidão do container.</li>
+  <li><code>nginx -t</code> e log do Nginx — proxy/headers/TLS. MySQL — conectividade e schema.</li>
+</ol>
+
+<h2>16. Checklist operacional e hardening</h2>
+<h3>16.1 Checklist antes de cada release em produção</h3>
+<ul>
+  <li>Migrations necessárias aplicadas ao banco de produção (em ordem).</li>
+  <li>Backup do banco realizado.</li>
+  <li><code>SPRINGDOC_ENABLED=false</code> no <code>.env</code> de produção.</li>
+  <li><code>CORS_ALLOWED_ORIGINS</code> só com domínios reais; patterns de localhost vazios.</li>
+  <li>Gate de teste verde no pipeline.</li>
+  <li>Findings de segurança triados (Trivy/Semgrep/Gitleaks).</li>
+  <li>Health check <code>healthy</code> após subir (<code>docker compose ps</code>).</li>
+  <li>Janela de baixo tráfego (há downtime no <code>down/up</code>).</li>
+  <li>Plano de rollback definido (revert vs. imagem anterior).</li>
+</ul>
+<h3>16.2 Recomendações de hardening (evolução do pipeline)</h3>
+<table>
+  <thead><tr><th style="width:24%">Área</th><th>Recomendação</th></tr></thead>
+  <tbody>
+    <tr><td>Health check</td><td><span class="badge b-ok">Implementado (rev. 1.1)</span> <code>/actuator/health</code> restrito + <code>HEALTHCHECK</code> no Dockerfile e compose — §10.3. Evolução: usar <code>--wait</code> no <code>compose up</code> para o deploy só concluir com o container <code>healthy</code>.</td></tr>
+    <tr><td>Gates de segurança</td><td>Promover <code>secret_detection</code> e depois <code>sca_dependencias</code> a bloqueantes (remover <code>allow_failure</code>) — §8.4.</td></tr>
+    <tr><td>Zero downtime</td><td>Avaliar blue-green / <code>healthcheck</code> + <code>--wait</code> no compose antes de derrubar o antigo.</td></tr>
+    <tr><td>Migrations</td><td>Adotar Flyway/Liquibase para versionar e aplicar schema automaticamente no start.</td></tr>
+    <tr><td>Imagem non-root</td><td>Resolver permissão do volume <code>./arquivos</code> e reabilitar a regra <code>missing-user</code> do Semgrep.</td></tr>
+    <tr><td>Segredos</td><td>Migrar do <code>.env</code> em disco para um cofre (Vault / GitLab masked+protected vars).</td></tr>
+    <tr><td>Observabilidade</td><td>Centralizar logs (Loki/ELK) e métricas (Prometheus). Actuator já habilitado pode expor <code>/actuator/prometheus</code> de forma restrita quando necessário.</td></tr>
+    <tr><td>Pin de imagens</td><td>Fixar digests de <code>trivy:latest</code> / <code>semgrep:latest</code> / <code>gitleaks:latest</code> para builds reprodutíveis.</td></tr>
+  </tbody>
+</table>
+
+<p class="small" style="margin-top:22px; border-top:1px solid var(--line); padding-top:8px">Documento gerado a partir da análise direta do repositório <code>api-achados-perdidos</code> (<code>.gitlab-ci.yml</code>, <code>Dockerfile</code>, <code>docker-compose.yml</code>, <code>application.properties</code>, <code>deploy/nginx/*.conf</code>, <code>scripts/*</code>). Mantenha este runbook versionado junto ao código e atualize-o a cada mudança no pipeline. — XPTO · Rock in Rio Backend · v1.1 · 24/07/2026.</p>

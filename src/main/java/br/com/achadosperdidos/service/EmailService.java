@@ -55,6 +55,36 @@ public class EmailService {
 
     @Transactional(readOnly = true)
     public Resultado enviar(String tpEvento, String destinatario, Map<String, String> variaveis) {
+        return enviar(tpEvento, destinatario, null, variaveis);
+    }
+
+    /**
+     * Envia para o e-mail remetente da conta SMTP vinculada ao propósito
+     * (útil para formulários que chegam à equipe, ex.: PORTAL_CONTATO).
+     */
+    @Transactional(readOnly = true)
+    public Resultado enviarParaRemetenteConfigurado(String tpEvento, String replyTo,
+                                                    Map<String, String> variaveis) {
+        EmailParametro parametro = parametroRepository.findByTpEvento(tpEvento).orElse(null);
+        if (parametro == null) {
+            return naoEnviado("Sem parâmetro de e-mail para " + tpEvento);
+        }
+        EmailConfig config = parametro.getEmailConfig();
+        if (config == null || config.getNmHost() == null || config.getNmHost().isBlank()
+                || !Boolean.TRUE.equals(config.getFgAtivo())) {
+            return naoEnviado("SMTP não configurado para " + tpEvento
+                    + ". Vincule uma conta em Configurações → E-mail / SMTP.");
+        }
+        String dest = primeiroNaoVazio(config.getNmRemetente(), config.getNmUsuario());
+        if (dest == null) {
+            return naoEnviado("Conta SMTP sem e-mail remetente configurado.");
+        }
+        return enviar(tpEvento, dest, replyTo, variaveis);
+    }
+
+    @Transactional(readOnly = true)
+    public Resultado enviar(String tpEvento, String destinatario, String replyTo,
+                            Map<String, String> variaveis) {
         EmailParametro parametro = parametroRepository.findByTpEvento(tpEvento).orElse(null);
         if (parametro == null) {
             return naoEnviado("Sem parâmetro de e-mail para " + tpEvento);
@@ -69,8 +99,14 @@ public class EmailService {
         }
 
         String assunto = parametro.getNmAssunto() != null ? parametro.getNmAssunto() : "Atualização do seu pedido";
+        if (variaveis != null) {
+            for (Map.Entry<String, String> e : variaveis.entrySet()) {
+                String valor = e.getValue() == null ? "" : e.getValue();
+                assunto = assunto.replace("{{" + e.getKey() + "}}", valor);
+            }
+        }
         try {
-            String html = templateService.render(parametro.getNmTemplate(), variaveis);
+            String html = templateService.render(parametro.getNmTemplate(), variaveis != null ? variaveis : Map.of());
             JavaMailSenderImpl sender = montarSender(config);
             MimeMessage msg = sender.createMimeMessage();
             // multipart=true permite anexar imagens inline (CID) — funciona em Gmail/Outlook
@@ -84,6 +120,9 @@ public class EmailService {
                 helper.setFrom(from);
             }
             helper.setTo(destinatario);
+            if (replyTo != null && !replyTo.isBlank()) {
+                helper.setReplyTo(replyTo.trim());
+            }
             helper.setSubject(assunto);
             helper.setText(html, true);
             if (LOGO.exists()) {
@@ -121,6 +160,14 @@ public class EmailService {
     private Resultado naoEnviado(String motivo) {
         log.info("E-mail não enviado: {}", motivo);
         return new Resultado(false, motivo);
+    }
+
+    private static String primeiroNaoVazio(String... valores) {
+        if (valores == null) return null;
+        for (String v : valores) {
+            if (v != null && !v.isBlank()) return v.trim();
+        }
+        return null;
     }
 
     /** Trunca o motivo do erro para caber na coluna DS_EmailErro. */

@@ -41,13 +41,30 @@ public class SecurityConfig {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
-                // Headers de segurança (A05): nosniff, anti-clickjacking, HSTS e Referrer-Policy.
-                // Não há CSP restritivo aqui de propósito — é uma API JSON e a UI do Swagger
-                // precisa carregar seus próprios assets; a proteção de XSS de anexos é feita no
-                // download (attachment + nosniff).
+                // Headers de segurança (A05 / relatório XPTO M-01, M-02, M-05):
+                //  - nosniff (M-04 defesa em profundidade)
+                //  - anti-clickjacking via frame-ancestors 'none' + X-Frame-Options DENY (M-02)
+                //  - HSTS 1 ano com includeSubDomains (M-05)
+                //  - Content-Security-Policy (M-01): elimina o alerta ZAP 10038 e adiciona
+                //    contenção de XSS. É uma API JSON, então em produção (Swagger desligado por
+                //    SPRINGDOC_ENABLED=false) o navegador não deve carregar nenhum recurso a
+                //    partir das respostas. As diretivas 'unsafe-inline' em script/style existem
+                //    apenas para a UI do Swagger (ambiente de dev), que injeta assets inline.
+                //  - Referrer-Policy estrita.
                 .headers(headers -> headers
                         .contentTypeOptions(Customizer.withDefaults())
                         .frameOptions(frame -> frame.deny())
+                        .contentSecurityPolicy(csp -> csp.policyDirectives(
+                                "default-src 'self'; "
+                                        + "base-uri 'self'; "
+                                        + "form-action 'self'; "
+                                        + "frame-ancestors 'none'; "
+                                        + "object-src 'none'; "
+                                        + "script-src 'self' 'unsafe-inline'; "
+                                        + "style-src 'self' 'unsafe-inline'; "
+                                        + "img-src 'self' data:; "
+                                        + "font-src 'self' data:; "
+                                        + "connect-src 'self'"))
                         .httpStrictTransportSecurity(hsts -> hsts
                                 .includeSubDomains(true)
                                 .maxAgeInSeconds(31536000))
@@ -66,6 +83,8 @@ public class SecurityConfig {
                                 "/api/v1/portal/eventos",
                                 "/api/v1/portal/eventos/**",
                                 "/api/v1/portal/status",
+                                "/api/v1/portal/metricas",
+                                "/api/v1/portal/contatos",
                                 "/api/v1/portal/arquivos/**",
                                 "/api/v1/portal/categorias",
                                 "/api/v1/portal/categorias/**",
@@ -75,11 +94,16 @@ public class SecurityConfig {
                                 "/api/v1/portal/respostas/**").permitAll()
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/portal/eventos/**",
+                                "/api/v1/portal/contato",
                                 "/api/v1/portal/auth/registro",
                                 "/api/v1/portal/respostas/**").permitAll()
                         .requestMatchers("/api/v1/portal/**").hasRole("PARTICIPANTE")
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/api-docs/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/error").permitAll()
+                        // Health check do container/orquestrador. Apenas /actuator/health é
+                        // liberado (sem detalhes — ver application.properties); nenhum outro
+                        // endpoint de management é exposto.
+                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         // Autorizacao fina por permissao (modulo.acao) e feita nos controllers
                         // via @PreAuthorize("@authz.pode('...')"). Aqui basta exigir autenticacao.
                         .requestMatchers("/api/v1/**").authenticated()

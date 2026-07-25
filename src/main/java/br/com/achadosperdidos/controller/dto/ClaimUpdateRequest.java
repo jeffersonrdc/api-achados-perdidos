@@ -18,6 +18,7 @@ public record ClaimUpdateRequest(
         String dsRelacaoContatoConfianca,
         String nmObjeto,
         String dsObjeto,
+        String dsWallpaper,
         String nmMarca,
         String nmModelo,
         String nmCor,
