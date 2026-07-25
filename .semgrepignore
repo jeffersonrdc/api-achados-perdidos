@@ -1,0 +1,10 @@
+# Documentação e artefatos — não são código executável.
+# Evita falso positivo de regras Java/Spring (ex.: actuator em HTML).
+docs/
+
+# Artefatos locais / gerados
+target/
+*.log
+.env
+application-local.properties
+arquivos/

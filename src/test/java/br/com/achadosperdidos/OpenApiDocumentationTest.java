@@ -4,6 +4,7 @@ import br.com.achadosperdidos.support.IntegrationTestBase;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
 import java.util.Set;
@@ -20,6 +21,7 @@ class OpenApiDocumentationTest extends IntegrationTestBase {
             Set.of("get", "post", "put", "patch", "delete", "options", "head");
 
     @Autowired
+    @Qualifier("requestMappingHandlerMapping")
     private RequestMappingHandlerMapping requestMappings;
 
     @Test
