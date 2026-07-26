@@ -75,8 +75,8 @@ class LocalIntegrationTest extends IntegrationTestBase {
                         .param("idEvento", idEvento)
                         .header("Authorization", bearer(adminToken)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].nmLocal").value("Posto Teste Atualizado"))
-                .andExpect(jsonPath("$[0].fgAtivo").value(true));
+                .andExpect(jsonPath("$.content[0].nmLocal").value("Posto Teste Atualizado"))
+                .andExpect(jsonPath("$.content[0].fgAtivo").value(true));
     }
 
     @Test
