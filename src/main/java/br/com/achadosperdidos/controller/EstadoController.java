@@ -3,6 +3,7 @@ package br.com.achadosperdidos.controller;
 import br.com.achadosperdidos.controller.dto.EstadoCreateRequest;
 import br.com.achadosperdidos.controller.dto.EstadoResponse;
 import br.com.achadosperdidos.controller.dto.EstadoUpdateRequest;
+import br.com.achadosperdidos.pagination.ApiPage;
 import br.com.achadosperdidos.service.EstadoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -13,8 +14,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/estados")
@@ -27,11 +26,14 @@ public class EstadoController {
 
     @GetMapping
     @PreAuthorize("@authz.pode('categoria.listar')")
-    @Operation(summary = "Listar estados de conservação")
-    public List<EstadoResponse> findAll(
+    @Operation(summary = "Listar estados de conservação (paginado)")
+    public ApiPage<EstadoResponse> findAll(
             @Parameter(description = "Inclui estados inativos quando `true`")
-            @RequestParam(required = false, defaultValue = "false") boolean incluirInativos) {
-        return estadoService.findAll(incluirInativos);
+            @RequestParam(required = false, defaultValue = "false") boolean incluirInativos,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String q) {
+        return estadoService.findAll(incluirInativos, page, limit, q);
     }
 
     @PostMapping

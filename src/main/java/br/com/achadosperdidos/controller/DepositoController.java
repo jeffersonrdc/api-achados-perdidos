@@ -5,6 +5,7 @@ import br.com.achadosperdidos.controller.dto.DepositoResponse;
 import br.com.achadosperdidos.controller.dto.EstoqueEnderecoCreateRequest;
 import br.com.achadosperdidos.controller.dto.EstoqueEnderecoResponse;
 import br.com.achadosperdidos.controller.dto.EstoqueEnderecoUpdateRequest;
+import br.com.achadosperdidos.pagination.ApiPage;
 import br.com.achadosperdidos.service.DepositoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -58,15 +59,18 @@ public class DepositoController {
 
     @GetMapping("/{idDeposito}/enderecos/itens")
     @PreAuthorize("@authz.pode('deposito.listar')")
-    @Operation(summary = "Listar endereços (admin)",
+    @Operation(summary = "Listar endereços (admin, paginado)",
             description = "Listagem completa para a tela /logistica-fisica.")
-    public List<EstoqueEnderecoResponse> enderecosAdmin(
+    public ApiPage<EstoqueEnderecoResponse> enderecosAdmin(
             @Parameter(description = "ID assinado do depósito") @PathVariable String idDeposito,
             @Parameter(description = "Nível obrigatório da hierarquia", required = true) @RequestParam String nivel,
             @Parameter(description = "Inclui endereços inativos quando `true`")
             @RequestParam(required = false, defaultValue = "false") boolean incluirInativos,
-            @Parameter(description = "ID assinado do endereço pai") @RequestParam(required = false) String idPai) {
-        return depositoService.listarEnderecosAdmin(idDeposito, nivel, incluirInativos, idPai);
+            @Parameter(description = "ID assinado do endereço pai") @RequestParam(required = false) String idPai,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String q) {
+        return depositoService.listarEnderecosAdmin(idDeposito, nivel, incluirInativos, idPai, page, limit, q);
     }
 
     @PostMapping("/{idDeposito}/enderecos")

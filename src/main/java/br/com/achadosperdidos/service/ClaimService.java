@@ -244,17 +244,34 @@ public class ClaimService {
     }
 
     @Transactional(readOnly = true)
-    public br.com.achadosperdidos.controller.dto.ClaimResumoResponse resumo(String idEvento, String tipo) {
+    public br.com.achadosperdidos.controller.dto.ClaimResumoResponse resumo(String idEvento, String tipo, String data) {
         Long ev = idCodec.decodeEventoId(idEvento);
         String tipoNorm = (tipo != null && !tipo.isBlank()) ? normalizarTipo(tipo) : null;
-        long total = claimRepository.countByEventoAndTipo(ev, tipoNorm);
-        long abertos = claimRepository.countByEventoTipoAndStatus(
-                ev, tipoNorm, List.of("Claim Aberto", MatchService.STATUS_AGUARDANDO_MATCH));
-        long emAnalise = claimRepository.countByEventoTipoAndStatus(
-                ev, tipoNorm, List.of("Claim em Análise", "Claim Aguardando Info", MatchService.STATUS_MATCH));
-        long aprovados = claimRepository.countByEventoTipoAndStatus(ev, tipoNorm, List.of("Claim Aprovado"));
-        long rejeitados = claimRepository.countByEventoTipoAndStatus(
-                ev, tipoNorm, List.of("Claim Rejeitado", "Claim Cancelado"));
+        LocalDate dia = parseData(data);
+
+        Specification<Claim> base = (root, query, cb) -> {
+            List<Predicate> ps = new ArrayList<>();
+            ps.add(cb.isFalse(root.get("fgExcluido")));
+            ps.add(cb.equal(root.get("evento").get("id"), ev));
+            if (tipoNorm != null) ps.add(cb.equal(root.get("tpClaim"), tipoNorm));
+            if (dia != null) {
+                ps.add(cb.between(root.get("dtCadastro"),
+                        dia.atStartOfDay(), dia.atTime(LocalTime.MAX)));
+            }
+            return cb.and(ps.toArray(new Predicate[0]));
+        };
+
+        long total = claimRepository.count(base);
+        long abertos = claimRepository.count(base.and((root, query, cb) ->
+                root.get("status").get("nmStatus").in(
+                        List.of("Claim Aberto", MatchService.STATUS_AGUARDANDO_MATCH))));
+        long emAnalise = claimRepository.count(base.and((root, query, cb) ->
+                root.get("status").get("nmStatus").in(
+                        List.of("Claim em Análise", "Claim Aguardando Info", MatchService.STATUS_MATCH))));
+        long aprovados = claimRepository.count(base.and((root, query, cb) ->
+                cb.equal(root.get("status").get("nmStatus"), "Claim Aprovado")));
+        long rejeitados = claimRepository.count(base.and((root, query, cb) ->
+                root.get("status").get("nmStatus").in(List.of("Claim Rejeitado", "Claim Cancelado"))));
         return new br.com.achadosperdidos.controller.dto.ClaimResumoResponse(total, abertos, emAnalise, aprovados, rejeitados);
     }
 

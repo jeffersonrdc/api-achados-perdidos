@@ -290,15 +290,33 @@ public class WorkflowService {
     }
 
     @Transactional(readOnly = true)
-    public MovimentacaoResumoResponse resumoMovimentacoes(String idEvento) {
+    public MovimentacaoResumoResponse resumoMovimentacoes(String idEvento, String data) {
         Long ev = idCodec.decodeEventoId(idEvento);
-        List<MovimentacaoResumoResponse.TipoQt> porTipo = itemMovimentacaoRepository.contagemPorTipo(ev).stream()
+        LocalDate dia = parseData(data);
+        LocalDateTime inicio = dia != null ? dia.atStartOfDay() : null;
+        LocalDateTime fim = dia != null ? dia.plusDays(1).atStartOfDay() : null;
+
+        List<MovimentacaoResumoResponse.TipoQt> porTipo = itemMovimentacaoRepository
+                .contagemPorTipo(ev, inicio, fim).stream()
                 .map(r -> new MovimentacaoResumoResponse.TipoQt(
                         r[0] != null ? r[0].toString() : "OUTROS", ((Number) r[1]).longValue()))
                 .toList();
         long total = porTipo.stream().mapToLong(MovimentacaoResumoResponse.TipoQt::qt).sum();
-        long transferencias = itemMovimentacaoRepository.countByItem_Evento_IdAndFgExcluidoFalseAndTpMovimento(ev, "TRANSFERENCIA");
-        long armazenamentos = itemMovimentacaoRepository.countByItem_Evento_IdAndFgExcluidoFalseAndTpMovimento(ev, "ARMAZENAMENTO");
+
+        Specification<ItemMovimentacao> base = (root, query, cb) -> {
+            List<Predicate> ps = new ArrayList<>();
+            ps.add(cb.isFalse(root.get("fgExcluido")));
+            ps.add(cb.equal(root.get("item").get("evento").get("id"), ev));
+            if (inicio != null) {
+                ps.add(cb.greaterThanOrEqualTo(root.get("dtMovimento"), inicio));
+                ps.add(cb.lessThan(root.get("dtMovimento"), fim));
+            }
+            return cb.and(ps.toArray(new Predicate[0]));
+        };
+        long transferencias = itemMovimentacaoRepository.count(base.and((root, query, cb) ->
+                cb.equal(root.get("tpMovimento"), "TRANSFERENCIA")));
+        long armazenamentos = itemMovimentacaoRepository.count(base.and((root, query, cb) ->
+                cb.equal(root.get("tpMovimento"), "ARMAZENAMENTO")));
         long outros = total - transferencias - armazenamentos;
         return new MovimentacaoResumoResponse(total, transferencias, armazenamentos, outros, porTipo);
     }

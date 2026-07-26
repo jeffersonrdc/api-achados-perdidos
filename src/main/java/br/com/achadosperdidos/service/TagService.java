@@ -6,12 +6,21 @@ import br.com.achadosperdidos.controller.dto.TagUpdateRequest;
 import br.com.achadosperdidos.entity.Categoria;
 import br.com.achadosperdidos.entity.Tag;
 import br.com.achadosperdidos.exception.RecursoNaoEncontradoException;
+import br.com.achadosperdidos.pagination.ApiPage;
+import br.com.achadosperdidos.pagination.PaginationMeta;
+import br.com.achadosperdidos.pagination.PaginationParams;
 import br.com.achadosperdidos.repository.TagRepository;
 import br.com.achadosperdidos.security.SignedResourceIdCodec;
+import jakarta.persistence.criteria.Predicate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -29,6 +38,7 @@ public class TagService {
         this.auditoriaContext = auditoriaContext;
     }
 
+    /** Lista completa — usado pelo portal. */
     @Transactional(readOnly = true)
     public List<TagResponse> findAll(boolean incluirInativos, String idSubcategoria) {
         List<Tag> lista;
@@ -43,6 +53,32 @@ public class TagService {
                     : tagRepository.findByFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAscNmTagAsc();
         }
         return lista.stream().map(this::toResponse).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public ApiPage<TagResponse> findAll(boolean incluirInativos, String idSubcategoria,
+                                        Integer page, Integer limit, String q) {
+        int p = PaginationParams.resolvePage(page);
+        int l = PaginationParams.resolveLimit(limit);
+        Long subId = (idSubcategoria != null && !idSubcategoria.isBlank())
+                ? idCodec.decodeCategoriaId(idSubcategoria) : null;
+        Specification<Tag> spec = (root, query, cb) -> {
+            List<Predicate> ps = new ArrayList<>();
+            ps.add(cb.isFalse(root.get("fgExcluido")));
+            if (!incluirInativos) ps.add(cb.isTrue(root.get("fgAtivo")));
+            if (subId != null) ps.add(cb.equal(root.get("subcategoria").get("id"), subId));
+            if (q != null && !q.isBlank()) {
+                String like = "%" + q.trim().toLowerCase() + "%";
+                ps.add(cb.or(
+                        cb.like(cb.lower(root.get("nmTag")), like),
+                        cb.like(cb.lower(root.get("dsTag")), like)));
+            }
+            return cb.and(ps.toArray(new Predicate[0]));
+        };
+        Page<Tag> result = tagRepository.findAll(spec,
+                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.ASC, "orOrdem").and(Sort.by(Sort.Direction.ASC, "nmTag"))));
+        var content = result.getContent().stream().map(this::toResponse).toList();
+        return ApiPage.paged(content, new PaginationMeta(p, l, result.getTotalElements(), result.getTotalPages()));
     }
 
     @Transactional

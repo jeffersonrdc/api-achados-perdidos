@@ -3,12 +3,13 @@ package br.com.achadosperdidos.repository;
 import br.com.achadosperdidos.entity.EstoqueEndereco;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
 @Repository
-public interface EstoqueEnderecoRepository extends JpaRepository<EstoqueEndereco, Long> {
+public interface EstoqueEnderecoRepository extends JpaRepository<EstoqueEndereco, Long>, JpaSpecificationExecutor<EstoqueEndereco> {
     List<EstoqueEndereco> findByDeposito_IdAndTpNivelAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAscNmEnderecoAsc(
             Long depositoId, String tpNivel);
 

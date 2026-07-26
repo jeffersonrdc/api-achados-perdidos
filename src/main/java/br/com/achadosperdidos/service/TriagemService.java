@@ -239,17 +239,18 @@ public class TriagemService {
 
     /** KPIs/cards da tela de triagem. */
     @Transactional(readOnly = true)
-    public TriagemResumoResponse resumo(String idEvento) {
+    public TriagemResumoResponse resumo(String idEvento, String data) {
         Long ev = idCodec.decodeEventoId(idEvento);
-        long estoquePendente = itemRepository.countEstoquePendenteTriagem(ev);
-        long aguardando = itemRepository.countByEvento_IdAndFgExcluidoFalseAndStatus_NmStatus(ev, "Aguardando triagem")
-                + estoquePendente;
-        long emAnalise = itemRepository.countByEvento_IdAndFgExcluidoFalseAndStatus_NmStatus(ev, "Em Análise");
-        long emTriagem = itemRepository.countByEvento_IdAndFgExcluidoFalseAndStatus_NmStatus(ev, "Em triagem");
-        long total = itemRepository.countNaFilaTriagem(ev, STATUS_FILA_LEGADO);
-        long sensiveis = itemRepository.countSensiveisNaFila(ev, STATUS_FILA_LEGADO);
-        long categorias = itemRepository.countCategoriasDistintas(ev, STATUS_FILA_LEGADO);
-        List<TriagemResumoResponse.CategoriaQt> porCategoria = itemRepository.contagemPorCategoria(ev, STATUS_FILA_LEGADO)
+        LocalDate dia = parseData(data);
+        long estoquePendente = itemRepository.countEstoquePendenteTriagem(ev, dia);
+        long aguardando = itemRepository.count(
+                filtros(ev, null, null, null, null, "Aguardando triagem", dia)) + estoquePendente;
+        long emAnalise = itemRepository.count(filtros(ev, null, null, null, null, "Em Análise", dia));
+        long emTriagem = itemRepository.count(filtros(ev, null, null, null, null, "Em triagem", dia));
+        long total = itemRepository.countNaFilaTriagem(ev, STATUS_FILA_LEGADO, dia);
+        long sensiveis = itemRepository.countSensiveisNaFila(ev, STATUS_FILA_LEGADO, dia);
+        long categorias = itemRepository.countCategoriasDistintas(ev, STATUS_FILA_LEGADO, dia);
+        List<TriagemResumoResponse.CategoriaQt> porCategoria = itemRepository.contagemPorCategoria(ev, STATUS_FILA_LEGADO, dia)
                 .stream()
                 .map(r -> new TriagemResumoResponse.CategoriaQt(
                         r[0] != null ? r[0].toString() : "Outros",

@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 
@@ -86,6 +87,7 @@ public interface ItemRepository extends JpaRepository<Item, Long>, JpaSpecificat
     @Query("""
             SELECT COUNT(DISTINCT i.categoria.id) FROM Item i
              WHERE i.evento.id = :eventoId AND i.fgExcluido = false
+               AND (:dia IS NULL OR i.dtEncontrado = :dia)
                AND (
                  i.status.nmStatus IN :statuses
                  OR (
@@ -96,11 +98,14 @@ public interface ItemRepository extends JpaRepository<Item, Long>, JpaSpecificat
                    )
                  )
                )""")
-    long countCategoriasDistintas(@Param("eventoId") Long eventoId, @Param("statuses") Collection<String> statuses);
+    long countCategoriasDistintas(@Param("eventoId") Long eventoId,
+                                  @Param("statuses") Collection<String> statuses,
+                                  @Param("dia") LocalDate dia);
 
     @Query("""
             SELECT i.categoria.nmCategoria AS nome, COUNT(i) AS qt FROM Item i
              WHERE i.evento.id = :eventoId AND i.fgExcluido = false
+               AND (:dia IS NULL OR i.dtEncontrado = :dia)
                AND (
                  i.status.nmStatus IN :statuses
                  OR (
@@ -112,22 +117,26 @@ public interface ItemRepository extends JpaRepository<Item, Long>, JpaSpecificat
                  )
                )
              GROUP BY i.categoria.nmCategoria ORDER BY qt DESC""")
-    List<Object[]> contagemPorCategoria(@Param("eventoId") Long eventoId, @Param("statuses") Collection<String> statuses);
+    List<Object[]> contagemPorCategoria(@Param("eventoId") Long eventoId,
+                                        @Param("statuses") Collection<String> statuses,
+                                        @Param("dia") LocalDate dia);
 
     /** Itens já no estoque que ainda não tiveram a triagem concluída (aparecem na fila). */
     @Query("""
             SELECT COUNT(i) FROM Item i
              WHERE i.evento.id = :eventoId AND i.fgExcluido = false
                AND i.status.nmStatus = 'Em estoque'
+               AND (:dia IS NULL OR i.dtEncontrado = :dia)
                AND NOT EXISTS (
                  SELECT 1 FROM Triagem t
                   WHERE t.item.id = i.id AND t.fgExcluido = false AND t.tpStatus = 'CONCLUIDA'
                )""")
-    long countEstoquePendenteTriagem(@Param("eventoId") Long eventoId);
+    long countEstoquePendenteTriagem(@Param("eventoId") Long eventoId, @Param("dia") LocalDate dia);
 
     @Query("""
             SELECT COUNT(i) FROM Item i
              WHERE i.evento.id = :eventoId AND i.fgExcluido = false AND i.fgSensivel = true
+               AND (:dia IS NULL OR i.dtEncontrado = :dia)
                AND (
                  i.status.nmStatus IN :statuses
                  OR (
@@ -138,11 +147,14 @@ public interface ItemRepository extends JpaRepository<Item, Long>, JpaSpecificat
                    )
                  )
                )""")
-    long countSensiveisNaFila(@Param("eventoId") Long eventoId, @Param("statuses") Collection<String> statuses);
+    long countSensiveisNaFila(@Param("eventoId") Long eventoId,
+                              @Param("statuses") Collection<String> statuses,
+                              @Param("dia") LocalDate dia);
 
     @Query("""
             SELECT COUNT(i) FROM Item i
              WHERE i.evento.id = :eventoId AND i.fgExcluido = false
+               AND (:dia IS NULL OR i.dtEncontrado = :dia)
                AND (
                  i.status.nmStatus IN :statuses
                  OR (
@@ -153,7 +165,9 @@ public interface ItemRepository extends JpaRepository<Item, Long>, JpaSpecificat
                    )
                  )
                )""")
-    long countNaFilaTriagem(@Param("eventoId") Long eventoId, @Param("statuses") Collection<String> statuses);
+    long countNaFilaTriagem(@Param("eventoId") Long eventoId,
+                            @Param("statuses") Collection<String> statuses,
+                            @Param("dia") LocalDate dia);
 
     // ---- Transferência: itens disponíveis em um local ----
     @EntityGraph(attributePaths = {"categoria", "localAtual"})
@@ -169,6 +183,9 @@ public interface ItemRepository extends JpaRepository<Item, Long>, JpaSpecificat
             SELECT COALESCE(d.nmDeposito, 'Sem localização') AS nome, COUNT(i) AS qt
               FROM Item i LEFT JOIN i.localizacao l LEFT JOIN l.deposito d
              WHERE i.evento.id = :eventoId AND i.fgExcluido = false AND i.status.nmStatus = :status
+               AND (:dia IS NULL OR i.dtEncontrado = :dia)
              GROUP BY d.nmDeposito ORDER BY qt DESC""")
-    List<Object[]> contagemEstoquePorDeposito(@Param("eventoId") Long eventoId, @Param("status") String status);
+    List<Object[]> contagemEstoquePorDeposito(@Param("eventoId") Long eventoId,
+                                              @Param("status") String status,
+                                              @Param("dia") LocalDate dia);
 }

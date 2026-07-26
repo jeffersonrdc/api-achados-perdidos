@@ -1,6 +1,7 @@
 package br.com.achadosperdidos.controller;
 
 import br.com.achadosperdidos.controller.dto.*;
+import br.com.achadosperdidos.pagination.ApiPage;
 import br.com.achadosperdidos.service.CatalogoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -50,12 +51,15 @@ public class CatalogoController {
 
     @GetMapping("/marcas/itens")
     @PreAuthorize("@authz.pode('categoria.listar')")
-    @Operation(summary = "Listar marcas (admin)",
+    @Operation(summary = "Listar marcas (admin, paginado)",
             description = "Listagem completa para a tela /caracteristicas.")
-    public List<MarcaResponse> marcasAdmin(
+    public ApiPage<MarcaResponse> marcasAdmin(
             @Parameter(description = "Inclui marcas inativas quando `true`")
-            @RequestParam(required = false, defaultValue = "false") boolean incluirInativos) {
-        return catalogoService.listarMarcasAdmin(incluirInativos);
+            @RequestParam(required = false, defaultValue = "false") boolean incluirInativos,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String q) {
+        return catalogoService.listarMarcasAdmin(incluirInativos, page, limit, q);
     }
 
     @PostMapping("/marcas")
@@ -87,13 +91,16 @@ public class CatalogoController {
 
     @GetMapping("/modelos/itens")
     @PreAuthorize("@authz.pode('categoria.listar')")
-    @Operation(summary = "Listar modelos (admin)",
+    @Operation(summary = "Listar modelos (admin, paginado)",
             description = "Listagem completa; opcionalmente filtrada por marca.")
-    public List<ModeloResponse> modelosAdmin(
+    public ApiPage<ModeloResponse> modelosAdmin(
             @Parameter(description = "Inclui modelos inativos quando `true`")
             @RequestParam(required = false, defaultValue = "false") boolean incluirInativos,
-            @Parameter(description = "ID assinado da marca") @RequestParam(required = false) String idMarca) {
-        return catalogoService.listarModelosAdmin(incluirInativos, idMarca);
+            @Parameter(description = "ID assinado da marca") @RequestParam(required = false) String idMarca,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String q) {
+        return catalogoService.listarModelosAdmin(incluirInativos, idMarca, page, limit, q);
     }
 
     @PostMapping("/modelos")
@@ -125,12 +132,15 @@ public class CatalogoController {
 
     @GetMapping("/cores/itens")
     @PreAuthorize("@authz.pode('categoria.listar')")
-    @Operation(summary = "Listar cores (admin)",
+    @Operation(summary = "Listar cores (admin, paginado)",
             description = "Listagem completa para a tela /caracteristicas.")
-    public List<CorResponse> coresAdmin(
+    public ApiPage<CorResponse> coresAdmin(
             @Parameter(description = "Inclui cores inativas quando `true`")
-            @RequestParam(required = false, defaultValue = "false") boolean incluirInativos) {
-        return catalogoService.listarCoresAdmin(incluirInativos);
+            @RequestParam(required = false, defaultValue = "false") boolean incluirInativos,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String q) {
+        return catalogoService.listarCoresAdmin(incluirInativos, page, limit, q);
     }
 
     @PostMapping("/cores")

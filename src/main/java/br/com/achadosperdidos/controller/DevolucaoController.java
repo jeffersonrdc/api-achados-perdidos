@@ -54,8 +54,10 @@ public class DevolucaoController {
     @PreAuthorize("@authz.pode('devolucao.listar')")
     @Operation(summary = "Resumo/cards das devoluções do evento")
     public br.com.achadosperdidos.controller.dto.DevolucaoResumoResponse resumo(
-            @Parameter(description = "ID assinado do evento") @RequestParam String idEvento) {
-        return devolucaoService.resumo(idEvento);
+            @Parameter(description = "ID assinado do evento") @RequestParam String idEvento,
+            @Parameter(description = "Data da devolução (yyyy-MM-dd ou dd/MM/yyyy); sem valor = totais do evento")
+            @RequestParam(required = false) String data) {
+        return devolucaoService.resumo(idEvento, data);
     }
 
     @GetMapping("/filtros")

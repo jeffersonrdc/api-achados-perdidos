@@ -5,6 +5,7 @@ import br.com.achadosperdidos.controller.dto.EventoConfiguracaoResponse;
 import br.com.achadosperdidos.controller.dto.EventoConfiguracaoUpdateRequest;
 import br.com.achadosperdidos.controller.dto.EventoResponse;
 import br.com.achadosperdidos.controller.dto.EventoUpdateRequest;
+import br.com.achadosperdidos.pagination.ApiPage;
 import br.com.achadosperdidos.service.EventoConfiguracaoService;
 import br.com.achadosperdidos.service.EventoService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -16,7 +17,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-import java.util.List;
+
 
 @RestController
 @RequestMapping("/api/v1/eventos")
@@ -36,9 +37,13 @@ public class EventoController {
         return ResponseEntity.status(HttpStatus.CREATED).body(eventoService.create(request));
     }
     @GetMapping @PreAuthorize("@authz.pode('evento.listar')")
-    @Operation(summary = "Listar eventos", description = "Por padrão retorna apenas eventos ativos.")
-    public List<EventoResponse> findAll(@RequestParam(defaultValue = "false") boolean incluirInativos) {
-        return eventoService.findAll(incluirInativos);
+    @Operation(summary = "Listar eventos (paginado)", description = "Por padrão retorna apenas eventos ativos.")
+    public ApiPage<EventoResponse> findAll(
+            @RequestParam(defaultValue = "false") boolean incluirInativos,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String q) {
+        return eventoService.findAll(incluirInativos, page, limit, q);
     }
     @GetMapping("/{id}") @PreAuthorize("@authz.pode('evento.listar')")
     @Operation(summary = "Buscar evento por ID assinado")

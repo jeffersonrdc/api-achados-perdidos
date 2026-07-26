@@ -564,7 +564,7 @@ public class PortalService {
         u.setFgAtivo(true);
         u.setFgExcluido(false);
         u = usuarioRepository.save(u);
-        return new UsuarioResponse(
+        return UsuarioResponse.of(
                 idCodec.encodeUsuarioId(u.getId()),
                 u.getNmUsuario(),
                 u.getNmLogin(),

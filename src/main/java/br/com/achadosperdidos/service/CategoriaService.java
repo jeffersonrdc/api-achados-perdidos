@@ -5,12 +5,21 @@ import br.com.achadosperdidos.controller.dto.CategoriaResponse;
 import br.com.achadosperdidos.controller.dto.CategoriaUpdateRequest;
 import br.com.achadosperdidos.entity.Categoria;
 import br.com.achadosperdidos.exception.RecursoNaoEncontradoException;
+import br.com.achadosperdidos.pagination.ApiPage;
+import br.com.achadosperdidos.pagination.PaginationMeta;
+import br.com.achadosperdidos.pagination.PaginationParams;
 import br.com.achadosperdidos.repository.CategoriaRepository;
 import br.com.achadosperdidos.security.SignedResourceIdCodec;
+import jakarta.persistence.criteria.Predicate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -31,16 +40,15 @@ public class CategoriaService {
         return categoriaRepository.findByCategoriaPaiIsNullAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc().stream().map(this::toResponse).toList();
     }
 
-    /** Lista apenas categorias-pai (topo). Subcategorias vêm por {@link #findSubcategorias}. */
+    /** Lista categorias-pai ou filhos (paginado) para o painel admin. */
     @Transactional(readOnly = true)
-    public List<CategoriaResponse> findAll(boolean incluirInativos) {
-        var lista = incluirInativos
-                ? categoriaRepository.findByCategoriaPaiIsNullAndFgExcluidoFalseOrderByOrOrdemAsc()
-                : categoriaRepository.findByCategoriaPaiIsNullAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc();
-        return lista.stream().map(this::toResponse).toList();
+    public ApiPage<CategoriaResponse> findAll(boolean incluirInativos, String idPai,
+                                              Integer page, Integer limit, String q) {
+        Long paiId = (idPai != null && !idPai.isBlank()) ? idCodec.decodeCategoriaId(idPai) : null;
+        return pageCategorias(incluirInativos, page, limit, q, paiId, paiId == null);
     }
 
-    /** Subcategorias (filhos) de uma categoria-pai. */
+    /** Subcategorias (filhos) de uma categoria-pai — usado pelo portal (lista completa). */
     @Transactional(readOnly = true)
     public List<CategoriaResponse> findSubcategorias(String idPaiToken, boolean incluirInativos) {
         Long idPai = idCodec.decodeCategoriaId(idPaiToken);
@@ -50,13 +58,38 @@ public class CategoriaService {
         return lista.stream().map(this::toResponse).toList();
     }
 
-    /** Todas as subcategorias (qualquer pai). */
+    /** Todas as subcategorias (qualquer pai), paginado. */
     @Transactional(readOnly = true)
-    public List<CategoriaResponse> findAllSubcategorias(boolean incluirInativos) {
-        var lista = incluirInativos
-                ? categoriaRepository.findByCategoriaPaiIsNotNullAndFgExcluidoFalseOrderByOrOrdemAsc()
-                : categoriaRepository.findByCategoriaPaiIsNotNullAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc();
-        return lista.stream().map(this::toResponse).toList();
+    public ApiPage<CategoriaResponse> findAllSubcategorias(boolean incluirInativos,
+                                                           Integer page, Integer limit, String q) {
+        return pageCategorias(incluirInativos, page, limit, q, null, false);
+    }
+
+    private ApiPage<CategoriaResponse> pageCategorias(boolean incluirInativos, Integer page, Integer limit,
+                                                      String q, Long paiId, boolean somentePais) {
+        int p = PaginationParams.resolvePage(page);
+        int l = PaginationParams.resolveLimit(limit);
+        Specification<Categoria> spec = (root, query, cb) -> {
+            List<Predicate> ps = new ArrayList<>();
+            ps.add(cb.isFalse(root.get("fgExcluido")));
+            if (!incluirInativos) ps.add(cb.isTrue(root.get("fgAtivo")));
+            if (somentePais) {
+                ps.add(cb.isNull(root.get("categoriaPai")));
+            } else if (paiId != null) {
+                ps.add(cb.equal(root.get("categoriaPai").get("id"), paiId));
+            } else {
+                ps.add(cb.isNotNull(root.get("categoriaPai")));
+            }
+            if (q != null && !q.isBlank()) {
+                String like = "%" + q.trim().toLowerCase() + "%";
+                ps.add(cb.like(cb.lower(root.get("nmCategoria")), like));
+            }
+            return cb.and(ps.toArray(new Predicate[0]));
+        };
+        Page<Categoria> result = categoriaRepository.findAll(spec,
+                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.ASC, "orOrdem").and(Sort.by(Sort.Direction.ASC, "nmCategoria"))));
+        var content = result.getContent().stream().map(this::toResponse).toList();
+        return ApiPage.paged(content, new PaginationMeta(p, l, result.getTotalElements(), result.getTotalPages()));
     }
 
     /** Categorias-pai ativas (entidades) para montagem de árvore. */

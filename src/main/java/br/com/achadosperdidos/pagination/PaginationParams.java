@@ -3,7 +3,7 @@ package br.com.achadosperdidos.pagination;
 public final class PaginationParams {
 
     private static final int DEFAULT_LIMIT = 20;
-    private static final int MAX_LIMIT = 100;
+    private static final int MAX_LIMIT = 200;
 
     private PaginationParams() {}
 

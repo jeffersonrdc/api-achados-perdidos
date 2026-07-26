@@ -3,6 +3,7 @@ package br.com.achadosperdidos.controller;
 import br.com.achadosperdidos.controller.dto.LocalCreateRequest;
 import br.com.achadosperdidos.controller.dto.LocalResponse;
 import br.com.achadosperdidos.controller.dto.LocalUpdateRequest;
+import br.com.achadosperdidos.pagination.ApiPage;
 import br.com.achadosperdidos.service.LocalService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -13,8 +14,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/locais")
@@ -36,10 +35,15 @@ public class LocalController {
 
     @GetMapping
     @PreAuthorize("@authz.pode('local.listar')")
-    @Operation(summary = "Listar locais do evento")
-    public List<LocalResponse> findByEvento(
-            @Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento) {
-        return localService.findByEvento(idEvento);
+    @Operation(summary = "Listar locais do evento (paginado)")
+    public ApiPage<LocalResponse> findByEvento(
+            @Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String tpLocal,
+            @RequestParam(required = false) Boolean fgAtivo) {
+        return localService.findByEvento(idEvento, page, limit, q, tpLocal, fgAtivo);
     }
 
     @GetMapping("/{id}")

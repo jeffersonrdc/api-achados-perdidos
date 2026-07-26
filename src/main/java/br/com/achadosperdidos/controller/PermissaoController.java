@@ -1,14 +1,13 @@
 package br.com.achadosperdidos.controller;
 
 import br.com.achadosperdidos.controller.dto.PermissaoResponse;
+import br.com.achadosperdidos.pagination.ApiPage;
 import br.com.achadosperdidos.service.PermissaoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/permissoes")
@@ -23,9 +22,12 @@ public class PermissaoController {
 
     @GetMapping
     @PreAuthorize("@authz.pode('permissao.listar')")
-    @Operation(summary = "Listar catálogo de permissões",
-            description = "Lista todas as permissões disponíveis para atribuição a perfis e usuários.")
-    public List<PermissaoResponse> listarCatalogo() {
-        return permissaoService.listarCatalogo();
+    @Operation(summary = "Listar catálogo de permissões (paginado)",
+            description = "Lista permissões disponíveis para atribuição a perfis e usuários.")
+    public ApiPage<PermissaoResponse> listarCatalogo(
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String q) {
+        return permissaoService.listarCatalogo(page, limit, q);
     }
 }

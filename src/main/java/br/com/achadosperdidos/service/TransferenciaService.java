@@ -133,14 +133,31 @@ public class TransferenciaService {
     }
 
     @Transactional(readOnly = true)
-    public TransferenciaResumoResponse resumo(String idEvento) {
+    public TransferenciaResumoResponse resumo(String idEvento, String data) {
         Long ev = idCodec.decodeEventoId(idEvento);
-        List<TransferenciaResumoResponse.DestinoQt> porDestino = transferenciaRepository.contagemPorDestino(ev).stream()
+        LocalDate dia = parseData(data);
+        LocalDateTime inicio = dia != null ? dia.atStartOfDay() : null;
+        LocalDateTime fim = dia != null ? dia.plusDays(1).atStartOfDay() : null;
+
+        List<TransferenciaResumoResponse.DestinoQt> porDestino = transferenciaRepository
+                .contagemPorDestino(ev, inicio, fim).stream()
                 .map(r -> new TransferenciaResumoResponse.DestinoQt(
                         r[0] != null ? r[0].toString() : "Sem origem", ((Number) r[1]).longValue()))
                 .toList();
-        long total = transferenciaRepository.countByEvento_IdAndFgExcluidoFalse(ev);
-        long concluidas = transferenciaRepository.countByEvento_IdAndFgExcluidoFalseAndTpStatus(ev, STATUS_CONCLUIDA);
+
+        Specification<Transferencia> base = (root, query, cb) -> {
+            List<Predicate> ps = new ArrayList<>();
+            ps.add(cb.isFalse(root.get("fgExcluido")));
+            ps.add(cb.equal(root.get("evento").get("id"), ev));
+            if (inicio != null) {
+                ps.add(cb.greaterThanOrEqualTo(root.get("dtTransferencia"), inicio));
+                ps.add(cb.lessThan(root.get("dtTransferencia"), fim));
+            }
+            return cb.and(ps.toArray(new Predicate[0]));
+        };
+        long total = transferenciaRepository.count(base);
+        long concluidas = transferenciaRepository.count(base.and((root, query, cb) ->
+                cb.equal(root.get("tpStatus"), STATUS_CONCLUIDA)));
         long locaisDestino = porDestino.size();
         return new TransferenciaResumoResponse(total, concluidas, total, locaisDestino, porDestino);
     }

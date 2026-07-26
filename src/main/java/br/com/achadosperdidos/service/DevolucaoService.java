@@ -199,15 +199,33 @@ public class DevolucaoService {
     }
 
     @Transactional(readOnly = true)
-    public br.com.achadosperdidos.controller.dto.DevolucaoResumoResponse resumo(String idEvento) {
+    public br.com.achadosperdidos.controller.dto.DevolucaoResumoResponse resumo(String idEvento, String data) {
         Long ev = idCodec.decodeEventoId(idEvento);
+        LocalDate dia = parseData(data);
+
+        Specification<Devolucao> base = (root, query, cb) -> {
+            List<Predicate> ps = new ArrayList<>();
+            ps.add(cb.isFalse(root.get("fgExcluido")));
+            ps.add(cb.equal(root.get("evento").get("id"), ev));
+            if (dia != null) {
+                ps.add(cb.between(root.get("dtDevolucao"),
+                        dia.atStartOfDay(), dia.atTime(LocalTime.MAX)));
+            }
+            return cb.and(ps.toArray(new Predicate[0]));
+        };
+
         return new br.com.achadosperdidos.controller.dto.DevolucaoResumoResponse(
-                devolucaoRepository.countByEvento_IdAndFgExcluidoFalse(ev),
-                devolucaoRepository.countByEvento_IdAndFgExcluidoFalseAndTpStatus(ev, "AGUARDANDO_RETIRADA"),
-                devolucaoRepository.countByEvento_IdAndFgExcluidoFalseAndTpStatus(ev, "EM_CONFERENCIA"),
-                devolucaoRepository.countByEvento_IdAndFgExcluidoFalseAndTpStatus(ev, "AGUARDANDO_ASSINATURA"),
-                devolucaoRepository.countByEvento_IdAndFgExcluidoFalseAndTpStatus(ev, "ASSINADO"),
-                devolucaoRepository.countByEvento_IdAndFgExcluidoFalseAndTpStatus(ev, "CONCLUIDO"));
+                devolucaoRepository.count(base),
+                devolucaoRepository.count(base.and((root, query, cb) ->
+                        cb.equal(root.get("tpStatus"), "AGUARDANDO_RETIRADA"))),
+                devolucaoRepository.count(base.and((root, query, cb) ->
+                        cb.equal(root.get("tpStatus"), "EM_CONFERENCIA"))),
+                devolucaoRepository.count(base.and((root, query, cb) ->
+                        cb.equal(root.get("tpStatus"), "AGUARDANDO_ASSINATURA"))),
+                devolucaoRepository.count(base.and((root, query, cb) ->
+                        cb.equal(root.get("tpStatus"), "ASSINADO"))),
+                devolucaoRepository.count(base.and((root, query, cb) ->
+                        cb.equal(root.get("tpStatus"), "CONCLUIDO"))));
     }
 
     private static final java.util.Set<String> STATUS = java.util.Set.of(

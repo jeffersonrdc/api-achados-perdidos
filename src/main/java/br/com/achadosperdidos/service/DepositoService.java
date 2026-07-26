@@ -9,14 +9,23 @@ import br.com.achadosperdidos.entity.Deposito;
 import br.com.achadosperdidos.entity.EstoqueEndereco;
 import br.com.achadosperdidos.entity.Evento;
 import br.com.achadosperdidos.exception.RecursoNaoEncontradoException;
+import br.com.achadosperdidos.pagination.ApiPage;
+import br.com.achadosperdidos.pagination.PaginationMeta;
+import br.com.achadosperdidos.pagination.PaginationParams;
 import br.com.achadosperdidos.repository.DepositoRepository;
 import br.com.achadosperdidos.repository.EstoqueEnderecoRepository;
 import br.com.achadosperdidos.repository.EventoRepository;
 import br.com.achadosperdidos.security.SignedResourceIdCodec;
+import jakarta.persistence.criteria.Predicate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -57,24 +66,33 @@ public class DepositoService {
                 .stream().map(EstoqueEndereco::getNmEndereco).toList();
     }
 
-    /** Listagem admin (objetos) para a tela /logistica-fisica. */
+    /** Listagem admin (paginada) para a tela /logistica-fisica. */
     @Transactional(readOnly = true)
-    public List<EstoqueEnderecoResponse> listarEnderecosAdmin(String idDeposito, String nivel,
-                                                             boolean incluirInativos, String idPai) {
+    public ApiPage<EstoqueEnderecoResponse> listarEnderecosAdmin(String idDeposito, String nivel,
+                                                                 boolean incluirInativos, String idPai,
+                                                                 Integer page, Integer limit, String q) {
+        int p = PaginationParams.resolvePage(page);
+        int l = PaginationParams.resolveLimit(limit);
         Long depId = idCodec.decode(SignedResourceIdCodec.Kind.DEP, idDeposito);
         String tp = normalizarNivel(nivel);
-        List<EstoqueEndereco> lista;
-        if (idPai != null && !idPai.isBlank()) {
-            Long paiId = idCodec.decodeEnderecoId(idPai);
-            lista = incluirInativos
-                    ? estoqueEnderecoRepository.findByDeposito_IdAndTpNivelAndEnderecoPai_IdAndFgExcluidoFalseOrderByOrOrdemAscNmEnderecoAsc(depId, tp, paiId)
-                    : estoqueEnderecoRepository.findByDeposito_IdAndTpNivelAndEnderecoPai_IdAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAscNmEnderecoAsc(depId, tp, paiId);
-        } else {
-            lista = incluirInativos
-                    ? estoqueEnderecoRepository.findByDeposito_IdAndTpNivelAndFgExcluidoFalseOrderByOrOrdemAscNmEnderecoAsc(depId, tp)
-                    : estoqueEnderecoRepository.findByDeposito_IdAndTpNivelAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAscNmEnderecoAsc(depId, tp);
-        }
-        return lista.stream().map(this::toEnderecoResponse).toList();
+        Long paiId = (idPai != null && !idPai.isBlank()) ? idCodec.decodeEnderecoId(idPai) : null;
+        Specification<EstoqueEndereco> spec = (root, query, cb) -> {
+            List<Predicate> ps = new ArrayList<>();
+            ps.add(cb.isFalse(root.get("fgExcluido")));
+            ps.add(cb.equal(root.get("deposito").get("id"), depId));
+            ps.add(cb.equal(root.get("tpNivel"), tp));
+            if (!incluirInativos) ps.add(cb.isTrue(root.get("fgAtivo")));
+            if (paiId != null) ps.add(cb.equal(root.get("enderecoPai").get("id"), paiId));
+            if (q != null && !q.isBlank()) {
+                String like = "%" + q.trim().toLowerCase() + "%";
+                ps.add(cb.like(cb.lower(root.get("nmEndereco")), like));
+            }
+            return cb.and(ps.toArray(new Predicate[0]));
+        };
+        Page<EstoqueEndereco> result = estoqueEnderecoRepository.findAll(spec,
+                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.ASC, "orOrdem").and(Sort.by(Sort.Direction.ASC, "nmEndereco"))));
+        var content = result.getContent().stream().map(this::toEnderecoResponse).toList();
+        return ApiPage.paged(content, new PaginationMeta(p, l, result.getTotalElements(), result.getTotalPages()));
     }
 
     @Transactional

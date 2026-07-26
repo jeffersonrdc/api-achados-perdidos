@@ -45,8 +45,11 @@ public class TriagemController {
     @GetMapping("/resumo")
     @PreAuthorize("@authz.pode('triagem.listar')")
     @Operation(summary = "Resumo da triagem do evento")
-    public TriagemResumoResponse resumo(@Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento) {
-        return triagemService.resumo(idEvento);
+    public TriagemResumoResponse resumo(
+            @Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento,
+            @Parameter(description = "Data (yyyy-MM-dd ou dd/MM/yyyy); sem valor = totais do evento")
+            @RequestParam(required = false) String data) {
+        return triagemService.resumo(idEvento, data);
     }
 
     @GetMapping("/filtros")

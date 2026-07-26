@@ -3,6 +3,7 @@ package br.com.achadosperdidos.controller;
 import br.com.achadosperdidos.controller.dto.TagCreateRequest;
 import br.com.achadosperdidos.controller.dto.TagResponse;
 import br.com.achadosperdidos.controller.dto.TagUpdateRequest;
+import br.com.achadosperdidos.pagination.ApiPage;
 import br.com.achadosperdidos.service.TagService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -14,8 +15,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-
 @RestController
 @RequestMapping("/api/v1/tags")
 @Tag(name = "Tags", description = "Tags vinculadas a subcategorias para classificação de itens.")
@@ -26,14 +25,17 @@ public class TagController {
 
     @GetMapping
     @PreAuthorize("@authz.pode('categoria.listar')")
-    @Operation(summary = "Listar tags",
+    @Operation(summary = "Listar tags (paginado)",
             description = "Opcionalmente filtra por subcategoria.")
-    public List<TagResponse> findAll(
+    public ApiPage<TagResponse> findAll(
             @Parameter(description = "Inclui tags inativas quando `true`")
             @RequestParam(required = false, defaultValue = "false") boolean incluirInativos,
             @Parameter(description = "ID assinado da subcategoria")
-            @RequestParam(required = false) String idSubcategoria) {
-        return tagService.findAll(incluirInativos, idSubcategoria);
+            @RequestParam(required = false) String idSubcategoria,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String q) {
+        return tagService.findAll(incluirInativos, idSubcategoria, page, limit, q);
     }
 
     @PostMapping

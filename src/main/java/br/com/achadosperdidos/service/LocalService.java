@@ -6,14 +6,23 @@ import br.com.achadosperdidos.controller.dto.LocalUpdateRequest;
 import br.com.achadosperdidos.entity.Evento;
 import br.com.achadosperdidos.entity.Local;
 import br.com.achadosperdidos.exception.RecursoNaoEncontradoException;
+import br.com.achadosperdidos.pagination.ApiPage;
+import br.com.achadosperdidos.pagination.PaginationMeta;
+import br.com.achadosperdidos.pagination.PaginationParams;
 import br.com.achadosperdidos.repository.EventoRepository;
 import br.com.achadosperdidos.repository.LocalRepository;
 import br.com.achadosperdidos.repository.UsuarioRepository;
 import br.com.achadosperdidos.security.SignedResourceIdCodec;
+import jakarta.persistence.criteria.Predicate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -60,10 +69,40 @@ public class LocalService {
         return toResponse(localRepository.save(l));
     }
 
+    /** Lista completa — usado pelo portal. */
     @Transactional(readOnly = true)
     public List<LocalResponse> findByEvento(String idEvento) {
         return localRepository.findByEvento_IdAndFgExcluidoFalseOrderByNmLocalAsc(idCodec.decodeEventoId(idEvento))
                 .stream().map(this::toResponse).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public ApiPage<LocalResponse> findByEvento(String idEvento, Integer page, Integer limit,
+                                               String q, String tpLocal, Boolean fgAtivo) {
+        int p = PaginationParams.resolvePage(page);
+        int l = PaginationParams.resolveLimit(limit);
+        Long eventoId = idCodec.decodeEventoId(idEvento);
+        Specification<Local> spec = (root, query, cb) -> {
+            List<Predicate> ps = new ArrayList<>();
+            ps.add(cb.isFalse(root.get("fgExcluido")));
+            ps.add(cb.equal(root.get("evento").get("id"), eventoId));
+            if (tpLocal != null && !tpLocal.isBlank()) {
+                ps.add(cb.equal(root.get("tpLocal"), tpLocal.trim().toUpperCase()));
+            }
+            if (fgAtivo != null) ps.add(cb.equal(root.get("fgAtivo"), fgAtivo));
+            if (q != null && !q.isBlank()) {
+                String like = "%" + q.trim().toLowerCase() + "%";
+                ps.add(cb.or(
+                        cb.like(cb.lower(root.get("nmLocal")), like),
+                        cb.like(cb.lower(root.get("dsObservacao")), like),
+                        cb.like(cb.lower(root.get("nmHorario")), like)));
+            }
+            return cb.and(ps.toArray(new Predicate[0]));
+        };
+        Page<Local> result = localRepository.findAll(spec,
+                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.ASC, "nmLocal")));
+        var content = result.getContent().stream().map(this::toResponse).toList();
+        return ApiPage.paged(content, new PaginationMeta(p, l, result.getTotalElements(), result.getTotalPages()));
     }
 
     @Transactional(readOnly = true)

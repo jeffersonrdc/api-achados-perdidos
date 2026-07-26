@@ -3,6 +3,7 @@ package br.com.achadosperdidos.controller;
 import br.com.achadosperdidos.controller.dto.CategoriaCreateRequest;
 import br.com.achadosperdidos.controller.dto.CategoriaResponse;
 import br.com.achadosperdidos.controller.dto.CategoriaUpdateRequest;
+import br.com.achadosperdidos.pagination.ApiPage;
 import br.com.achadosperdidos.service.CategoriaService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -13,7 +14,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/categorias")
@@ -25,26 +25,30 @@ public class CategoriaController {
 
     @GetMapping
     @PreAuthorize("@authz.pode('categoria.listar')")
-    @Operation(summary = "Listar categorias raiz ou filhos",
+    @Operation(summary = "Listar categorias raiz ou filhos (paginado)",
             description = "Sem `idPai` retorna apenas categorias-pai. Com `idPai` retorna as subcategorias desse pai.")
-    public List<CategoriaResponse> findAll(
+    public ApiPage<CategoriaResponse> findAll(
             @Parameter(description = "Inclui categorias inativas quando `true`")
             @RequestParam(required = false, defaultValue = "false") boolean incluirInativos,
             @Parameter(description = "ID assinado da categoria-pai; quando informado, lista filhos")
-            @RequestParam(required = false) String idPai) {
-        return (idPai != null && !idPai.isBlank())
-                ? categoriaService.findSubcategorias(idPai, incluirInativos)
-                : categoriaService.findAll(incluirInativos);
+            @RequestParam(required = false) String idPai,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String q) {
+        return categoriaService.findAll(incluirInativos, idPai, page, limit, q);
     }
 
     @GetMapping("/subcategorias")
     @PreAuthorize("@authz.pode('categoria.listar')")
-    @Operation(summary = "Listar todas as subcategorias",
+    @Operation(summary = "Listar todas as subcategorias (paginado)",
             description = "Retorna subcategorias de qualquer pai — usado na tela /caracteristicas.")
-    public List<CategoriaResponse> findAllSubcategorias(
+    public ApiPage<CategoriaResponse> findAllSubcategorias(
             @Parameter(description = "Inclui subcategorias inativas quando `true`")
-            @RequestParam(required = false, defaultValue = "false") boolean incluirInativos) {
-        return categoriaService.findAllSubcategorias(incluirInativos);
+            @RequestParam(required = false, defaultValue = "false") boolean incluirInativos,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String q) {
+        return categoriaService.findAllSubcategorias(incluirInativos, page, limit, q);
     }
 
     @GetMapping("/{id}")

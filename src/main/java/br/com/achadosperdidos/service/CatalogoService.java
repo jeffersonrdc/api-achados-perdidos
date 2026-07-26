@@ -5,14 +5,23 @@ import br.com.achadosperdidos.entity.Cor;
 import br.com.achadosperdidos.entity.Marca;
 import br.com.achadosperdidos.entity.Modelo;
 import br.com.achadosperdidos.exception.RecursoNaoEncontradoException;
+import br.com.achadosperdidos.pagination.ApiPage;
+import br.com.achadosperdidos.pagination.PaginationMeta;
+import br.com.achadosperdidos.pagination.PaginationParams;
 import br.com.achadosperdidos.repository.CorRepository;
 import br.com.achadosperdidos.repository.MarcaRepository;
 import br.com.achadosperdidos.repository.ModeloRepository;
 import br.com.achadosperdidos.security.SignedResourceIdCodec;
+import jakarta.persistence.criteria.Predicate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -63,11 +72,14 @@ public class CatalogoService {
     // ---- Marcas (CRUD) ----
 
     @Transactional(readOnly = true)
-    public List<MarcaResponse> listarMarcasAdmin(boolean incluirInativos) {
-        var lista = incluirInativos
-                ? marcaRepository.findByFgExcluidoFalseOrderByOrOrdemAscNmMarcaAsc()
-                : marcaRepository.findByFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAscNmMarcaAsc();
-        return lista.stream().map(this::toMarca).toList();
+    public ApiPage<MarcaResponse> listarMarcasAdmin(boolean incluirInativos, Integer page, Integer limit, String q) {
+        int p = PaginationParams.resolvePage(page);
+        int l = PaginationParams.resolveLimit(limit);
+        Specification<Marca> spec = catalogoSpec(incluirInativos, q, "nmMarca");
+        Page<Marca> result = marcaRepository.findAll(spec,
+                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.ASC, "orOrdem").and(Sort.by(Sort.Direction.ASC, "nmMarca"))));
+        var content = result.getContent().stream().map(this::toMarca).toList();
+        return ApiPage.paged(content, new PaginationMeta(p, l, result.getTotalElements(), result.getTotalPages()));
     }
 
     @Transactional
@@ -116,19 +128,26 @@ public class CatalogoService {
     // ---- Modelos (CRUD) ----
 
     @Transactional(readOnly = true)
-    public List<ModeloResponse> listarModelosAdmin(boolean incluirInativos, String idMarca) {
-        List<Modelo> lista;
-        if (idMarca != null && !idMarca.isBlank()) {
-            Long mid = idCodec.decodeMarcaId(idMarca);
-            lista = incluirInativos
-                    ? modeloRepository.findByMarca_IdAndFgExcluidoFalseOrderByOrOrdemAscNmModeloAsc(mid)
-                    : modeloRepository.findByMarca_IdAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAscNmModeloAsc(mid);
-        } else {
-            lista = incluirInativos
-                    ? modeloRepository.findByFgExcluidoFalseOrderByOrOrdemAscNmModeloAsc()
-                    : modeloRepository.findByFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAscNmModeloAsc();
-        }
-        return lista.stream().map(this::toModelo).toList();
+    public ApiPage<ModeloResponse> listarModelosAdmin(boolean incluirInativos, String idMarca,
+                                                      Integer page, Integer limit, String q) {
+        int p = PaginationParams.resolvePage(page);
+        int l = PaginationParams.resolveLimit(limit);
+        Long marcaId = (idMarca != null && !idMarca.isBlank()) ? idCodec.decodeMarcaId(idMarca) : null;
+        Specification<Modelo> spec = (root, query, cb) -> {
+            List<Predicate> ps = new ArrayList<>();
+            ps.add(cb.isFalse(root.get("fgExcluido")));
+            if (!incluirInativos) ps.add(cb.isTrue(root.get("fgAtivo")));
+            if (marcaId != null) ps.add(cb.equal(root.get("marca").get("id"), marcaId));
+            if (q != null && !q.isBlank()) {
+                String like = "%" + q.trim().toLowerCase() + "%";
+                ps.add(cb.like(cb.lower(root.get("nmModelo")), like));
+            }
+            return cb.and(ps.toArray(new Predicate[0]));
+        };
+        Page<Modelo> result = modeloRepository.findAll(spec,
+                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.ASC, "orOrdem").and(Sort.by(Sort.Direction.ASC, "nmModelo"))));
+        var content = result.getContent().stream().map(this::toModelo).toList();
+        return ApiPage.paged(content, new PaginationMeta(p, l, result.getTotalElements(), result.getTotalPages()));
     }
 
     @Transactional
@@ -183,11 +202,14 @@ public class CatalogoService {
     // ---- Cores (CRUD) ----
 
     @Transactional(readOnly = true)
-    public List<CorResponse> listarCoresAdmin(boolean incluirInativos) {
-        var lista = incluirInativos
-                ? corRepository.findByFgExcluidoFalseOrderByOrOrdemAscNmCorAsc()
-                : corRepository.findByFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAscNmCorAsc();
-        return lista.stream().map(this::toCor).toList();
+    public ApiPage<CorResponse> listarCoresAdmin(boolean incluirInativos, Integer page, Integer limit, String q) {
+        int p = PaginationParams.resolvePage(page);
+        int l = PaginationParams.resolveLimit(limit);
+        Specification<Cor> spec = catalogoSpec(incluirInativos, q, "nmCor");
+        Page<Cor> result = corRepository.findAll(spec,
+                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.ASC, "orOrdem").and(Sort.by(Sort.Direction.ASC, "nmCor"))));
+        var content = result.getContent().stream().map(this::toCor).toList();
+        return ApiPage.paged(content, new PaginationMeta(p, l, result.getTotalElements(), result.getTotalPages()));
     }
 
     @Transactional
@@ -233,6 +255,19 @@ public class CatalogoService {
         c.setFgAtivo(false);
         c.setDtAlteracao(LocalDateTime.now());
         corRepository.save(c);
+    }
+
+    private <T> Specification<T> catalogoSpec(boolean incluirInativos, String q, String nomeField) {
+        return (root, query, cb) -> {
+            List<Predicate> ps = new ArrayList<>();
+            ps.add(cb.isFalse(root.get("fgExcluido")));
+            if (!incluirInativos) ps.add(cb.isTrue(root.get("fgAtivo")));
+            if (q != null && !q.isBlank()) {
+                String like = "%" + q.trim().toLowerCase() + "%";
+                ps.add(cb.like(cb.lower(root.get(nomeField)), like));
+            }
+            return cb.and(ps.toArray(new Predicate[0]));
+        };
     }
 
     private Marca findMarca(Long id) {

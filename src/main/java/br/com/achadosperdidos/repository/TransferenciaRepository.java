@@ -19,6 +19,9 @@ public interface TransferenciaRepository extends JpaRepository<Transferencia, Lo
             SELECT COALESCE(l.nmLocal, 'Sem origem') AS nome, COUNT(t) AS qt
               FROM Transferencia t LEFT JOIN t.localDestino l
              WHERE t.evento.id = :eventoId AND t.fgExcluido = false
+               AND (:inicio IS NULL OR (t.dtTransferencia >= :inicio AND t.dtTransferencia < :fim))
              GROUP BY l.nmLocal ORDER BY qt DESC""")
-    List<Object[]> contagemPorDestino(@Param("eventoId") Long eventoId);
+    List<Object[]> contagemPorDestino(@Param("eventoId") Long eventoId,
+                                      @Param("inicio") java.time.LocalDateTime inicio,
+                                      @Param("fim") java.time.LocalDateTime fim);
 }

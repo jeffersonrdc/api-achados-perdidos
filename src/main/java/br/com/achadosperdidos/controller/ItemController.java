@@ -60,8 +60,10 @@ public class ItemController {
     @PreAuthorize("@authz.pode('item.listar')")
     @Operation(summary = "Resumo da coleta do evento")
     public ColetaResumoResponse coletaResumo(
-            @Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento) {
-        return itemService.coletaResumo(idEvento);
+            @Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento,
+            @Parameter(description = "Data (yyyy-MM-dd ou dd/MM/yyyy); sem valor = totais do evento")
+            @RequestParam(required = false) String data) {
+        return itemService.coletaResumo(idEvento, data);
     }
 
     @GetMapping("/coleta/filtros")
@@ -91,8 +93,10 @@ public class ItemController {
     @PreAuthorize("@authz.pode('item.listar')")
     @Operation(summary = "Resumo do estoque do evento")
     public EstoqueResumoResponse estoqueResumo(
-            @Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento) {
-        return itemService.estoqueResumo(idEvento);
+            @Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento,
+            @Parameter(description = "Data (yyyy-MM-dd ou dd/MM/yyyy); sem valor = totais do evento")
+            @RequestParam(required = false) String data) {
+        return itemService.estoqueResumo(idEvento, data);
     }
 
     @GetMapping("/estoque/filtros")

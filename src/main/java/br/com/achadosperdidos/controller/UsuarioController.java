@@ -44,8 +44,12 @@ public class UsuarioController {
     @PreAuthorize("@authz.pode('usuario.listar')")
     @Operation(summary = "Listar usuários (paginado)")
     public ApiPage<UsuarioResponse> findAll(@RequestParam(required = false) Integer page,
-                                            @RequestParam(required = false) Integer limit) {
-        return usuarioService.findAll(page, limit);
+                                            @RequestParam(required = false) Integer limit,
+                                            @RequestParam(required = false) String q,
+                                            @RequestParam(required = false) String nmPerfil,
+                                            @Parameter(description = "ID assinado do perfil")
+                                            @RequestParam(required = false) String idPerfil) {
+        return usuarioService.findAll(page, limit, q, nmPerfil, idPerfil);
     }
 
     @GetMapping("/{id}")

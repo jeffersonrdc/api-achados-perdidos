@@ -56,8 +56,10 @@ public class TransferenciaController {
     @PreAuthorize("@authz.pode('item.listar')")
     @Operation(summary = "Resumo de transferências do evento")
     public TransferenciaResumoResponse resumo(
-            @Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento) {
-        return transferenciaService.resumo(idEvento);
+            @Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento,
+            @Parameter(description = "Data (yyyy-MM-dd ou dd/MM/yyyy); sem valor = totais do evento")
+            @RequestParam(required = false) String data) {
+        return transferenciaService.resumo(idEvento, data);
     }
 
     @GetMapping("/itens-disponiveis")

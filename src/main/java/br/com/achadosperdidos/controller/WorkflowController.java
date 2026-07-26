@@ -56,8 +56,11 @@ public class WorkflowController {
     @GetMapping("/movimentacoes/resumo")
     @PreAuthorize("@authz.pode('item.listar')")
     @Operation(summary = "Resumo de movimentações do evento")
-    public MovimentacaoResumoResponse resumoMovimentacoes(@Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento) {
-        return workflowService.resumoMovimentacoes(idEvento);
+    public MovimentacaoResumoResponse resumoMovimentacoes(
+            @Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento,
+            @Parameter(description = "Data (yyyy-MM-dd ou dd/MM/yyyy); sem valor = totais do evento")
+            @RequestParam(required = false) String data) {
+        return workflowService.resumoMovimentacoes(idEvento, data);
     }
 
     @GetMapping("/itens/{idItem}/movimentacoes")

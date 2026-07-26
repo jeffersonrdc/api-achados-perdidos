@@ -5,6 +5,7 @@ import br.com.achadosperdidos.controller.dto.EquipeMembroRequest;
 import br.com.achadosperdidos.controller.dto.EquipeMembroResponse;
 import br.com.achadosperdidos.controller.dto.EquipeResponse;
 import br.com.achadosperdidos.controller.dto.EquipeUpdateRequest;
+import br.com.achadosperdidos.pagination.ApiPage;
 import br.com.achadosperdidos.service.EquipeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -15,8 +16,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/equipes")
@@ -38,10 +37,14 @@ public class EquipeController {
 
     @GetMapping
     @PreAuthorize("@authz.pode('equipe.listar')")
-    @Operation(summary = "Listar equipes do evento")
-    public List<EquipeResponse> findByEvento(
-            @Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento) {
-        return equipeService.findByEvento(idEvento);
+    @Operation(summary = "Listar equipes do evento (paginado)")
+    public ApiPage<EquipeResponse> findByEvento(
+            @Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String q,
+            @Parameter(description = "Tipo da equipe") @RequestParam(required = false) String tpEquipe) {
+        return equipeService.findByEvento(idEvento, page, limit, q, tpEquipe);
     }
 
     @GetMapping("/{id}")

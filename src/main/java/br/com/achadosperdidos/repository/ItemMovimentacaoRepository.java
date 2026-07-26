@@ -24,6 +24,9 @@ public interface ItemMovimentacaoRepository extends JpaRepository<ItemMovimentac
     @Query("""
             SELECT m.tpMovimento AS nome, COUNT(m) AS qt FROM ItemMovimentacao m
              WHERE m.item.evento.id = :eventoId AND m.fgExcluido = false
+               AND (:inicio IS NULL OR (m.dtMovimento >= :inicio AND m.dtMovimento < :fim))
              GROUP BY m.tpMovimento ORDER BY qt DESC""")
-    List<Object[]> contagemPorTipo(@Param("eventoId") Long eventoId);
+    List<Object[]> contagemPorTipo(@Param("eventoId") Long eventoId,
+                                   @Param("inicio") java.time.LocalDateTime inicio,
+                                   @Param("fim") java.time.LocalDateTime fim);
 }

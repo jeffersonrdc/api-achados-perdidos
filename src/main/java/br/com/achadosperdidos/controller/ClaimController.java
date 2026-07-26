@@ -73,8 +73,10 @@ public class ClaimController {
     @Operation(summary = "Resumo/cards dos claims do evento")
     public br.com.achadosperdidos.controller.dto.ClaimResumoResponse resumo(
             @Parameter(description = "ID assinado do evento") @RequestParam String idEvento,
-            @Parameter(description = "PERDA ou RETIRADA") @RequestParam(required = false) String tipo) {
-        return claimService.resumo(idEvento, tipo);
+            @Parameter(description = "PERDA ou RETIRADA") @RequestParam(required = false) String tipo,
+            @Parameter(description = "Data de cadastro (yyyy-MM-dd ou dd/MM/yyyy); sem valor = totais do evento")
+            @RequestParam(required = false) String data) {
+        return claimService.resumo(idEvento, tipo, data);
     }
 
     @GetMapping("/filtros")

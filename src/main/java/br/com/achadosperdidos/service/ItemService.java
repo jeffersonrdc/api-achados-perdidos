@@ -8,6 +8,7 @@ import br.com.achadosperdidos.controller.dto.ItemCreateRequest;
 import br.com.achadosperdidos.controller.dto.ItemLocalizacaoRequest;
 import br.com.achadosperdidos.controller.dto.ItemResponse;
 import br.com.achadosperdidos.controller.dto.ItemUpdateRequest;
+import br.com.achadosperdidos.entity.Claim;
 import br.com.achadosperdidos.entity.Evento;
 import br.com.achadosperdidos.entity.Item;
 import br.com.achadosperdidos.entity.Localizacao;
@@ -30,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -242,16 +244,45 @@ public class ItemService {
     // ------------------------------------------------------------------
 
     @Transactional(readOnly = true)
-    public ColetaResumoResponse coletaResumo(String idEvento) {
+    public ColetaResumoResponse coletaResumo(String idEvento, String data) {
         Long ev = idCodec.decodeEventoId(idEvento);
+        LocalDate dia = parseData(data);
+
+        Specification<Item> base = (root, query, cb) -> cb.and(
+                cb.isFalse(root.get("fgExcluido")),
+                cb.equal(root.get("evento").get("id"), ev));
+        if (dia != null) {
+            LocalDate d = dia;
+            base = base.and((root, query, cb) -> cb.equal(root.get("dtEncontrado"), d));
+        }
+
+        long total = itemRepository.count(base);
+        long coletados = itemRepository.count(base.and((root, query, cb) ->
+                cb.equal(root.get("status").get("nmStatus"), "Coletado")));
+        long aguardandoTriagem = itemRepository.count(base.and((root, query, cb) ->
+                cb.equal(root.get("status").get("nmStatus"), "Aguardando triagem")));
+        long emTriagem = itemRepository.count(base.and((root, query, cb) ->
+                cb.equal(root.get("status").get("nmStatus"), "Em triagem")));
+        long sensiveis = itemRepository.count(base.and((root, query, cb) ->
+                cb.isTrue(root.get("fgSensivel"))));
+        long altaPrioridade = itemRepository.count(base.and((root, query, cb) ->
+                cb.equal(root.get("tpPrioridade"), "ALTA")));
+
+        Specification<Claim> claimSpec = (root, query, cb) -> {
+            List<Predicate> ps = new ArrayList<>();
+            ps.add(cb.isFalse(root.get("fgExcluido")));
+            ps.add(cb.equal(root.get("evento").get("id"), ev));
+            ps.add(root.get("status").get("nmStatus").in(CLAIM_STATUS_PENDENTES));
+            if (dia != null) {
+                ps.add(cb.between(root.get("dtCadastro"),
+                        dia.atStartOfDay(), dia.atTime(LocalTime.MAX)));
+            }
+            return cb.and(ps.toArray(new Predicate[0]));
+        };
+        long solicitacoesPendentes = claimRepository.count(claimSpec);
+
         return new ColetaResumoResponse(
-                itemRepository.countByEvento_IdAndFgExcluidoFalse(ev),
-                itemRepository.countByEvento_IdAndFgExcluidoFalseAndStatus_NmStatus(ev, "Coletado"),
-                claimRepository.countByEvento_IdAndFgExcluidoFalseAndStatus_NmStatusIn(ev, CLAIM_STATUS_PENDENTES),
-                itemRepository.countByEvento_IdAndFgExcluidoFalseAndStatus_NmStatus(ev, "Aguardando triagem"),
-                itemRepository.countByEvento_IdAndFgExcluidoFalseAndStatus_NmStatus(ev, "Em triagem"),
-                itemRepository.countByEvento_IdAndFgExcluidoFalseAndFgSensivelTrue(ev),
-                itemRepository.countByEvento_IdAndFgExcluidoFalseAndTpPrioridade(ev, "ALTA"));
+                total, coletados, solicitacoesPendentes, aguardandoTriagem, emTriagem, sensiveis, altaPrioridade);
     }
 
     @Transactional(readOnly = true)
@@ -317,9 +348,10 @@ public class ItemService {
     }
 
     @Transactional(readOnly = true)
-    public EstoqueResumoResponse estoqueResumo(String idEvento) {
+    public EstoqueResumoResponse estoqueResumo(String idEvento, String data) {
         Long ev = idCodec.decodeEventoId(idEvento);
-        List<EstoqueResumoResponse.DepositoQt> porDeposito = itemRepository.contagemEstoquePorDeposito(ev, STATUS_ESTOQUE)
+        LocalDate dia = parseData(data);
+        List<EstoqueResumoResponse.DepositoQt> porDeposito = itemRepository.contagemEstoquePorDeposito(ev, STATUS_ESTOQUE, dia)
                 .stream()
                 .map(r -> new EstoqueResumoResponse.DepositoQt(
                         r[0] != null ? r[0].toString() : "Sem localização",
@@ -330,8 +362,17 @@ public class ItemService {
                 .filter(d -> "Sem localização".equals(d.nome())).mapToLong(EstoqueResumoResponse.DepositoQt::qt).sum();
         long comLoc = total - semLoc;
         long depositos = porDeposito.stream().filter(d -> !"Sem localização".equals(d.nome())).count();
-        long sensiveis = itemRepository.countByEvento_IdAndFgExcluidoFalseAndFgSensivelTrueAndStatus_NmStatusIn(
-                ev, List.of(STATUS_ESTOQUE));
+
+        Specification<Item> sensivelSpec = (root, query, cb) -> {
+            List<Predicate> ps = new ArrayList<>();
+            ps.add(cb.isFalse(root.get("fgExcluido")));
+            ps.add(cb.equal(root.get("evento").get("id"), ev));
+            ps.add(cb.isTrue(root.get("fgSensivel")));
+            ps.add(cb.equal(root.get("status").get("nmStatus"), STATUS_ESTOQUE));
+            if (dia != null) ps.add(cb.equal(root.get("dtEncontrado"), dia));
+            return cb.and(ps.toArray(new Predicate[0]));
+        };
+        long sensiveis = itemRepository.count(sensivelSpec);
         return new EstoqueResumoResponse(total, comLoc, semLoc, depositos, sensiveis, porDeposito);
     }
 
@@ -340,7 +381,7 @@ public class ItemService {
     public ColetaFiltrosResponse estoqueFiltros(String idEvento) {
         ColetaFiltrosResponse base = coletaFiltros(idEvento);
         Long ev = idCodec.decodeEventoId(idEvento);
-        List<String> depositos = itemRepository.contagemEstoquePorDeposito(ev, STATUS_ESTOQUE).stream()
+        List<String> depositos = itemRepository.contagemEstoquePorDeposito(ev, STATUS_ESTOQUE, null).stream()
                 .map(r -> r[0] != null ? r[0].toString() : "Sem localização")
                 .filter(nome -> !"Sem localização".equals(nome))
                 .toList();

@@ -10,15 +10,24 @@ import br.com.achadosperdidos.entity.EquipeUsuario;
 import br.com.achadosperdidos.entity.Evento;
 import br.com.achadosperdidos.entity.Usuario;
 import br.com.achadosperdidos.exception.RecursoNaoEncontradoException;
+import br.com.achadosperdidos.pagination.ApiPage;
+import br.com.achadosperdidos.pagination.PaginationMeta;
+import br.com.achadosperdidos.pagination.PaginationParams;
 import br.com.achadosperdidos.repository.EquipeRepository;
 import br.com.achadosperdidos.repository.EquipeUsuarioRepository;
 import br.com.achadosperdidos.repository.EventoRepository;
 import br.com.achadosperdidos.repository.UsuarioRepository;
 import br.com.achadosperdidos.security.SignedResourceIdCodec;
+import jakarta.persistence.criteria.Predicate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -68,9 +77,30 @@ public class EquipeService {
     }
 
     @Transactional(readOnly = true)
-    public List<EquipeResponse> findByEvento(String idEvento) {
-        return equipeRepository.findByEvento_IdAndFgExcluidoFalseOrderByNmEquipeAsc(idCodec.decodeEventoId(idEvento))
-                .stream().map(this::toResponse).toList();
+    public ApiPage<EquipeResponse> findByEvento(String idEvento, Integer page, Integer limit,
+                                                String q, String tpEquipe) {
+        int p = PaginationParams.resolvePage(page);
+        int l = PaginationParams.resolveLimit(limit);
+        Long eventoId = idCodec.decodeEventoId(idEvento);
+        Specification<Equipe> spec = (root, query, cb) -> {
+            List<Predicate> ps = new ArrayList<>();
+            ps.add(cb.isFalse(root.get("fgExcluido")));
+            ps.add(cb.equal(root.get("evento").get("id"), eventoId));
+            if (tpEquipe != null && !tpEquipe.isBlank()) {
+                ps.add(cb.equal(root.get("tpEquipe"), tpEquipe.trim().toUpperCase()));
+            }
+            if (q != null && !q.isBlank()) {
+                String like = "%" + q.trim().toLowerCase() + "%";
+                ps.add(cb.or(
+                        cb.like(cb.lower(root.get("nmEquipe")), like),
+                        cb.like(cb.lower(root.get("dsResponsabilidade")), like)));
+            }
+            return cb.and(ps.toArray(new Predicate[0]));
+        };
+        Page<Equipe> result = equipeRepository.findAll(spec,
+                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.ASC, "nmEquipe")));
+        var content = result.getContent().stream().map(this::toResponse).toList();
+        return ApiPage.paged(content, new PaginationMeta(p, l, result.getTotalElements(), result.getTotalPages()));
     }
 
     @Transactional(readOnly = true)

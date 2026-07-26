@@ -11,8 +11,10 @@ import br.com.achadosperdidos.pagination.PaginationParams;
 import br.com.achadosperdidos.repository.PerfilRepository;
 import br.com.achadosperdidos.repository.UsuarioRepository;
 import br.com.achadosperdidos.security.SignedResourceIdCodec;
+import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,7 +22,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.time.Year;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -75,8 +79,11 @@ public class UsuarioService {
         u.setFgAtivo(true);
         u.setFgExcluido(false);
         Usuario salvo = usuarioRepository.save(u);
-        enviarCredenciais(salvo, senhaPlain, false);
-        return toResponse(salvo);
+        EmailService.Resultado email = tentarEnviarCredenciais(salvo, senhaPlain, false);
+        String aviso = email.enviado()
+                ? null
+                : (email.erro() != null ? email.erro() : "E-mail de credenciais não enviado.");
+        return toResponse(salvo, email.enviado(), aviso);
     }
 
     /**
@@ -91,14 +98,36 @@ public class UsuarioService {
         u.setNmSenha(passwordEncoder.encode(senhaPlain));
         u.setDtAlteracao(LocalDateTime.now());
         usuarioRepository.save(u);
-        enviarCredenciais(u, senhaPlain, true);
+        EmailService.Resultado email = tentarEnviarCredenciais(u, senhaPlain, true);
+        if (!email.enviado()) {
+            String motivo = email.erro() != null ? email.erro() : "falha desconhecida no SMTP";
+            throw new IllegalArgumentException(
+                    "A senha não foi alterada porque o e-mail com as credenciais não pôde ser enviado: " + motivo);
+        }
     }
 
     @Transactional(readOnly = true)
-    public ApiPage<UsuarioResponse> findAll(Integer page, Integer limit) {
+    public ApiPage<UsuarioResponse> findAll(Integer page, Integer limit, String q, String nmPerfil, String idPerfil) {
         int p = PaginationParams.resolvePage(page);
         int l = PaginationParams.resolveLimit(limit);
-        Page<Usuario> result = usuarioRepository.findByFgExcluidoFalse(PageRequest.of(p - 1, l));
+        Long perfilId = (idPerfil != null && !idPerfil.isBlank()) ? idCodec.decodePerfilId(idPerfil) : null;
+        Specification<Usuario> spec = (root, query, cb) -> {
+            List<Predicate> ps = new ArrayList<>();
+            ps.add(cb.isFalse(root.get("fgExcluido")));
+            if (perfilId != null) ps.add(cb.equal(root.get("perfil").get("id"), perfilId));
+            if (nmPerfil != null && !nmPerfil.isBlank()) {
+                ps.add(cb.equal(cb.lower(root.get("perfil").get("nmPerfil")), nmPerfil.trim().toLowerCase()));
+            }
+            if (q != null && !q.isBlank()) {
+                String like = "%" + q.trim().toLowerCase() + "%";
+                ps.add(cb.or(
+                        cb.like(cb.lower(root.get("nmUsuario")), like),
+                        cb.like(cb.lower(root.get("nmLogin")), like),
+                        cb.like(cb.lower(root.get("nmEmail")), like)));
+            }
+            return cb.and(ps.toArray(new Predicate[0]));
+        };
+        Page<Usuario> result = usuarioRepository.findAll(spec, PageRequest.of(p - 1, l));
         var content = result.getContent().stream().map(this::toResponse).toList();
         return ApiPage.paged(content, new PaginationMeta(p, l, result.getTotalElements(), result.getTotalPages()));
     }
@@ -162,7 +191,8 @@ public class UsuarioService {
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Usuário não encontrado."));
     }
 
-    private void enviarCredenciais(Usuario u, String senhaPlain, boolean reset) {
+    /** Tenta enviar credenciais; nunca lança — o caller decide o que fazer com o resultado. */
+    private EmailService.Resultado tentarEnviarCredenciais(Usuario u, String senhaPlain, boolean reset) {
         String tpEvento = reset ? TP_RESET : TP_CADASTRO;
         Map<String, String> vars = new LinkedHashMap<>();
         vars.put("nomeUsuario", u.getNmUsuario() != null ? u.getNmUsuario() : "");
@@ -181,13 +211,7 @@ public class UsuarioService {
                     "Seu usuário no painel administrativo de Achados e Perdidos foi criado. "
                             + "Use os dados abaixo para acessar o sistema.");
         }
-        EmailService.Resultado resultado = emailService.enviar(tpEvento, u.getNmEmail(), vars);
-        if (!resultado.enviado()) {
-            String motivo = resultado.erro() != null ? resultado.erro() : "falha desconhecida no SMTP";
-            throw new IllegalArgumentException(
-                    (reset ? "A senha não foi alterada" : "O usuário não foi criado")
-                            + " porque o e-mail com as credenciais não pôde ser enviado: " + motivo);
-        }
+        return emailService.enviar(tpEvento, u.getNmEmail(), vars);
     }
 
     static String gerarSenhaAleatoria() {
@@ -205,12 +229,18 @@ public class UsuarioService {
     }
 
     private UsuarioResponse toResponse(Usuario u) {
+        return toResponse(u, null, null);
+    }
+
+    private UsuarioResponse toResponse(Usuario u, Boolean emailEnviado, String emailAviso) {
         return new UsuarioResponse(
                 idCodec.encodeUsuarioId(u.getId()),
                 u.getNmUsuario(),
                 u.getNmLogin(),
                 u.getNmEmail(),
                 u.getPerfil().getNmPerfil(),
-                u.getFgAtivo());
+                u.getFgAtivo(),
+                emailEnviado,
+                emailAviso);
     }
 }
