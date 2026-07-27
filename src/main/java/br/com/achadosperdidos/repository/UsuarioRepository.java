@@ -10,9 +10,9 @@ import java.util.Optional;
 
 @Repository
 public interface UsuarioRepository extends JpaRepository<Usuario, Long>, JpaSpecificationExecutor<Usuario> {
-    @EntityGraph(attributePaths = {"perfil", "empresa"})
+    @EntityGraph(attributePaths = {"perfil"})
     Optional<Usuario> findWithPerfilByNmEmail(String nmEmail);
-    @EntityGraph(attributePaths = {"perfil", "empresa"})
+    @EntityGraph(attributePaths = {"perfil"})
     Optional<Usuario> findWithPerfilByNmLogin(String nmLogin);
     Optional<Usuario> findByNmEmail(String nmEmail);
     Optional<Usuario> findByNmLoginAndFgExcluidoFalse(String nmLogin);

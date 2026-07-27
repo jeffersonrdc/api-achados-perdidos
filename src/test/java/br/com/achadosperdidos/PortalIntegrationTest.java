@@ -89,7 +89,6 @@ class PortalIntegrationTest extends IntegrationTestBase {
 
     private String criarEvento() throws Exception {
         var body = objectMapper.createObjectNode()
-                .put("idEmpresa", seedData.idEmpresa())
                 .put("nmEvento", "Festival Portal 2026")
                 .put("dtInicio", LocalDateTime.now().minusDays(1).toString())
                 .put("dtFim", LocalDateTime.now().plusDays(7).toString())

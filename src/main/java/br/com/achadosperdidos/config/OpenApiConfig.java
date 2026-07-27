@@ -608,7 +608,6 @@ public class OpenApiConfig {
                 tag("Dashboard", "Painéis operacionais e SLA pendente."),
                 tag("Depósitos", "Depósitos físicos de armazenamento."),
                 tag("Devoluções", "Registro e status de devoluções."),
-                tag("Empresas", "Empresas organizadoras vinculadas aos eventos."),
                 tag("Equipes", "Equipes e membros por evento/local."),
                 tag("Estados", "Estados de conservação e apresentação dos itens."),
                 tag("Etiqueta", "Geração/consulta de etiqueta do item."),

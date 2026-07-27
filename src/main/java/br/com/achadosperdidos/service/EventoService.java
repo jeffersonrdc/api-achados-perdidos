@@ -4,13 +4,11 @@ import br.com.achadosperdidos.controller.dto.EventoCreateRequest;
 import br.com.achadosperdidos.controller.dto.EventoResponse;
 import br.com.achadosperdidos.controller.dto.EventoUpdateRequest;
 import br.com.achadosperdidos.entity.Arquivo;
-import br.com.achadosperdidos.entity.Empresa;
 import br.com.achadosperdidos.entity.Evento;
 import br.com.achadosperdidos.exception.RecursoNaoEncontradoException;
 import br.com.achadosperdidos.pagination.ApiPage;
 import br.com.achadosperdidos.pagination.PaginationMeta;
 import br.com.achadosperdidos.pagination.PaginationParams;
-import br.com.achadosperdidos.repository.EmpresaRepository;
 import br.com.achadosperdidos.repository.EventoRepository;
 import br.com.achadosperdidos.security.SignedResourceIdCodec;
 import jakarta.persistence.criteria.Predicate;
@@ -30,25 +28,19 @@ import java.util.stream.Collectors;
 @Service
 public class EventoService {
     private final EventoRepository eventoRepository;
-    private final EmpresaRepository empresaRepository;
     private final ArquivoService arquivoService;
     private final SignedResourceIdCodec idCodec;
 
-    public EventoService(EventoRepository eventoRepository, EmpresaRepository empresaRepository,
+    public EventoService(EventoRepository eventoRepository,
                          ArquivoService arquivoService, SignedResourceIdCodec idCodec) {
         this.eventoRepository = eventoRepository;
-        this.empresaRepository = empresaRepository;
         this.arquivoService = arquivoService;
         this.idCodec = idCodec;
     }
 
     @Transactional
     public EventoResponse create(EventoCreateRequest request) {
-        Long empresaId = idCodec.decodeEmpresaId(request.idEmpresa());
-        Empresa empresa = empresaRepository.findById(empresaId)
-                .orElseThrow(() -> new RecursoNaoEncontradoException("Empresa não encontrada."));
         Evento evento = new Evento();
-        evento.setEmpresa(empresa);
         evento.setNmEvento(request.nmEvento().trim());
         evento.setDsEvento(request.dsEvento());
         evento.setDtInicio(request.dtInicio());

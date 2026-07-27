@@ -269,7 +269,6 @@ public class AuditoriaService {
             case "perfil" -> "Perfis";
             case "permissao" -> "Permissões";
             case "crianca" -> "Crianças (Achados)";
-            case "empresa" -> "Empresas";
             case "lacre" -> "Lacres";
             case "marca" -> "Marcas";
             case "modelo" -> "Modelos";

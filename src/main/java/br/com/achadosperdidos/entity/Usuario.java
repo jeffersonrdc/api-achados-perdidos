@@ -8,7 +8,6 @@ import java.time.LocalDateTime;
 @Entity @Table(name = "usuario")
 public class Usuario {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) @Column(name = "ID_Usuario") private Long id;
-    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "IDR_Empresa", nullable = false) private Empresa empresa;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "IDR_Perfil", nullable = false) private Perfil perfil;
     @Column(name = "NM_Usuario", nullable = false, length = 150) private String nmUsuario;
     @Column(name = "NM_Login", nullable = false, length = 80) private String nmLogin;
@@ -19,7 +18,6 @@ public class Usuario {
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Ativo", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgAtivo = true;
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Excluido", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgExcluido = false;
     public Long getId() { return id; } public void setId(Long id) { this.id = id; }
-    public Empresa getEmpresa() { return empresa; } public void setEmpresa(Empresa v) { this.empresa = v; }
     public Perfil getPerfil() { return perfil; } public void setPerfil(Perfil v) { this.perfil = v; }
     public String getNmUsuario() { return nmUsuario; } public void setNmUsuario(String v) { this.nmUsuario = v; }
     public String getNmLogin() { return nmLogin; } public void setNmLogin(String v) { this.nmLogin = v; }

@@ -63,8 +63,6 @@ public class SignedResourceIdCodec {
     public long decodeCategoriaId(String token) { return decode(Kind.CAT, token); }
     public String encodeUsuarioId(long id) { return encode(Kind.USR, id); }
     public long decodeUsuarioId(String token) { return decode(Kind.USR, token); }
-    public String encodeEmpresaId(long id) { return encode(Kind.EMP, id); }
-    public long decodeEmpresaId(String token) { return decode(Kind.EMP, token); }
     public String encodeStatusId(long id) { return encode(Kind.STA, id); }
     public long decodeStatusId(String token) { return decode(Kind.STA, token); }
     public String encodeLocalizacaoId(long id) { return encode(Kind.LOC, id); }

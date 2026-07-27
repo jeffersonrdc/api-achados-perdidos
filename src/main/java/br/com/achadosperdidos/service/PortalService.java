@@ -58,7 +58,6 @@ public class PortalService {
     private final EmailService emailService;
     private final PortalContatosConfigService portalContatosConfigService;
     private final PerfilRepository perfilRepository;
-    private final EmpresaRepository empresaRepository;
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
     private final SignedResourceIdCodec idCodec;
@@ -86,7 +85,6 @@ public class PortalService {
                          EmailService emailService,
                          PortalContatosConfigService portalContatosConfigService,
                          PerfilRepository perfilRepository,
-                         EmpresaRepository empresaRepository,
                          UsuarioRepository usuarioRepository,
                          PasswordEncoder passwordEncoder,
                          SignedResourceIdCodec idCodec) {
@@ -110,7 +108,6 @@ public class PortalService {
         this.emailService = emailService;
         this.portalContatosConfigService = portalContatosConfigService;
         this.perfilRepository = perfilRepository;
-        this.empresaRepository = empresaRepository;
         this.usuarioRepository = usuarioRepository;
         this.passwordEncoder = passwordEncoder;
         this.idCodec = idCodec;
@@ -550,11 +547,8 @@ public class PortalService {
         }
         Perfil perfil = perfilRepository.findByNmPerfilIgnoreCaseAndFgExcluidoFalse("Participante")
                 .orElseGet(() -> criarPerfilParticipante());
-        Empresa empresa = empresaRepository.findAll().stream().findFirst()
-                .orElseThrow(() -> new IllegalStateException("Nenhuma empresa cadastrada."));
 
         Usuario u = new Usuario();
-        u.setEmpresa(empresa);
         u.setPerfil(perfil);
         u.setNmUsuario(request.nmUsuario().trim());
         u.setNmLogin(request.nmEmail().trim().toLowerCase());

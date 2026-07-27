@@ -96,7 +96,6 @@ class LocalIntegrationTest extends IntegrationTestBase {
 
     private String criarEvento() throws Exception {
         var body = objectMapper.createObjectNode()
-                .put("idEmpresa", seedData.idEmpresa())
                 .put("nmEvento", "Evento Locais Teste")
                 .put("dtInicio", LocalDateTime.now().minusDays(1).toString())
                 .put("dtFim", LocalDateTime.now().plusDays(7).toString())

@@ -12,14 +12,12 @@ import java.time.LocalDateTime;
 public class TestDataSeeder {
 
     public record SeedData(
-            String idEmpresa,
             String idCategoria,
             String idStatusRecebido,
             String idStatusClaimAberto,
             String idStatusEmEstoque
     ) {}
 
-    private final EmpresaRepository empresaRepository;
     private final PerfilRepository perfilRepository;
     private final UsuarioRepository usuarioRepository;
     private final CategoriaRepository categoriaRepository;
@@ -27,14 +25,12 @@ public class TestDataSeeder {
     private final PasswordEncoder passwordEncoder;
     private final SignedResourceIdCodec idCodec;
 
-    public TestDataSeeder(EmpresaRepository empresaRepository,
-                          PerfilRepository perfilRepository,
+    public TestDataSeeder(PerfilRepository perfilRepository,
                           UsuarioRepository usuarioRepository,
                           CategoriaRepository categoriaRepository,
                           StatusItemRepository statusItemRepository,
                           PasswordEncoder passwordEncoder,
                           SignedResourceIdCodec idCodec) {
-        this.empresaRepository = empresaRepository;
         this.perfilRepository = perfilRepository;
         this.usuarioRepository = usuarioRepository;
         this.categoriaRepository = categoriaRepository;
@@ -46,16 +42,6 @@ public class TestDataSeeder {
     public SeedData seed() {
         LocalDateTime now = LocalDateTime.now();
 
-        Empresa empresa = new Empresa();
-        empresa.setNmRazaoSocial("Empresa Teste LTDA");
-        empresa.setNmFantasia("Achados Teste");
-        empresa.setNrCnpj("12345678000199");
-        empresa.setNmEmail("contato@teste.com");
-        empresa.setDtCadastro(now);
-        empresa.setFgAtivo(true);
-        empresa.setFgExcluido(false);
-        empresa = empresaRepository.save(empresa);
-
         Perfil admin = savePerfil("Administrador", now);
         Perfil atendente = savePerfil("Atendente", now);
         savePerfil("Operador", now);
@@ -63,7 +49,6 @@ public class TestDataSeeder {
         savePerfil("Participante", now);
 
         Usuario usuarioAdmin = new Usuario();
-        usuarioAdmin.setEmpresa(empresa);
         usuarioAdmin.setPerfil(admin);
         usuarioAdmin.setNmUsuario("Administrador");
         usuarioAdmin.setNmLogin("admin");
@@ -75,7 +60,6 @@ public class TestDataSeeder {
         usuarioRepository.save(usuarioAdmin);
 
         Usuario usuarioAtendente = new Usuario();
-        usuarioAtendente.setEmpresa(empresa);
         usuarioAtendente.setPerfil(atendente);
         usuarioAtendente.setNmUsuario("Atendente");
         usuarioAtendente.setNmLogin("atendente");
@@ -105,7 +89,6 @@ public class TestDataSeeder {
         saveStatus("Match", 92, now);
 
         return new SeedData(
-                idCodec.encodeEmpresaId(empresa.getId()),
                 idCodec.encodeCategoriaId(categoria.getId()),
                 idCodec.encodeStatusId(recebido.getId()),
                 idCodec.encodeStatusId(claimAberto.getId()),

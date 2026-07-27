@@ -40,20 +40,17 @@ public class UsuarioService {
     private final PerfilRepository perfilRepository;
     private final SignedResourceIdCodec idCodec;
     private final PasswordEncoder passwordEncoder;
-    private final UsuarioContextService usuarioContextService;
     private final AuditoriaContextService auditoriaContext;
     private final EmailService emailService;
 
     public UsuarioService(UsuarioRepository usuarioRepository, PerfilRepository perfilRepository,
                           SignedResourceIdCodec idCodec, PasswordEncoder passwordEncoder,
-                          UsuarioContextService usuarioContextService,
                           AuditoriaContextService auditoriaContext,
                           EmailService emailService) {
         this.usuarioRepository = usuarioRepository;
         this.perfilRepository = perfilRepository;
         this.idCodec = idCodec;
         this.passwordEncoder = passwordEncoder;
-        this.usuarioContextService = usuarioContextService;
         this.auditoriaContext = auditoriaContext;
         this.emailService = emailService;
     }
@@ -64,12 +61,10 @@ public class UsuarioService {
         if (usuarioRepository.findByNmEmail(request.nmEmail().trim()).isPresent()) {
             throw new EmailEmUsoException("E-mail já cadastrado.");
         }
-        Usuario admin = usuarioContextService.requireUsuarioLogado();
         Perfil perfil = perfilRepository.findByNmPerfilIgnoreCaseAndFgExcluidoFalse(request.nmPerfil().trim())
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Perfil não encontrado."));
         String senhaPlain = request.senha();
         Usuario u = new Usuario();
-        u.setEmpresa(admin.getEmpresa());
         u.setPerfil(perfil);
         u.setNmUsuario(request.nmUsuario().trim());
         u.setNmLogin(request.nmLogin().trim());

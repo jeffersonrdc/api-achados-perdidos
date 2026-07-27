@@ -8,7 +8,6 @@ import java.time.LocalDateTime;
 @Entity @Table(name = "evento")
 public class Evento {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) @Column(name = "ID_Evento") private Long id;
-    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "IDR_Empresa", nullable = false) private Empresa empresa;
     @Column(name = "NM_Evento", nullable = false, length = 200) private String nmEvento;
     @Column(name = "DS_Evento", columnDefinition = "TEXT") private String dsEvento;
     @Column(name = "DT_Inicio", nullable = false) private LocalDateTime dtInicio;
@@ -24,7 +23,6 @@ public class Evento {
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Ativo", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgAtivo = true;
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Excluido", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgExcluido = false;
     public Long getId() { return id; } public void setId(Long id) { this.id = id; }
-    public Empresa getEmpresa() { return empresa; } public void setEmpresa(Empresa v) { this.empresa = v; }
     public String getNmEvento() { return nmEvento; } public void setNmEvento(String v) { this.nmEvento = v; }
     public String getDsEvento() { return dsEvento; } public void setDsEvento(String v) { this.dsEvento = v; }
     public LocalDateTime getDtInicio() { return dtInicio; } public void setDtInicio(LocalDateTime v) { this.dtInicio = v; }
