@@ -34,7 +34,7 @@ public class ClaimWorkflowService {
     private final ClaimService claimService;
     private final StatusItemService statusItemService;
     private final EmailService emailService;
-    private final DevolucaoService devolucaoService;
+    private final DevolucaoFluxoService devolucaoFluxoService;
     private final WorkflowService workflowService;
     private final UsuarioContextService usuarioContextService;
     private final SignedResourceIdCodec idCodec;
@@ -43,7 +43,7 @@ public class ClaimWorkflowService {
     public ClaimWorkflowService(ClaimRepository claimRepository, ClaimHistoricoRepository historicoRepository,
                                 ClaimValidacaoRepository validacaoRepository, ItemRepository itemRepository,
                                 ClaimService claimService, StatusItemService statusItemService,
-                                EmailService emailService, DevolucaoService devolucaoService,
+                                EmailService emailService, DevolucaoFluxoService devolucaoFluxoService,
                                 WorkflowService workflowService, UsuarioContextService usuarioContextService,
                                 SignedResourceIdCodec idCodec, ClaimMensagemService claimMensagemService) {
         this.claimRepository = claimRepository;
@@ -53,7 +53,7 @@ public class ClaimWorkflowService {
         this.claimService = claimService;
         this.statusItemService = statusItemService;
         this.emailService = emailService;
-        this.devolucaoService = devolucaoService;
+        this.devolucaoFluxoService = devolucaoFluxoService;
         this.workflowService = workflowService;
         this.usuarioContextService = usuarioContextService;
         this.idCodec = idCodec;
@@ -102,10 +102,8 @@ public class ClaimWorkflowService {
         validacao.setFgExcluido(false);
         validacaoRepository.save(validacao);
 
-        // Gera a devolução (aparece na tela /devolucoes) e reserva o item para retirada.
-        devolucaoService.create(new DevolucaoCreateRequest(
-                req.idItem(), idCodec.encodeClaimId(claim.getId()), "RETIRADA",
-                claim.getNmNome(), claim.getNrCpf(), justificativa, false, false));
+        // Ticket do novo fluxo (PICKUP/SHIPPING) + e-mail de escolha de modalidade.
+        devolucaoFluxoService.criarTicketPosAprovacao(claim, item);
         workflowService.transitarSePermitido(req.idItem(), "Aguardando retirada",
                 "Pedido de devolução aprovado — item reservado para retirada.");
 

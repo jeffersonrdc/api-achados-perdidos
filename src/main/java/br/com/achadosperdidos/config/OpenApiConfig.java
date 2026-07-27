@@ -407,7 +407,7 @@ public class OpenApiConfig {
         if (!publicEndpoint) {
             responses.putIfAbsent("401", new ApiResponse().$ref("#/components/responses/Unauthorized"));
             responses.putIfAbsent("403", new ApiResponse().$ref("#/components/responses/Forbidden"));
-        } else if ("PortalController".equals(handlerMethod.getBeanType().getSimpleName())) {
+        } else if (isPortalController(handlerMethod.getBeanType().getSimpleName())) {
             responses.putIfAbsent("403", new ApiResponse().$ref("#/components/responses/Forbidden"));
         }
         boolean hasPathId = java.util.Arrays.stream(method.getParameters())
@@ -430,7 +430,7 @@ public class OpenApiConfig {
                 && handlerMethod.getMethod().getName().equals("login")) {
             responses.putIfAbsent("429", new ApiResponse().$ref("#/components/responses/TooManyRequests"));
         }
-        if ("PortalController".equals(className)) {
+        if (isPortalController(className)) {
             responses.putIfAbsent("429", new ApiResponse().$ref("#/components/responses/PublicTooManyRequests"));
         }
         if (isMultipart(method)) {
@@ -473,7 +473,7 @@ public class OpenApiConfig {
             operation.setSecurity(List.of());
             return;
         }
-        if ("PortalController".equals(className)) {
+        if (isPortalController(className)) {
             PreAuthorize pre = handlerMethod.getMethodAnnotation(PreAuthorize.class);
             if (pre == null) {
                 operation.setSecurity(List.of());
@@ -484,8 +484,13 @@ public class OpenApiConfig {
     private static boolean isPublicEndpoint(HandlerMethod handlerMethod) {
         String className = handlerMethod.getBeanType().getSimpleName();
         if ("AuthController".equals(className)) return true;
-        if (!"PortalController".equals(className)) return false;
+        if (!isPortalController(className)) return false;
         return handlerMethod.getMethodAnnotation(PreAuthorize.class) == null;
+    }
+
+    /** Controllers públicos do portal (`PortalController`, `PortalDevolucaoController`, …). */
+    private static boolean isPortalController(String className) {
+        return className != null && className.startsWith("Portal");
     }
 
     private static String controllerTag(HandlerMethod handlerMethod) {

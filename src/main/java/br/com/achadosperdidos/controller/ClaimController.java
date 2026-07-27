@@ -9,11 +9,13 @@ import br.com.achadosperdidos.controller.dto.ClaimReprovarRequest;
 import br.com.achadosperdidos.controller.dto.ClaimResponse;
 import br.com.achadosperdidos.controller.dto.ClaimSolicitarInfoRequest;
 import br.com.achadosperdidos.controller.dto.ClaimUpdateRequest;
+import br.com.achadosperdidos.controller.dto.DevolucaoResponse;
 import br.com.achadosperdidos.controller.dto.MatchCandidatoResponse;
 import br.com.achadosperdidos.pagination.ApiPage;
 import br.com.achadosperdidos.service.ClaimMensagemService;
 import br.com.achadosperdidos.service.ClaimService;
 import br.com.achadosperdidos.service.ClaimWorkflowService;
+import br.com.achadosperdidos.service.DevolucaoFluxoService;
 import br.com.achadosperdidos.service.MatchService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -36,13 +38,16 @@ public class ClaimController {
     private final ClaimWorkflowService claimWorkflowService;
     private final ClaimMensagemService claimMensagemService;
     private final MatchService matchService;
+    private final DevolucaoFluxoService devolucaoFluxoService;
 
     public ClaimController(ClaimService claimService, ClaimWorkflowService claimWorkflowService,
-                           ClaimMensagemService claimMensagemService, MatchService matchService) {
+                           ClaimMensagemService claimMensagemService, MatchService matchService,
+                           DevolucaoFluxoService devolucaoFluxoService) {
         this.claimService = claimService;
         this.claimWorkflowService = claimWorkflowService;
         this.claimMensagemService = claimMensagemService;
         this.matchService = matchService;
+        this.devolucaoFluxoService = devolucaoFluxoService;
     }
 
     @PostMapping
@@ -172,5 +177,12 @@ public class ClaimController {
     public ClaimMensagemResponse enviarMensagem(@PathVariable String id,
                                                 @Valid @RequestBody ClaimMensagemCreateRequest request) {
         return claimMensagemService.enviarOperador(id, request);
+    }
+
+    @PostMapping("/{id}/returns")
+    @PreAuthorize("@authz.pode('claim.validar')")
+    @Operation(summary = "Criar ticket de devolução a partir do claim aprovado (idempotente)")
+    public DevolucaoResponse criarRetorno(@PathVariable String id) {
+        return devolucaoFluxoService.criarRetornoDoClaim(id);
     }
 }

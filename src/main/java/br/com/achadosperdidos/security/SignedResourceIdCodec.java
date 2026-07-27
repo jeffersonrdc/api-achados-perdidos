@@ -214,5 +214,13 @@ public class SignedResourceIdCodec {
     public String encodeAuthEventId(long id) { return encode(Kind.AEV, id); }
     public long decodeAuthEventId(String token) { return decode(Kind.AEV, token); }
 
-    public enum Kind { EMP, USR, EVT, CAT, ITM, CLM, DEP, STA, LOC, DEV, CRI, CRR, ARQ, MOV, SLA, CAC, ICC, AUD, CLV, CTO, LCR, SLG, IHI, LCL, EQP, EQM, TRG, ETQ, PRF, TSF, MRC, MOD, COR, TAG, ESD, EDR, CMS, AEV }
+    public String encodeDevolucaoHistoricoId(long id) { return encode(Kind.DEVHIST, id); }
+    public long decodeDevolucaoHistoricoId(String token) { return decode(Kind.DEVHIST, token); }
+    public String encodeDevolucaoPickupOpcaoId(long id) { return encode(Kind.DEVPICKUP, id); }
+    public long decodeDevolucaoPickupOpcaoId(String token) { return decode(Kind.DEVPICKUP, token); }
+
+    public enum Kind {
+        EMP, USR, EVT, CAT, ITM, CLM, DEP, STA, LOC, DEV, CRI, CRR, ARQ, MOV, SLA, CAC, ICC, AUD, CLV, CTO, LCR, SLG,
+        IHI, LCL, EQP, EQM, TRG, ETQ, PRF, TSF, MRC, MOD, COR, TAG, ESD, EDR, CMS, AEV, DEVHIST, DEVPICKUP
+    }
 }

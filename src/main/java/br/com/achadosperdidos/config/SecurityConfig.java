@@ -91,12 +91,14 @@ public class SecurityConfig {
                                 "/api/v1/portal/subcategorias/**",
                                 "/api/v1/portal/marcas",
                                 "/api/v1/portal/modelos",
-                                "/api/v1/portal/respostas/**").permitAll()
+                                "/api/v1/portal/respostas/**",
+                                "/api/v1/portal/devolucoes/**").permitAll()
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/portal/eventos/**",
                                 "/api/v1/portal/contato",
                                 "/api/v1/portal/auth/registro",
-                                "/api/v1/portal/respostas/**").permitAll()
+                                "/api/v1/portal/respostas/**",
+                                "/api/v1/portal/devolucoes/**").permitAll()
                         .requestMatchers("/api/v1/portal/**").hasRole("PARTICIPANTE")
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/api-docs/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/error").permitAll()

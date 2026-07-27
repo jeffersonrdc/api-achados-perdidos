@@ -57,10 +57,12 @@ public class DevolucaoService {
     private final MatchService matchService;
     private final AuditoriaContextService auditoriaContext;
     private final SignedResourceIdCodec idCodec;
+    private final DevolucaoFluxoService devolucaoFluxoService;
 
     public DevolucaoService(DevolucaoRepository devolucaoRepository, ItemRepository itemRepository, ClaimRepository claimRepository,
                             WorkflowService workflowService, MatchService matchService,
-                            AuditoriaContextService auditoriaContext, SignedResourceIdCodec idCodec) {
+                            AuditoriaContextService auditoriaContext, SignedResourceIdCodec idCodec,
+                            @org.springframework.context.annotation.Lazy DevolucaoFluxoService devolucaoFluxoService) {
         this.devolucaoRepository = devolucaoRepository;
         this.itemRepository = itemRepository;
         this.claimRepository = claimRepository;
@@ -68,6 +70,7 @@ public class DevolucaoService {
         this.matchService = matchService;
         this.auditoriaContext = auditoriaContext;
         this.idCodec = idCodec;
+        this.devolucaoFluxoService = devolucaoFluxoService;
     }
 
     @Transactional
@@ -108,6 +111,11 @@ public class DevolucaoService {
             workflowService.transitarSePermitido(request.idItem(), "Devolvido", "Devolução concluída ao responsável.");
         }
         Devolucao saved = devolucaoRepository.save(d);
+        if (saved.getCdProtocolo() == null || saved.getCdProtocolo().isBlank()) {
+            saved.setCdProtocolo(String.format(java.util.Locale.ROOT, "DEV-%d-%06d",
+                    LocalDateTime.now().getYear(), saved.getId()));
+            saved = devolucaoRepository.save(saved);
+        }
         if (claimId != null) {
             matchService.confirmarMatch(claimId, item.getId());
         }
@@ -228,38 +236,10 @@ public class DevolucaoService {
                         cb.equal(root.get("tpStatus"), "CONCLUIDO"))));
     }
 
-    private static final java.util.Set<String> STATUS = java.util.Set.of(
-            "AGUARDANDO_RETIRADA", "EM_CONFERENCIA", "AGUARDANDO_ASSINATURA", "ASSINADO", "CONCLUIDO");
-
     /** Avança o status da devolução; ao concluir, marca o item como Devolvido. */
     @Transactional
     public DevolucaoResponse atualizarStatus(String idToken, DevolucaoStatusRequest request) {
-        auditoriaContext.marcarContexto();
-        Devolucao d = devolucaoRepository.findById(idCodec.decodeDevolucaoId(idToken))
-                .filter(x -> !Boolean.TRUE.equals(x.getFgExcluido()))
-                .orElseThrow(() -> new RecursoNaoEncontradoException("Devolução não encontrada."));
-        String destino = request.tpStatus().trim().toUpperCase();
-        if (!STATUS.contains(destino)) {
-            throw new IllegalArgumentException("Status de devolução inválido: " + request.tpStatus());
-        }
-        d.setTpStatus(destino);
-        if (request.dsObservacao() != null && !request.dsObservacao().isBlank()) {
-            d.setDsObservacao(request.dsObservacao());
-        }
-        if ("ASSINADO".equals(destino) || "CONCLUIDO".equals(destino)) {
-            d.setFgAssinado(true);
-        }
-        if ("CONCLUIDO".equals(destino)) {
-            d.setFgConcluido(true);
-            Item item = d.getItem();
-            item.setFgEntregue(true);
-            item.setDtAlteracao(LocalDateTime.now());
-            itemRepository.save(item);
-            workflowService.transitarSePermitido(idCodec.encodeItemId(item.getId()), "Devolvido",
-                    "Devolução concluída ao responsável.");
-        }
-        d.setDtAlteracao(LocalDateTime.now());
-        return toResponse(devolucaoRepository.save(d));
+        return devolucaoFluxoService.atualizarStatus(idToken, request);
     }
 
     private DevolucaoResponse toResponse(Devolucao d) {
@@ -280,6 +260,10 @@ public class DevolucaoService {
                 item.getDtEncontrado(),
                 d.getDsObservacao(),
                 item.getTpPrioridade(),
-                item.getFgSensivel());
+                item.getFgSensivel(),
+                d.getCdProtocolo(),
+                d.getTpMetodo(),
+                d.getTpClaimOrigem() != null ? d.getTpClaimOrigem() : (claim != null ? claim.getTpClaim() : null),
+                DevolucaoStatusMachine.nextAction(d.getTpStatus()));
     }
 }

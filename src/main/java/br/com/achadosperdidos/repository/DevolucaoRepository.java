@@ -12,9 +12,13 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface DevolucaoRepository extends JpaRepository<Devolucao, Long>, JpaSpecificationExecutor<Devolucao> {
+
+    Optional<Devolucao> findByClaim_IdAndFgExcluidoFalse(Long claimId);
+
     @EntityGraph(attributePaths = {"item", "item.categoria", "claim"})
     List<Devolucao> findByFgExcluidoFalseOrderByDtDevolucaoDesc();
 

@@ -10,27 +10,36 @@ import java.time.LocalDateTime;
 public class Devolucao {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "ID_Devolucao") private Long id;
+    @Column(name = "CD_Protocolo", length = 40) private String cdProtocolo;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "IDR_Evento", nullable = false) private Evento evento;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "IDR_Item", nullable = false) private Item item;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "IDR_Claim") private Claim claim;
+    @Column(name = "TP_ClaimOrigem", length = 20) private String tpClaimOrigem;
     @Column(name = "TP_Devolucao", nullable = false, length = 30) private String tpDevolucao;
+    @Column(name = "TP_Metodo", length = 20) private String tpMetodo;
     @Column(name = "DT_Devolucao", nullable = false) private LocalDateTime dtDevolucao;
+    @Column(name = "DT_Conclusao") private LocalDateTime dtConclusao;
     @Column(name = "NM_Recebedor", nullable = false, length = 150) private String nmRecebedor;
     @Column(name = "NR_CPF", length = 11) private String nrCpf;
     @Column(name = "DS_Observacao", columnDefinition = "TEXT") private String dsObservacao;
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Assinado", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgAssinado = false;
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Concluido", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgConcluido = false;
-    @Column(name = "TP_Status", nullable = false, length = 30) private String tpStatus = "AGUARDANDO_RETIRADA";
+    @Column(name = "TP_Status", nullable = false, length = 40) private String tpStatus = "AGUARDANDO_RETIRADA";
     @Column(name = "DT_Cadastro", nullable = false) private LocalDateTime dtCadastro;
     @Column(name = "DT_Alteracao") private LocalDateTime dtAlteracao;
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Ativo", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgAtivo = true;
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Excluido", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgExcluido = false;
+
     public Long getId(){return id;} public void setId(Long id){this.id=id;}
+    public String getCdProtocolo(){return cdProtocolo;} public void setCdProtocolo(String cdProtocolo){this.cdProtocolo=cdProtocolo;}
     public Evento getEvento(){return evento;} public void setEvento(Evento evento){this.evento=evento;}
     public Item getItem(){return item;} public void setItem(Item item){this.item=item;}
     public Claim getClaim(){return claim;} public void setClaim(Claim claim){this.claim=claim;}
+    public String getTpClaimOrigem(){return tpClaimOrigem;} public void setTpClaimOrigem(String tpClaimOrigem){this.tpClaimOrigem=tpClaimOrigem;}
     public String getTpDevolucao(){return tpDevolucao;} public void setTpDevolucao(String tpDevolucao){this.tpDevolucao=tpDevolucao;}
+    public String getTpMetodo(){return tpMetodo;} public void setTpMetodo(String tpMetodo){this.tpMetodo=tpMetodo;}
     public LocalDateTime getDtDevolucao(){return dtDevolucao;} public void setDtDevolucao(LocalDateTime dtDevolucao){this.dtDevolucao=dtDevolucao;}
+    public LocalDateTime getDtConclusao(){return dtConclusao;} public void setDtConclusao(LocalDateTime dtConclusao){this.dtConclusao=dtConclusao;}
     public String getNmRecebedor(){return nmRecebedor;} public void setNmRecebedor(String nmRecebedor){this.nmRecebedor=nmRecebedor;}
     public String getNrCpf(){return nrCpf;} public void setNrCpf(String nrCpf){this.nrCpf=nrCpf;}
     public String getDsObservacao(){return dsObservacao;} public void setDsObservacao(String dsObservacao){this.dsObservacao=dsObservacao;}
