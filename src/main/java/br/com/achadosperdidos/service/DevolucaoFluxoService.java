@@ -6,7 +6,6 @@ import br.com.achadosperdidos.entity.*;
 import br.com.achadosperdidos.exception.RecursoNaoEncontradoException;
 import br.com.achadosperdidos.repository.*;
 import br.com.achadosperdidos.security.SignedResourceIdCodec;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -48,9 +47,7 @@ public class DevolucaoFluxoService {
     private final AuditoriaContextService auditoriaContext;
     private final UsuarioContextService usuarioContextService;
     private final SignedResourceIdCodec idCodec;
-
-    @Value("${app.portal.base-url:http://localhost:4300}")
-    private String portalBaseUrl;
+    private final PortalBaseUrlService portalBaseUrlService;
 
     public DevolucaoFluxoService(DevolucaoRepository devolucaoRepository,
                                  ClaimRepository claimRepository,
@@ -70,7 +67,8 @@ public class DevolucaoFluxoService {
                                  WorkflowService workflowService,
                                  AuditoriaContextService auditoriaContext,
                                  UsuarioContextService usuarioContextService,
-                                 SignedResourceIdCodec idCodec) {
+                                 SignedResourceIdCodec idCodec,
+                                 PortalBaseUrlService portalBaseUrlService) {
         this.devolucaoRepository = devolucaoRepository;
         this.claimRepository = claimRepository;
         this.claimValidacaoRepository = claimValidacaoRepository;
@@ -90,6 +88,7 @@ public class DevolucaoFluxoService {
         this.auditoriaContext = auditoriaContext;
         this.usuarioContextService = usuarioContextService;
         this.idCodec = idCodec;
+        this.portalBaseUrlService = portalBaseUrlService;
     }
 
     @Transactional
@@ -97,11 +96,9 @@ public class DevolucaoFluxoService {
         auditoriaContext.marcarContexto();
         var existente = devolucaoRepository.findByClaim_IdAndFgExcluidoFalse(claim.getId());
         if (existente.isPresent()) {
-            Devolucao d = existente.get();
-            if (DELIVERY_METHOD_PENDING.equals(d.getTpStatus())) {
-                enviarEmailEscolherModalidade(d, claim);
-            }
-            return d;
+            // Idempotente: não regenera token nem reenvia e-mail.
+            // Novo token só na criação ou em POST .../emails/resend.
+            return existente.get();
         }
 
         Devolucao d = new Devolucao();
@@ -477,6 +474,11 @@ public class DevolucaoFluxoService {
                 enviarCotacao(idToken);
                 yield new EmailService.Resultado(true, null);
             }
+            case "DEVOLUCAO_SHIPPING_ENDERECO" -> {
+                DevolucaoAcaoToken token = tokenService.gerar(d, ACAO_SHIPPING_ADDRESS, 15, false);
+                yield enviarEmail(d, claim, "DEVOLUCAO_SHIPPING_ENDERECO",
+                        montarLink("/devolucao/endereco", token.getCdToken()));
+            }
             case "DEVOLUCAO_POSTAGEM" -> {
                 enviarPostagem(idToken);
                 yield new EmailService.Resultado(true, null);
@@ -575,6 +577,7 @@ public class DevolucaoFluxoService {
         d.setTpDevolucao(method);
         if ("PICKUP".equals(method)) {
             transitar(d, PICKUP_SELECTED);
+            marcarAtualizacaoOperador(d);
             historicoService.registrar(d, PICKUP_SELECTED, "Modalidade: retirada",
                     "Solicitante escolheu retirada presencial.", "SOLICITANTE", null, null, null);
         } else {
@@ -583,9 +586,10 @@ public class DevolucaoFluxoService {
             DevolucaoAcaoToken addrToken = tokenService.gerar(d, ACAO_SHIPPING_ADDRESS, 15, false);
             Claim claim = d.getClaim();
             if (claim != null) {
-                enviarEmail(d, claim, "DEVOLUCAO_OCORRENCIA",
+                enviarEmail(d, claim, "DEVOLUCAO_SHIPPING_ENDERECO",
                         montarLink("/devolucao/endereco", addrToken.getCdToken()));
             }
+            marcarAtualizacaoOperador(d);
             historicoService.registrar(d, SHIPPING_ADDRESS_PENDING, "Modalidade: Correios",
                     "Solicitante escolheu envio pelos Correios.", "SOLICITANTE", null, null, null);
         }
@@ -641,6 +645,7 @@ public class DevolucaoFluxoService {
         historicoService.registrar(d, READY_FOR_PICKUP, "Agendamento confirmado",
                 "Opção: " + op.getDtOpcao() + " " + op.getHrInicio() + "-" + op.getHrFim(),
                 "SOLICITANTE", null, email, null);
+        marcarAtualizacaoOperador(d);
         tokenService.marcarUsado(token);
         return Map.of("tpStatus", d.getTpStatus(), "optionId", req.optionId());
     }
@@ -679,6 +684,7 @@ public class DevolucaoFluxoService {
         }
         historicoService.registrar(d, SHIPPING_QUOTE_PENDING, "Endereço informado",
                 end.getNmCidade() + "/" + end.getSgUf(), "SOLICITANTE", null, null, null);
+        marcarAtualizacaoOperador(d);
         if (ACAO_SHIPPING_ADDRESS.equals(token.getTpAcao()) || ACAO_CHOOSE_METHOD.equals(token.getTpAcao())) {
             tokenService.marcarUsado(token);
         }
@@ -710,6 +716,7 @@ public class DevolucaoFluxoService {
                 ? enviarEmail(d, claim, "DEVOLUCAO_PAGAMENTO_RECEBIDO", null) : null;
         historicoService.registrar(d, PAID_AWAITING_POSTING, "Comprovante recebido",
                 "Aguardando postagem.", "SOLICITANTE", null, email, null);
+        marcarAtualizacaoOperador(d);
         tokenService.marcarUsado(token);
         return Map.of("tpStatus", d.getTpStatus());
     }
@@ -774,11 +781,6 @@ public class DevolucaoFluxoService {
         devolucaoRepository.save(d);
     }
 
-    private EmailService.Resultado enviarEmailEscolherModalidade(Devolucao d, Claim claim) {
-        DevolucaoAcaoToken token = tokenService.gerar(d, ACAO_CHOOSE_METHOD, 15, false);
-        return enviarEmailEscolherModalidade(d, claim, token);
-    }
-
     private EmailService.Resultado enviarEmailEscolherModalidade(Devolucao d, Claim claim, DevolucaoAcaoToken token) {
         if (claim == null || claim.getNmEmail() == null || claim.getNmEmail().isBlank()) {
             return new EmailService.Resultado(false, "E-mail do solicitante ausente.");
@@ -808,16 +810,59 @@ public class DevolucaoFluxoService {
     }
 
     private String montarLink(String path, String cdToken) {
-        String base = portalBaseUrl == null ? "" : portalBaseUrl.trim();
-        if (base.endsWith("/")) base = base.substring(0, base.length() - 1);
+        String base = portalBaseUrlService.resolve();
         String p = path.startsWith("/") ? path : "/" + path;
         return base + p + "?token=" + cdToken;
+    }
+
+    private void marcarAtualizacaoOperador(Devolucao d) {
+        d.setFgAtualizacaoOperador(true);
+        d.setDtAtualizacaoOperador(agora());
+        d.setDtAlteracao(agora());
+        devolucaoRepository.save(d);
+    }
+
+    @Transactional
+    public void marcarAtualizacoesLidas(String idToken) {
+        auditoriaContext.marcarContexto();
+        Devolucao d = findDevolucao(idToken);
+        if (Boolean.TRUE.equals(d.getFgAtualizacaoOperador())) {
+            d.setFgAtualizacaoOperador(false);
+            d.setDtAlteracao(agora());
+            devolucaoRepository.save(d);
+        }
+    }
+
+    @Transactional
+    public DevolucaoDetalheResponse salvarConferencia(String idToken, DevolucaoConferenciaRequest req) {
+        auditoriaContext.marcarContexto();
+        Devolucao d = findDevolucao(idToken);
+        boolean item = Boolean.TRUE.equals(req.itemConferido());
+        boolean doc = Boolean.TRUE.equals(req.documentoConferido());
+        d.setFgItemConferido(item);
+        d.setFgDocumentoConferido(doc);
+        if (item && doc) {
+            d.setDtConferencia(agora());
+            String st = d.getTpStatus() == null ? "" : d.getTpStatus().toUpperCase(Locale.ROOT);
+            if (READY_FOR_PICKUP.equals(st) || AGUARDANDO_RETIRADA.equals(st) || PICKUP_SCHEDULE_CONFIRMED.equals(st)) {
+                transitar(d, EM_CONFERENCIA);
+                historicoService.registrar(d, EM_CONFERENCIA, "Conferência iniciada",
+                        "Item e documento conferidos pelo operador.", "OPERADOR",
+                        usuarioLogado(), null, null);
+            }
+        } else {
+            d.setDtConferencia(null);
+        }
+        d.setDtAlteracao(agora());
+        devolucaoRepository.save(d);
+        return toDetalhe(d);
     }
 
     private String sugerirEmailPorStatus(String status) {
         return switch (status == null ? "" : status) {
             case DELIVERY_METHOD_PENDING, CREATED -> "DEVOLUCAO_ESCOLHER_MODALIDADE";
             case PICKUP_OPTIONS_PREPARED, PICKUP_OPTIONS_SENT, PICKUP_CONFIRMATION_PENDING -> "DEVOLUCAO_PICKUP_OPCOES";
+            case SHIPPING_ADDRESS_PENDING, SHIPPING_SELECTED -> "DEVOLUCAO_SHIPPING_ENDERECO";
             case SHIPPING_QUOTE_PENDING, SHIPPING_QUOTE_SENT, PAYMENT_PROOF_PENDING -> "DEVOLUCAO_SHIPPING_COTACAO";
             case POSTED, IN_TRANSIT -> "DEVOLUCAO_POSTAGEM";
             case COMPLETED, CONCLUIDO, DELIVERED -> "DEVOLUCAO_CONCLUIDA";
@@ -915,7 +960,10 @@ public class DevolucaoFluxoService {
                 quote,
                 proof,
                 posting,
-                mapHistorico(d.getId()));
+                mapHistorico(d.getId()),
+                Boolean.TRUE.equals(d.getFgItemConferido()),
+                Boolean.TRUE.equals(d.getFgDocumentoConferido()),
+                Boolean.TRUE.equals(d.getFgAtualizacaoOperador()));
     }
 
     private List<DevolucaoHistoricoItemResponse> mapHistorico(Long devolucaoId) {
@@ -955,6 +1003,7 @@ public class DevolucaoFluxoService {
                 d.getCdProtocolo(),
                 d.getTpMetodo(),
                 d.getTpClaimOrigem(),
-                nextAction(d.getTpStatus()));
+                nextAction(d.getTpStatus()),
+                Boolean.TRUE.equals(d.getFgAtualizacaoOperador()));
     }
 }

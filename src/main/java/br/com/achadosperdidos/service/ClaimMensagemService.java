@@ -21,7 +21,6 @@ import br.com.achadosperdidos.repository.ClaimRepository;
 import br.com.achadosperdidos.repository.ClaimRespostaTokenRepository;
 import br.com.achadosperdidos.repository.EventoConfiguracaoRepository;
 import br.com.achadosperdidos.security.SignedResourceIdCodec;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -55,9 +54,7 @@ public class ClaimMensagemService {
     private final ClaimService claimService;
     private final UsuarioContextService usuarioContextService;
     private final SignedResourceIdCodec idCodec;
-
-    @Value("${app.portal.base-url:http://localhost:4300}")
-    private String portalBaseUrl;
+    private final PortalBaseUrlService portalBaseUrlService;
 
     public ClaimMensagemService(ClaimRepository claimRepository,
                                 ClaimMensagemRepository mensagemRepository,
@@ -69,7 +66,8 @@ public class ClaimMensagemService {
                                 StatusItemService statusItemService,
                                 ClaimService claimService,
                                 UsuarioContextService usuarioContextService,
-                                SignedResourceIdCodec idCodec) {
+                                SignedResourceIdCodec idCodec,
+                                PortalBaseUrlService portalBaseUrlService) {
         this.claimRepository = claimRepository;
         this.mensagemRepository = mensagemRepository;
         this.tokenRepository = tokenRepository;
@@ -81,6 +79,7 @@ public class ClaimMensagemService {
         this.claimService = claimService;
         this.usuarioContextService = usuarioContextService;
         this.idCodec = idCodec;
+        this.portalBaseUrlService = portalBaseUrlService;
     }
 
     /** Lista a conversa e marca mensagens do solicitante como vistas pelo operador. */
@@ -263,9 +262,7 @@ public class ClaimMensagemService {
     }
 
     private String montarLinkResposta(String cdToken) {
-        String base = portalBaseUrl == null ? "" : portalBaseUrl.trim();
-        if (base.endsWith("/")) base = base.substring(0, base.length() - 1);
-        return base + "/responder-email?token=" + cdToken;
+        return portalBaseUrlService.resolve() + "/responder-email?token=" + cdToken;
     }
 
     private int resolverPrazoDias(Long eventoId) {

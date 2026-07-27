@@ -157,6 +157,22 @@ public class DevolucaoController {
         return devolucaoFluxoService.reenviarEmail(id, request != null ? request : new DevolucaoEmailResendRequest(null));
     }
 
+    @PostMapping("/{id}/marcar-lidas")
+    @PreAuthorize("@authz.pode('devolucao.listar')")
+    @Operation(summary = "Marcar atualizações do solicitante como lidas (badge)")
+    public Map<String, Object> marcarLidas(@PathVariable String id) {
+        devolucaoFluxoService.marcarAtualizacoesLidas(id);
+        return Map.of("ok", true);
+    }
+
+    @PostMapping("/{id}/conferencia")
+    @PreAuthorize("@authz.pode('devolucao.realizar')")
+    @Operation(summary = "Persistir checkboxes de conferência presencial")
+    public DevolucaoDetalheResponse salvarConferencia(
+            @PathVariable String id, @Valid @RequestBody DevolucaoConferenciaRequest request) {
+        return devolucaoFluxoService.salvarConferencia(id, request);
+    }
+
     @PutMapping("/{id}/status")
     @PreAuthorize("@authz.pode('devolucao.realizar')")
     @Operation(summary = "Atualizar status da devolução")

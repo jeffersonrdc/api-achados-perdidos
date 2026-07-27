@@ -1,7 +1,5 @@
 package br.com.achadosperdidos.controller.dto;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 
 public record DevolucaoDetalheResponse(
@@ -29,5 +27,8 @@ public record DevolucaoDetalheResponse(
         DevolucaoShippingQuoteResponse shippingQuote,
         DevolucaoPaymentProofResponse paymentProof,
         DevolucaoShippingPostingResponse shippingPosting,
-        List<DevolucaoHistoricoItemResponse> history
+        List<DevolucaoHistoricoItemResponse> history,
+        Boolean itemConferido,
+        Boolean documentoConferido,
+        Boolean fgAtualizacaoOperador
 ) {}

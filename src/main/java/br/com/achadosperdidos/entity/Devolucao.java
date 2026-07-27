@@ -23,8 +23,13 @@ public class Devolucao {
     @Column(name = "NR_CPF", length = 11) private String nrCpf;
     @Column(name = "DS_Observacao", columnDefinition = "TEXT") private String dsObservacao;
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Assinado", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgAssinado = false;
+    @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_ItemConferido", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgItemConferido = false;
+    @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_DocumentoConferido", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgDocumentoConferido = false;
+    @Column(name = "DT_Conferencia") private LocalDateTime dtConferencia;
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Concluido", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgConcluido = false;
     @Column(name = "TP_Status", nullable = false, length = 40) private String tpStatus = "AGUARDANDO_RETIRADA";
+    @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_AtualizacaoOperador", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgAtualizacaoOperador = false;
+    @Column(name = "DT_AtualizacaoOperador") private LocalDateTime dtAtualizacaoOperador;
     @Column(name = "DT_Cadastro", nullable = false) private LocalDateTime dtCadastro;
     @Column(name = "DT_Alteracao") private LocalDateTime dtAlteracao;
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Ativo", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgAtivo = true;
@@ -44,8 +49,13 @@ public class Devolucao {
     public String getNrCpf(){return nrCpf;} public void setNrCpf(String nrCpf){this.nrCpf=nrCpf;}
     public String getDsObservacao(){return dsObservacao;} public void setDsObservacao(String dsObservacao){this.dsObservacao=dsObservacao;}
     public Boolean getFgAssinado(){return fgAssinado;} public void setFgAssinado(Boolean fgAssinado){this.fgAssinado=fgAssinado;}
+    public Boolean getFgItemConferido(){return fgItemConferido;} public void setFgItemConferido(Boolean fgItemConferido){this.fgItemConferido=fgItemConferido;}
+    public Boolean getFgDocumentoConferido(){return fgDocumentoConferido;} public void setFgDocumentoConferido(Boolean fgDocumentoConferido){this.fgDocumentoConferido=fgDocumentoConferido;}
+    public LocalDateTime getDtConferencia(){return dtConferencia;} public void setDtConferencia(LocalDateTime dtConferencia){this.dtConferencia=dtConferencia;}
     public Boolean getFgConcluido(){return fgConcluido;} public void setFgConcluido(Boolean fgConcluido){this.fgConcluido=fgConcluido;}
     public String getTpStatus(){return tpStatus;} public void setTpStatus(String tpStatus){this.tpStatus=tpStatus;}
+    public Boolean getFgAtualizacaoOperador(){return fgAtualizacaoOperador;} public void setFgAtualizacaoOperador(Boolean fgAtualizacaoOperador){this.fgAtualizacaoOperador=fgAtualizacaoOperador;}
+    public LocalDateTime getDtAtualizacaoOperador(){return dtAtualizacaoOperador;} public void setDtAtualizacaoOperador(LocalDateTime dtAtualizacaoOperador){this.dtAtualizacaoOperador=dtAtualizacaoOperador;}
     public LocalDateTime getDtCadastro(){return dtCadastro;} public void setDtCadastro(LocalDateTime dtCadastro){this.dtCadastro=dtCadastro;}
     public LocalDateTime getDtAlteracao(){return dtAlteracao;} public void setDtAlteracao(LocalDateTime dtAlteracao){this.dtAlteracao=dtAlteracao;}
     public Boolean getFgAtivo(){return fgAtivo;} public void setFgAtivo(Boolean fgAtivo){this.fgAtivo=fgAtivo;}

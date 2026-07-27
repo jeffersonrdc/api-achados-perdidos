@@ -16,9 +16,12 @@ import java.util.List;
 
 @Repository
 public interface ItemRepository extends JpaRepository<Item, Long>, JpaSpecificationExecutor<Item> {
-    @EntityGraph(attributePaths = {"evento", "categoria", "status"})
+    @EntityGraph(attributePaths = {"evento", "categoria", "status", "subcategoria"})
     List<Item> findByEvento_IdAndStatus_NmStatusInAndFgExcluidoFalseOrderByDtCadastroAsc(
             Long eventoId, Collection<String> statuses);
+
+    @EntityGraph(attributePaths = {"evento", "categoria", "status", "subcategoria"})
+    List<Item> findByEvento_IdAndFgExcluidoFalseOrderByDtCadastroAsc(Long eventoId);
 
     @EntityGraph(attributePaths = {"categoria", "subcategoria", "status", "localizacao", "localizacao.deposito"})
     List<Item> findByEvento_IdAndStatus_NmStatusAndFgExcluidoFalseOrderByDtEncontradoDesc(

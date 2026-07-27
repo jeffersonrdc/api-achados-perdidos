@@ -15,11 +15,11 @@ import br.com.achadosperdidos.repository.ClaimRepository;
 import br.com.achadosperdidos.repository.DevolucaoRepository;
 import br.com.achadosperdidos.repository.ItemRepository;
 import br.com.achadosperdidos.security.SignedResourceIdCodec;
+import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -159,11 +159,43 @@ public class DevolucaoService {
             // Evita duplicatas quando o join com item é usado em contagem.
             if (query != null && Long.class != query.getResultType() && long.class != query.getResultType()) {
                 query.distinct(true);
+                var statusPath = root.get("tpStatus");
+                Expression<Integer> grupoConcluido = cb.<Integer>selectCase()
+                        .when(statusPath.in("COMPLETED", "CONCLUIDO", "DELIVERED", "CANCELLED", "ITEM_DELIVERED"), 1)
+                        .otherwise(0);
+                Expression<Integer> ordemPipeline = cb.<Integer>selectCase()
+                        .when(cb.equal(statusPath, "DELIVERY_METHOD_PENDING"), 1)
+                        .when(cb.equal(statusPath, "CREATED"), 2)
+                        .when(cb.equal(statusPath, "PICKUP_SELECTED"), 10)
+                        .when(cb.equal(statusPath, "PICKUP_SCHEDULE_REQUESTED"), 11)
+                        .when(cb.equal(statusPath, "PICKUP_OPTIONS_PREPARED"), 12)
+                        .when(cb.equal(statusPath, "PICKUP_OPTIONS_SENT"), 13)
+                        .when(cb.equal(statusPath, "PICKUP_CONFIRMATION_PENDING"), 14)
+                        .when(cb.equal(statusPath, "PICKUP_OPTIONS_EXPIRED"), 15)
+                        .when(cb.equal(statusPath, "PICKUP_SCHEDULE_CONFIRMED"), 16)
+                        .when(cb.equal(statusPath, "READY_FOR_PICKUP"), 17)
+                        .when(cb.equal(statusPath, "AGUARDANDO_RETIRADA"), 18)
+                        .when(cb.equal(statusPath, "EM_CONFERENCIA"), 19)
+                        .when(cb.equal(statusPath, "TERMO_GERADO"), 20)
+                        .when(cb.equal(statusPath, "AGUARDANDO_ASSINATURA"), 21)
+                        .when(cb.equal(statusPath, "ASSINADO"), 22)
+                        .when(cb.equal(statusPath, "SHIPPING_SELECTED"), 30)
+                        .when(cb.equal(statusPath, "SHIPPING_ADDRESS_PENDING"), 31)
+                        .when(cb.equal(statusPath, "SHIPPING_QUOTE_PENDING"), 32)
+                        .when(cb.equal(statusPath, "SHIPPING_QUOTE_SENT"), 33)
+                        .when(cb.equal(statusPath, "PAYMENT_PROOF_PENDING"), 34)
+                        .when(cb.equal(statusPath, "PAID_AWAITING_POSTING"), 35)
+                        .when(cb.equal(statusPath, "POSTED"), 36)
+                        .when(cb.equal(statusPath, "IN_TRANSIT"), 37)
+                        .otherwise(50);
+                query.orderBy(
+                        cb.asc(grupoConcluido),
+                        cb.asc(ordemPipeline),
+                        cb.desc(root.get("dtDevolucao")));
             }
             return cb.and(ps.toArray(new Predicate[0]));
         };
-        Page<Devolucao> result = devolucaoRepository.findAll(spec,
-                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.DESC, "dtDevolucao")));
+        Page<Devolucao> result = devolucaoRepository.findAll(spec, PageRequest.of(p - 1, l));
         var content = result.getContent().stream().map(this::toResponse).toList();
         return ApiPage.paged(content, new PaginationMeta(p, l, result.getTotalElements(), result.getTotalPages()));
     }
@@ -264,6 +296,7 @@ public class DevolucaoService {
                 d.getCdProtocolo(),
                 d.getTpMetodo(),
                 d.getTpClaimOrigem() != null ? d.getTpClaimOrigem() : (claim != null ? claim.getTpClaim() : null),
-                DevolucaoStatusMachine.nextAction(d.getTpStatus()));
+                DevolucaoStatusMachine.nextAction(d.getTpStatus()),
+                Boolean.TRUE.equals(d.getFgAtualizacaoOperador()));
     }
 }

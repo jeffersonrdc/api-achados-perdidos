@@ -25,8 +25,8 @@ import java.util.stream.Collectors;
 
 /**
  * Motor de match claim PERDA ↔ itens da coleta/estoque.
- * Critérios: mesma categoria (filtro), subcategoria + marca + modelo + cor iguais;
- * se o claim tiver tags, exige ao menos uma em comum (senão, os demais bastam).
+ * Critérios: mesma categoria (filtro); subcategoria/marca/modelo/cor só quando o claim informou;
+ * se o claim tiver tags, exige ao menos uma em comum.
  * Persiste candidatos em {@code claim_validacao} com {@code ST_Resultado=PENDENTE}.
  */
 @Service
@@ -39,8 +39,9 @@ public class MatchService {
     public static final String STATUS_AGUARDANDO_MATCH = "Aguardando Match";
     public static final String STATUS_MATCH = "Match";
 
-    private static final List<String> STATUS_CANDIDATOS = List.of(
-            "Em estoque", "Com pedido de devolucao", "Aguardando retirada");
+    /** Status finais / indisponíveis — excluídos do match. */
+    private static final Set<String> STATUS_EXCLUIDOS = Set.of(
+            "Aguardando retirada", "Devolvido", "Descartado", "Finalizado");
     /** Status que o motor de match pode alterar automaticamente. */
     private static final Set<String> STATUS_GERENCIADOS = Set.of(
             "Claim Aberto", STATUS_AGUARDANDO_MATCH, STATUS_MATCH);
@@ -79,11 +80,10 @@ public class MatchService {
         Long eventoId = claim.getEvento().getId();
         Long categoriaId = claim.getCategoria().getId();
         List<Item> candidatos = itemRepository
-                .findByEvento_IdAndStatus_NmStatusInAndFgExcluidoFalseOrderByDtCadastroAsc(
-                        eventoId, STATUS_CANDIDATOS)
+                .findByEvento_IdAndFgExcluidoFalseOrderByDtCadastroAsc(eventoId)
                 .stream()
-                .filter(i -> !Boolean.TRUE.equals(i.getFgEntregue()))
                 .filter(i -> !Boolean.TRUE.equals(i.getFgDescartado()))
+                .filter(i -> !statusExcluido(i))
                 .filter(i -> i.getCategoria() != null && Objects.equals(i.getCategoria().getId(), categoriaId))
                 .toList();
 
@@ -124,14 +124,11 @@ public class MatchService {
     public int recalcularMatchesPorItem(Item item) {
         if (item == null || item.getId() == null) return 0;
         if (Boolean.TRUE.equals(item.getFgExcluido())
-                || Boolean.TRUE.equals(item.getFgEntregue())
                 || Boolean.TRUE.equals(item.getFgDescartado())) {
             return 0;
         }
         if (item.getEvento() == null || item.getCategoria() == null) return 0;
-        String st = item.getStatus() != null ? item.getStatus().getNmStatus() : "";
-        boolean candidato = STATUS_CANDIDATOS.stream().anyMatch(s -> s.equalsIgnoreCase(st));
-        if (!candidato) return 0;
+        if (statusExcluido(item)) return 0;
 
         List<Claim> claims = claimRepository.findPerdasParaMatch(
                 item.getEvento().getId(), ClaimService.TIPO_PERDA, item.getCategoria().getId());
@@ -214,26 +211,46 @@ public class MatchService {
         }
     }
 
+    private static boolean statusExcluido(Item item) {
+        String st = item.getStatus() != null ? item.getStatus().getNmStatus() : "";
+        if (st == null || st.isBlank()) return false;
+        return STATUS_EXCLUIDOS.stream().anyMatch(s -> s.equalsIgnoreCase(st));
+    }
+
     int calcularScore(Claim claim, Item item) {
-        // Critérios obrigatórios: subcategoria, marca, modelo e cor.
-        if (claim.getSubcategoria() == null || item.getSubcategoria() == null
-                || !Objects.equals(claim.getSubcategoria().getId(), item.getSubcategoria().getId())) {
-            return 0;
+        int camposInformados = 0;
+
+        if (claim.getSubcategoria() != null) {
+            camposInformados++;
+            if (item.getSubcategoria() == null
+                    || !Objects.equals(claim.getSubcategoria().getId(), item.getSubcategoria().getId())) {
+                return 0;
+            }
         }
-        if (!equalsIgnore(claim.getNmMarca(), item.getNmMarca())) return 0;
-        if (!equalsIgnore(claim.getNmModelo(), item.getNmModelo())) return 0;
-        if (!equalsIgnore(claim.getNmCor(), item.getNmCor())) return 0;
+        if (informado(claim.getNmMarca())) {
+            camposInformados++;
+            if (!equalsIgnore(claim.getNmMarca(), item.getNmMarca())) return 0;
+        }
+        if (informado(claim.getNmModelo())) {
+            camposInformados++;
+            if (!equalsIgnore(claim.getNmModelo(), item.getNmModelo())) return 0;
+        }
+        if (informado(claim.getNmCor())) {
+            camposInformados++;
+            if (!equalsIgnore(claim.getNmCor(), item.getNmCor())) return 0;
+        }
 
         Set<String> claimTags = splitTags(claim.getDsTags());
-        // Se o claim informou tags, exige ao menos uma em comum com o item.
-        // Se não houver tags no claim, os demais critérios bastam.
         if (!claimTags.isEmpty() && !temAoMenosUmaTag(claimTags, item)) {
             return 0;
         }
 
-        int score = 70; // subcategoria + marca + modelo + cor
+        // Categoria já filtrada. Score base sobe se houver poucos campos informados.
+        int score = camposInformados == 0
+                ? 60
+                : Math.max(SCORE_MINIMO, 40 + camposInformados * 10);
         if (!claimTags.isEmpty()) {
-            score += 15; // ao menos uma tag bateu
+            score += 15;
         }
         return Math.min(100, score);
     }
@@ -258,6 +275,10 @@ public class MatchService {
                 .map(s -> s.trim().toLowerCase(Locale.ROOT))
                 .filter(s -> s.length() >= 2)
                 .collect(Collectors.toSet());
+    }
+
+    private static boolean informado(String v) {
+        return v != null && !v.trim().isEmpty();
     }
 
     private static boolean equalsIgnore(String a, String b) {
