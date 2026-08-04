@@ -91,16 +91,7 @@ public interface ItemRepository extends JpaRepository<Item, Long>, JpaSpecificat
             SELECT COUNT(DISTINCT i.categoria.id) FROM Item i
              WHERE i.evento.id = :eventoId AND i.fgExcluido = false
                AND (:dia IS NULL OR i.dtEncontrado = :dia)
-               AND (
-                 i.status.nmStatus IN :statuses
-                 OR (
-                   i.status.nmStatus = 'Em estoque'
-                   AND NOT EXISTS (
-                     SELECT 1 FROM Triagem t
-                      WHERE t.item.id = i.id AND t.fgExcluido = false AND t.tpStatus = 'CONCLUIDA'
-                   )
-                 )
-               )""")
+               AND i.status.nmStatus IN :statuses""")
     long countCategoriasDistintas(@Param("eventoId") Long eventoId,
                                   @Param("statuses") Collection<String> statuses,
                                   @Param("dia") LocalDate dia);
@@ -109,47 +100,17 @@ public interface ItemRepository extends JpaRepository<Item, Long>, JpaSpecificat
             SELECT i.categoria.nmCategoria AS nome, COUNT(i) AS qt FROM Item i
              WHERE i.evento.id = :eventoId AND i.fgExcluido = false
                AND (:dia IS NULL OR i.dtEncontrado = :dia)
-               AND (
-                 i.status.nmStatus IN :statuses
-                 OR (
-                   i.status.nmStatus = 'Em estoque'
-                   AND NOT EXISTS (
-                     SELECT 1 FROM Triagem t
-                      WHERE t.item.id = i.id AND t.fgExcluido = false AND t.tpStatus = 'CONCLUIDA'
-                   )
-                 )
-               )
+               AND i.status.nmStatus IN :statuses
              GROUP BY i.categoria.nmCategoria ORDER BY qt DESC""")
     List<Object[]> contagemPorCategoria(@Param("eventoId") Long eventoId,
                                         @Param("statuses") Collection<String> statuses,
                                         @Param("dia") LocalDate dia);
 
-    /** Itens já no estoque que ainda não tiveram a triagem concluída (aparecem na fila). */
-    @Query("""
-            SELECT COUNT(i) FROM Item i
-             WHERE i.evento.id = :eventoId AND i.fgExcluido = false
-               AND i.status.nmStatus = 'Em estoque'
-               AND (:dia IS NULL OR i.dtEncontrado = :dia)
-               AND NOT EXISTS (
-                 SELECT 1 FROM Triagem t
-                  WHERE t.item.id = i.id AND t.fgExcluido = false AND t.tpStatus = 'CONCLUIDA'
-               )""")
-    long countEstoquePendenteTriagem(@Param("eventoId") Long eventoId, @Param("dia") LocalDate dia);
-
     @Query("""
             SELECT COUNT(i) FROM Item i
              WHERE i.evento.id = :eventoId AND i.fgExcluido = false AND i.fgSensivel = true
                AND (:dia IS NULL OR i.dtEncontrado = :dia)
-               AND (
-                 i.status.nmStatus IN :statuses
-                 OR (
-                   i.status.nmStatus = 'Em estoque'
-                   AND NOT EXISTS (
-                     SELECT 1 FROM Triagem t
-                      WHERE t.item.id = i.id AND t.fgExcluido = false AND t.tpStatus = 'CONCLUIDA'
-                   )
-                 )
-               )""")
+               AND i.status.nmStatus IN :statuses""")
     long countSensiveisNaFila(@Param("eventoId") Long eventoId,
                               @Param("statuses") Collection<String> statuses,
                               @Param("dia") LocalDate dia);
@@ -158,16 +119,7 @@ public interface ItemRepository extends JpaRepository<Item, Long>, JpaSpecificat
             SELECT COUNT(i) FROM Item i
              WHERE i.evento.id = :eventoId AND i.fgExcluido = false
                AND (:dia IS NULL OR i.dtEncontrado = :dia)
-               AND (
-                 i.status.nmStatus IN :statuses
-                 OR (
-                   i.status.nmStatus = 'Em estoque'
-                   AND NOT EXISTS (
-                     SELECT 1 FROM Triagem t
-                      WHERE t.item.id = i.id AND t.fgExcluido = false AND t.tpStatus = 'CONCLUIDA'
-                   )
-                 )
-               )""")
+               AND i.status.nmStatus IN :statuses""")
     long countNaFilaTriagem(@Param("eventoId") Long eventoId,
                             @Param("statuses") Collection<String> statuses,
                             @Param("dia") LocalDate dia);

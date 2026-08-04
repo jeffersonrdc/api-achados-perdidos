@@ -6,6 +6,7 @@ import br.com.achadosperdidos.controller.dto.ResumoOperacionalResponse;
 import br.com.achadosperdidos.entity.Evento;
 import br.com.achadosperdidos.exception.RecursoNaoEncontradoException;
 import br.com.achadosperdidos.repository.EventoRepository;
+import br.com.achadosperdidos.repository.WallpaperDownloadRepository;
 import br.com.achadosperdidos.security.SignedResourceIdCodec;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -33,10 +34,14 @@ public class AnalyticsService {
     private EntityManager em;
 
     private final EventoRepository eventoRepository;
+    private final WallpaperDownloadRepository wallpaperDownloadRepository;
     private final SignedResourceIdCodec idCodec;
 
-    public AnalyticsService(EventoRepository eventoRepository, SignedResourceIdCodec idCodec) {
+    public AnalyticsService(EventoRepository eventoRepository,
+                            WallpaperDownloadRepository wallpaperDownloadRepository,
+                            SignedResourceIdCodec idCodec) {
         this.eventoRepository = eventoRepository;
+        this.wallpaperDownloadRepository = wallpaperDownloadRepository;
         this.idCodec = idCodec;
     }
 
@@ -172,7 +177,8 @@ public class AnalyticsService {
                 porStatus.getOrDefault("Finalizado", 0L),
                 porStatus.getOrDefault("Descartado", 0L),
                 contarDevolvidosNoDia(ev, diaDevolvidos),
-                dia != null ? contarSensiveisNoDia(ev, dia) : contarSensiveis(ev));
+                dia != null ? contarSensiveisNoDia(ev, dia) : contarSensiveis(ev),
+                wallpaperDownloadRepository.contarPorEvento(ev, dia));
     }
 
     /** Série temporal: janela de {@code dias} terminando em {@code data} (ou hoje). */

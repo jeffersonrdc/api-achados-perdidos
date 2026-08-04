@@ -6,6 +6,7 @@ import br.com.achadosperdidos.controller.dto.ClaimHistoricoResponse;
 import br.com.achadosperdidos.controller.dto.ClaimMensagemCreateRequest;
 import br.com.achadosperdidos.controller.dto.ClaimMensagemResponse;
 import br.com.achadosperdidos.controller.dto.ClaimReprovarRequest;
+import br.com.achadosperdidos.controller.dto.ClaimRetornoRequest;
 import br.com.achadosperdidos.controller.dto.ClaimResponse;
 import br.com.achadosperdidos.controller.dto.ClaimSolicitarInfoRequest;
 import br.com.achadosperdidos.controller.dto.ClaimUpdateRequest;
@@ -181,8 +182,10 @@ public class ClaimController {
 
     @PostMapping("/{id}/returns")
     @PreAuthorize("@authz.pode('claim.validar')")
-    @Operation(summary = "Criar ticket de devolução a partir do claim aprovado (idempotente)")
-    public DevolucaoResponse criarRetorno(@PathVariable String id) {
-        return devolucaoFluxoService.criarRetornoDoClaim(id);
+    @Operation(summary = "Criar ticket de devolução a partir do claim aprovado (idempotente)",
+            description = "Aceita o item escolhido no match. Recusa o par claim↔item já reprovado.")
+    public DevolucaoResponse criarRetorno(@PathVariable String id,
+                                          @RequestBody(required = false) ClaimRetornoRequest request) {
+        return devolucaoFluxoService.criarRetornoDoClaim(id, request != null ? request.idItem() : null);
     }
 }

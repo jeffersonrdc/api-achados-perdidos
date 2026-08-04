@@ -100,7 +100,7 @@ BEGIN
                 'DT_Alteracao', DATE_FORMAT(NEW.DT_Alteracao, '%Y-%m-%d %H:%i:%s')),
     NEW.IDR_UsuarioCadastro);
   CALL SP_RegistrarVersionamento('usuario', NEW.ID_Usuario, 'INSERT',
-    JSON_OBJECT('NM_Login', NEW.NM_Login, 'NM_Email', NEW.NM_Email, 'IDR_Perfil', NEW.IDR_Perfil, 'IDR_Empresa', NEW.IDR_Empresa),
+    JSON_OBJECT('NM_Login', NEW.NM_Login, 'NM_Email', NEW.NM_Email, 'IDR_Perfil', NEW.IDR_Perfil),
     NEW.IDR_UsuarioCadastro);
 END$$
 CREATE TRIGGER TRG_usuario_au_audit AFTER UPDATE ON usuario FOR EACH ROW

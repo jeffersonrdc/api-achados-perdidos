@@ -32,6 +32,7 @@ public class ClaimWorkflowService {
     private final ClaimValidacaoRepository validacaoRepository;
     private final ItemRepository itemRepository;
     private final ClaimService claimService;
+    private final MatchService matchService;
     private final StatusItemService statusItemService;
     private final EmailService emailService;
     private final DevolucaoFluxoService devolucaoFluxoService;
@@ -42,7 +43,8 @@ public class ClaimWorkflowService {
 
     public ClaimWorkflowService(ClaimRepository claimRepository, ClaimHistoricoRepository historicoRepository,
                                 ClaimValidacaoRepository validacaoRepository, ItemRepository itemRepository,
-                                ClaimService claimService, StatusItemService statusItemService,
+                                ClaimService claimService, MatchService matchService,
+                                StatusItemService statusItemService,
                                 EmailService emailService, DevolucaoFluxoService devolucaoFluxoService,
                                 WorkflowService workflowService, UsuarioContextService usuarioContextService,
                                 SignedResourceIdCodec idCodec, ClaimMensagemService claimMensagemService) {
@@ -51,6 +53,7 @@ public class ClaimWorkflowService {
         this.validacaoRepository = validacaoRepository;
         this.itemRepository = itemRepository;
         this.claimService = claimService;
+        this.matchService = matchService;
         this.statusItemService = statusItemService;
         this.emailService = emailService;
         this.devolucaoFluxoService = devolucaoFluxoService;
@@ -104,6 +107,8 @@ public class ClaimWorkflowService {
 
         // Ticket do novo fluxo (PICKUP/SHIPPING) + e-mail de escolha de modalidade.
         devolucaoFluxoService.criarTicketPosAprovacao(claim, item);
+        // Claim resolvido: os candidatos restantes saem da fila do match.
+        matchService.descartarPendentes(claim.getId(), item.getId());
         workflowService.transitarSePermitido(req.idItem(), "Aguardando retirada",
                 "Pedido de devolução aprovado — item reservado para retirada.");
 
@@ -125,6 +130,22 @@ public class ClaimWorkflowService {
         claim.setDsJustificativaReprovacao(justificativa);
         claim.setDtAlteracao(LocalDateTime.now());
         claimRepository.save(claim);
+
+        // Match: o par claim↔item fica reprovado para sempre; os demais candidatos
+        // voltam à fila e o claim PERDA retorna ao pool para o operador tentar outro.
+        if (item != null) {
+            boolean sobrouPendente = matchService.reprovarMatch(claim.getId(), item.getId());
+            // O item deixa de estar reservado: volta ao estoque e ao portal.
+            workflowService.transitarSePermitido(idCodec.encodeItemId(item.getId()), "Em estoque",
+                    "Pedido de devolução reprovado — item liberado ao estoque.");
+            // Libera o ticket do claim (UK_devolucao_claim é 1 por claim) para que
+            // outro candidato possa ser encaminhado sem perder o histórico.
+            devolucaoFluxoService.cancelarTicketDoClaim(claim, justificativa);
+            if (ClaimService.TIPO_PERDA.equalsIgnoreCase(claim.getTpClaim())) {
+                matchService.devolverAoPoolDeMatch(claim, sobrouPendente);
+            }
+        }
+
         Map<String, String> vars = variaveis(claim, justificativa);
         vars.put("motivo", justificativa);
         var email = emailService.enviar("CLAIM_REPROVACAO", claim.getNmEmail(), vars);

@@ -43,6 +43,7 @@ public class DevolucaoFluxoService {
     private final EmailService emailService;
     private final ArquivoService arquivoService;
     private final MatchService matchService;
+    private final StatusItemService statusItemService;
     private final WorkflowService workflowService;
     private final AuditoriaContextService auditoriaContext;
     private final UsuarioContextService usuarioContextService;
@@ -64,6 +65,7 @@ public class DevolucaoFluxoService {
                                  EmailService emailService,
                                  ArquivoService arquivoService,
                                  MatchService matchService,
+                                 StatusItemService statusItemService,
                                  WorkflowService workflowService,
                                  AuditoriaContextService auditoriaContext,
                                  UsuarioContextService usuarioContextService,
@@ -84,6 +86,7 @@ public class DevolucaoFluxoService {
         this.emailService = emailService;
         this.arquivoService = arquivoService;
         this.matchService = matchService;
+        this.statusItemService = statusItemService;
         this.workflowService = workflowService;
         this.auditoriaContext = auditoriaContext;
         this.usuarioContextService = usuarioContextService;
@@ -91,14 +94,65 @@ public class DevolucaoFluxoService {
         this.portalBaseUrlService = portalBaseUrlService;
     }
 
+    /** Reaproveita o ticket cancelado para o novo item escolhido no match. */
+    private Devolucao reabrirTicketCancelado(Devolucao d, Claim claim, Item item) {
+        d.setItem(item);
+        d.setEvento(item.getEvento());
+        String origem = claim.getTpClaim() != null ? claim.getTpClaim() : "RETIRADA";
+        d.setTpClaimOrigem(origem);
+        d.setTpDevolucao(origem);
+        d.setTpMetodo(null);
+        d.setTpStatus(DELIVERY_METHOD_PENDING);
+        d.setNmRecebedor(claim.getNmNome());
+        d.setNrCpf(claim.getNrCpf());
+        d.setFgAssinado(false);
+        d.setFgConcluido(false);
+        d.setDtDevolucao(agora());
+        d.setDtAlteracao(agora());
+        d.setFgAtivo(true);
+        d = devolucaoRepository.save(d);
+
+        matchService.confirmarMatch(claim.getId(), item.getId());
+        historicoService.registrar(d, CREATED, "Ticket reaberto",
+                "Novo candidato do match encaminhado após reprovação anterior.", "SISTEMA", null, null, null);
+
+        DevolucaoAcaoToken token = tokenService.gerar(d, ACAO_CHOOSE_METHOD, 15, false);
+        EmailService.Resultado email = enviarEmailEscolherModalidade(d, claim, token);
+        historicoService.registrar(d, DELIVERY_METHOD_PENDING, "Aguardando modalidade",
+                "E-mail enviado para escolha de modalidade de devolução.",
+                "SISTEMA", null, email, null);
+        return d;
+    }
+
+    /** Cancela o ticket do claim (reprovação), preservando o registro e o histórico. */
+    @Transactional
+    public void cancelarTicketDoClaim(Claim claim, String motivo) {
+        if (claim == null || claim.getId() == null) return;
+        var existente = devolucaoRepository.findByClaim_IdAndFgExcluidoFalse(claim.getId());
+        if (existente.isEmpty()) return;
+        Devolucao d = existente.get();
+        if (CANCELLED.equals(d.getTpStatus())) return;
+        d.setTpStatus(CANCELLED);
+        d.setDtAlteracao(agora());
+        devolucaoRepository.save(d);
+        historicoService.registrar(d, CANCELLED, "Pedido reprovado",
+                motivo != null && !motivo.isBlank() ? motivo : "Pedido de devolução reprovado pelo operador.",
+                "OPERADOR", null, null, null);
+    }
+
     @Transactional
     public Devolucao criarTicketPosAprovacao(Claim claim, Item item) {
         auditoriaContext.marcarContexto();
         var existente = devolucaoRepository.findByClaim_IdAndFgExcluidoFalse(claim.getId());
-        if (existente.isPresent()) {
+        if (existente.isPresent() && !CANCELLED.equals(existente.get().getTpStatus())) {
             // Idempotente: não regenera token nem reenvia e-mail.
             // Novo token só na criação ou em POST .../emails/resend.
             return existente.get();
+        }
+        if (existente.isPresent()) {
+            // Ticket cancelado numa reprovação anterior: há UNIQUE (IDR_Claim), então
+            // o mesmo registro é reaproveitado para o novo candidato do match.
+            return reabrirTicketCancelado(existente.get(), claim, item);
         }
 
         Devolucao d = new Devolucao();
@@ -139,10 +193,23 @@ public class DevolucaoFluxoService {
 
     @Transactional
     public DevolucaoResponse criarRetornoDoClaim(String claimIdToken) {
+        return criarRetornoDoClaim(claimIdToken, null);
+    }
+
+    /**
+     * Abre o pedido de devolução a partir de um match. O item vem da seleção do
+     * operador; um par claim↔item já reprovado é recusado.
+     */
+    @Transactional
+    public DevolucaoResponse criarRetornoDoClaim(String claimIdToken, String idItemEscolhido) {
         Claim claim = claimRepository.findById(idCodec.decodeClaimId(claimIdToken))
                 .filter(c -> !Boolean.TRUE.equals(c.getFgExcluido()))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Pedido (claim) não encontrado."));
-        Item item = resolverItemDoClaim(claim);
+        Item item = resolverItemEscolhido(claim, idItemEscolhido);
+        if (matchService.isReprovado(claim.getId(), item.getId())) {
+            throw new IllegalArgumentException(
+                    "Este item já foi reprovado para o pedido. Escolha outro item do match.");
+        }
         String statusNome = claim.getStatus() != null ? claim.getStatus().getNmStatus() : "";
         String sn = statusNome == null ? "" : statusNome.toLowerCase(Locale.ROOT);
         if (!(sn.contains("aprov") || sn.contains("match") || sn.contains("retirada"))) {
@@ -157,6 +224,10 @@ public class DevolucaoFluxoService {
         Devolucao d = criarTicketPosAprovacao(claim, item);
         workflowService.transitarSePermitido(idCodec.encodeItemId(item.getId()), "Aguardando retirada",
                 "Ticket de devolução criado — item reservado.");
+        // O pedido passa a ser tratado em /pedidos, onde o operador aprova ou reprova.
+        claim.setStatus(statusItemService.findByNomeOrDefault(null, "Claim em Análise"));
+        claim.setDtAlteracao(agora());
+        claimRepository.save(claim);
         return toListResponse(d);
     }
 
@@ -731,6 +802,20 @@ public class DevolucaoFluxoService {
     }
 
     // ---------------- helpers ----------------
+
+    /** Item escolhido pelo operador no match; sem seleção, cai no match confirmado. */
+    private Item resolverItemEscolhido(Claim claim, String idItemEscolhido) {
+        if (idItemEscolhido == null || idItemEscolhido.isBlank()) {
+            return resolverItemDoClaim(claim);
+        }
+        Item item = itemRepository.findById(idCodec.decodeItemId(idItemEscolhido))
+                .filter(i -> !Boolean.TRUE.equals(i.getFgExcluido()))
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Item não encontrado."));
+        if (!item.getEvento().getId().equals(claim.getEvento().getId())) {
+            throw new IllegalArgumentException("Item e pedido pertencem a eventos diferentes.");
+        }
+        return item;
+    }
 
     private Item resolverItemDoClaim(Claim claim) {
         return claimValidacaoRepository

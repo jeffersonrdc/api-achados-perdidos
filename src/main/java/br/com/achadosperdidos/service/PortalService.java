@@ -59,6 +59,7 @@ public class PortalService {
     private final PortalContatosConfigService portalContatosConfigService;
     private final PerfilRepository perfilRepository;
     private final UsuarioRepository usuarioRepository;
+    private final WallpaperDownloadRepository wallpaperDownloadRepository;
     private final PasswordEncoder passwordEncoder;
     private final SignedResourceIdCodec idCodec;
 
@@ -86,6 +87,7 @@ public class PortalService {
                          PortalContatosConfigService portalContatosConfigService,
                          PerfilRepository perfilRepository,
                          UsuarioRepository usuarioRepository,
+                         WallpaperDownloadRepository wallpaperDownloadRepository,
                          PasswordEncoder passwordEncoder,
                          SignedResourceIdCodec idCodec) {
         this.eventoRepository = eventoRepository;
@@ -109,6 +111,7 @@ public class PortalService {
         this.portalContatosConfigService = portalContatosConfigService;
         this.perfilRepository = perfilRepository;
         this.usuarioRepository = usuarioRepository;
+        this.wallpaperDownloadRepository = wallpaperDownloadRepository;
         this.passwordEncoder = passwordEncoder;
         this.idCodec = idCodec;
     }
@@ -218,6 +221,51 @@ public class PortalService {
                             "/api/v1/portal/arquivos/" + id + "/thumbnail?max=600");
                 })
                 .toList();
+    }
+
+    /**
+     * Registra um download de wallpaper feito no portal (/wallpaper) e devolve o
+     * total acumulado do evento — alimenta o card "Wallpapers Baixados" do painel.
+     */
+    @Transactional
+    public PortalWallpaperDownloadResponse registrarDownloadWallpaper(
+            String idEvento, PortalWallpaperDownloadRequest request, String ip, String userAgent) {
+        Evento evento = findEvento(idCodec.decodeEventoIdAssinado(idEvento));
+
+        WallpaperDownload download = new WallpaperDownload();
+        download.setEvento(evento);
+        download.setArquivo(resolverArquivoWallpaper(evento, request));
+        download.setNmOrigem("PORTAL");
+        download.setNrIp(ip);
+        download.setDsUserAgent(truncar(userAgent, 300));
+        download.setDtDownload(LocalDateTime.now());
+        download.setDtCadastro(LocalDateTime.now());
+        download.setFgAtivo(true);
+        download.setFgExcluido(false);
+        wallpaperDownloadRepository.save(download);
+
+        return new PortalWallpaperDownloadResponse(
+                wallpaperDownloadRepository.contarPorEvento(evento.getId(), null));
+    }
+
+    /** Arte escolhida; ignora IDs inválidos ou de outro evento para não perder a contagem. */
+    private Arquivo resolverArquivoWallpaper(Evento evento, PortalWallpaperDownloadRequest request) {
+        String idArquivo = request != null ? request.idArquivo() : null;
+        if (idArquivo == null || idArquivo.isBlank()) return null;
+        try {
+            return arquivoRepository.findById(idCodec.decodeArquivoId(idArquivo))
+                    .filter(a -> !Boolean.TRUE.equals(a.getFgExcluido()))
+                    .filter(a -> a.getEvento() != null && evento.getId().equals(a.getEvento().getId()))
+                    .orElse(null);
+        } catch (RuntimeException ex) {
+            return null;
+        }
+    }
+
+    private static String truncar(String valor, int max) {
+        if (valor == null) return null;
+        String v = valor.trim();
+        return v.length() <= max ? v : v.substring(0, max);
     }
 
     private static String rotuloAssuntoContato(String codigo) {

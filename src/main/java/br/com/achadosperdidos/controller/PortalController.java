@@ -122,6 +122,27 @@ public class PortalController {
         return portalService.listarWallpapers(idEvento);
     }
 
+    @PostMapping("/eventos/{idEvento}/wallpapers/downloads")
+    @SecurityRequirements
+    @Operation(summary = "Registrar download de wallpaper",
+            description = "Endpoint público com rate limit. Chamado ao clicar em \"Baixar Wallpaper (.PNG)\" "
+                    + "na página /wallpaper; alimenta o card \"Wallpapers Baixados\" do painel.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Download registrado",
+                    content = @Content(schema = @Schema(implementation = PortalWallpaperDownloadResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Evento não encontrado"),
+            @ApiResponse(responseCode = "429", description = "Rate limit excedido")
+    })
+    public PortalWallpaperDownloadResponse registrarDownloadWallpaper(
+            @Parameter(description = "ID assinado do evento (`s2.*`)", required = true)
+            @PathVariable String idEvento,
+            @RequestBody(required = false) PortalWallpaperDownloadRequest request,
+            HttpServletRequest http) {
+        String ip = ipDe(http);
+        publicRateLimiter.check("portal-wallpaper-download", ip);
+        return portalService.registrarDownloadWallpaper(idEvento, request, ip, http.getHeader("User-Agent"));
+    }
+
     @GetMapping("/eventos/{idEvento}")
     @SecurityRequirements
     @Operation(summary = "Detalhar evento no portal",

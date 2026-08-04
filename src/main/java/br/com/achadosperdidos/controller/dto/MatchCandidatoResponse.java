@@ -20,5 +20,9 @@ public record MatchCandidatoResponse(
         LocalTime hrEncontrado,
         String tpPrioridade,
         String nmStatus,
-        BigDecimal vlScore
+        BigDecimal vlScore,
+        /** Resultado da validação: PENDENTE ou REPROVADO. */
+        String stResultado,
+        /** True quando este par claim↔item foi reprovado e não aceita novo pedido. */
+        boolean fgBloqueado
 ) {}

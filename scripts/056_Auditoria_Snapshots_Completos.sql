@@ -455,7 +455,7 @@ CREATE TRIGGER TRG_evento_ai_audit AFTER INSERT ON evento FOR EACH ROW
 BEGIN
   CALL SP_RegistrarAuditoria('evento', NEW.ID_Evento, 'INSERT', NULL,
     JSON_OBJECT(
-      'IDR_Empresa', NEW.IDR_Empresa, 'NM_Evento', NEW.NM_Evento, 'DS_Evento', NEW.DS_Evento,
+      'NM_Evento', NEW.NM_Evento, 'DS_Evento', NEW.DS_Evento,
       'DT_Inicio', DATE_FORMAT(NEW.DT_Inicio, '%Y-%m-%d %H:%i:%s'),
       'DT_Fim', DATE_FORMAT(NEW.DT_Fim, '%Y-%m-%d %H:%i:%s'),
       'DT_InicioRecebimento', DATE_FORMAT(NEW.DT_InicioRecebimento, '%Y-%m-%d %H:%i:%s'),
@@ -469,7 +469,7 @@ BEGIN
       'DT_Alteracao', DATE_FORMAT(NEW.DT_Alteracao, '%Y-%m-%d %H:%i:%s')
     ), NEW.IDR_UsuarioCadastro);
   CALL SP_RegistrarVersionamento('evento', NEW.ID_Evento, 'INSERT',
-    JSON_OBJECT('NM_Evento', NEW.NM_Evento, 'IDR_Empresa', NEW.IDR_Empresa,
+    JSON_OBJECT('NM_Evento', NEW.NM_Evento,
                 'DT_Inicio', DATE_FORMAT(NEW.DT_Inicio, '%Y-%m-%d %H:%i:%s'),
                 'DT_Fim', DATE_FORMAT(NEW.DT_Fim, '%Y-%m-%d %H:%i:%s')),
     NEW.IDR_UsuarioCadastro);
@@ -478,7 +478,7 @@ END$$
 CREATE TRIGGER TRG_evento_au_audit AFTER UPDATE ON evento FOR EACH ROW
 BEGIN
   IF NOT (
-      OLD.IDR_Empresa <=> NEW.IDR_Empresa AND OLD.NM_Evento <=> NEW.NM_Evento
+      OLD.NM_Evento <=> NEW.NM_Evento
       AND OLD.DS_Evento <=> NEW.DS_Evento AND OLD.DT_Inicio <=> NEW.DT_Inicio
       AND OLD.DT_Fim <=> NEW.DT_Fim AND OLD.DT_InicioRecebimento <=> NEW.DT_InicioRecebimento
       AND OLD.DT_FimRecebimento <=> NEW.DT_FimRecebimento
@@ -490,7 +490,7 @@ BEGIN
   ) THEN
     CALL SP_RegistrarAuditoria('evento', NEW.ID_Evento, 'UPDATE',
       JSON_OBJECT(
-        'IDR_Empresa', OLD.IDR_Empresa, 'NM_Evento', OLD.NM_Evento, 'DS_Evento', OLD.DS_Evento,
+        'NM_Evento', OLD.NM_Evento, 'DS_Evento', OLD.DS_Evento,
         'DT_Inicio', DATE_FORMAT(OLD.DT_Inicio, '%Y-%m-%d %H:%i:%s'),
         'DT_Fim', DATE_FORMAT(OLD.DT_Fim, '%Y-%m-%d %H:%i:%s'),
         'DT_InicioRecebimento', DATE_FORMAT(OLD.DT_InicioRecebimento, '%Y-%m-%d %H:%i:%s'),
@@ -504,7 +504,7 @@ BEGIN
         'DT_Alteracao', DATE_FORMAT(OLD.DT_Alteracao, '%Y-%m-%d %H:%i:%s')
       ),
       JSON_OBJECT(
-        'IDR_Empresa', NEW.IDR_Empresa, 'NM_Evento', NEW.NM_Evento, 'DS_Evento', NEW.DS_Evento,
+        'NM_Evento', NEW.NM_Evento, 'DS_Evento', NEW.DS_Evento,
         'DT_Inicio', DATE_FORMAT(NEW.DT_Inicio, '%Y-%m-%d %H:%i:%s'),
         'DT_Fim', DATE_FORMAT(NEW.DT_Fim, '%Y-%m-%d %H:%i:%s'),
         'DT_InicioRecebimento', DATE_FORMAT(NEW.DT_InicioRecebimento, '%Y-%m-%d %H:%i:%s'),

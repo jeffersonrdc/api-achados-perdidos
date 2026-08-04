@@ -35,6 +35,11 @@ public class MatchService {
     public static final String ST_PENDENTE = "PENDENTE";
     public static final String ST_CONFIRMADO = "CONFIRMADO";
     public static final String ST_DESCARTADO = "DESCARTADO";
+    /**
+     * Par claim↔item recusado pelo operador na análise do pedido. É definitivo:
+     * o registro permanece visível no match e nunca volta a aceitar novo pedido.
+     */
+    public static final String ST_REPROVADO = "REPROVADO";
 
     public static final String STATUS_AGUARDANDO_MATCH = "Aguardando Match";
     public static final String STATUS_MATCH = "Match";
@@ -77,6 +82,9 @@ public class MatchService {
 
         invalidarPendentes(claim.getId());
 
+        // Pares já reprovados não voltam à fila — o registro original permanece.
+        Set<Long> reprovados = itensReprovados(claim.getId());
+
         Long eventoId = claim.getEvento().getId();
         Long categoriaId = claim.getCategoria().getId();
         List<Item> candidatos = itemRepository
@@ -85,6 +93,7 @@ public class MatchService {
                 .filter(i -> !Boolean.TRUE.equals(i.getFgDescartado()))
                 .filter(i -> !statusExcluido(i))
                 .filter(i -> i.getCategoria() != null && Objects.equals(i.getCategoria().getId(), categoriaId))
+                .filter(i -> !reprovados.contains(i.getId()))
                 .toList();
 
         record Scored(Item item, int score) {}
@@ -160,12 +169,19 @@ public class MatchService {
         claimRepository.save(claim);
     }
 
+    /**
+     * Candidatos do claim: o que está em pedido aberto (CONFIRMADO), os pendentes
+     * e os reprovados — estes últimos mantidos à vista, mas bloqueados. Reprovados
+     * vão para o fim da lista.
+     */
     @Transactional(readOnly = true)
     public List<MatchCandidatoResponse> listarPorClaim(String idClaimAssinado) {
         Long claimId = idCodec.decodeClaimId(idClaimAssinado);
         return claimValidacaoRepository
-                .findByClaim_IdAndStResultadoAndFgExcluidoFalseOrderByQtSimilaridadeDesc(claimId, ST_PENDENTE)
+                .findByClaim_IdAndStResultadoInAndFgExcluidoFalseOrderByQtSimilaridadeDesc(
+                        claimId, List.of(ST_PENDENTE, ST_CONFIRMADO, ST_REPROVADO))
                 .stream()
+                .sorted(Comparator.comparing((ClaimValidacao v) -> ST_REPROVADO.equalsIgnoreCase(v.getStResultado())))
                 .map(this::toCandidato)
                 .toList();
     }
@@ -183,23 +199,100 @@ public class MatchService {
         return claimValidacaoRepository.countByClaim_IdAndStResultadoAndFgExcluidoFalse(claimId, ST_PENDENTE);
     }
 
-    /** Ao iniciar devolução a partir de um match: confirma o item e descarta os demais pendentes. */
+    /**
+     * Ao abrir o pedido a partir de um match: marca o item escolhido como
+     * {@link #ST_CONFIRMADO}. Os demais seguem pendentes de propósito — se este
+     * pedido for reprovado, o operador precisa deles para tentar outro item.
+     */
     @Transactional
     public void confirmarMatch(Long claimId, Long itemId) {
         if (claimId == null || itemId == null) return;
         LocalDateTime agora = LocalDateTime.now();
-        List<ClaimValidacao> pendentes = claimValidacaoRepository
-                .findByClaim_IdAndStResultadoAndFgExcluidoFalseOrderByQtSimilaridadeDesc(claimId, ST_PENDENTE);
-        for (ClaimValidacao v : pendentes) {
+        for (ClaimValidacao v : claimValidacaoRepository
+                .findByClaim_IdAndStResultadoAndFgExcluidoFalseOrderByQtSimilaridadeDesc(claimId, ST_PENDENTE)) {
             if (v.getItem() != null && Objects.equals(v.getItem().getId(), itemId)) {
                 v.setStResultado(ST_CONFIRMADO);
                 v.setDtValidacao(agora);
-            } else {
-                v.setStResultado(ST_DESCARTADO);
-                v.setDtValidacao(agora);
+                claimValidacaoRepository.save(v);
             }
+        }
+    }
+
+    /** Após a aprovação o claim está resolvido: os candidatos restantes saem da fila. */
+    @Transactional
+    public void descartarPendentes(Long claimId, Long itemIdMantido) {
+        if (claimId == null) return;
+        LocalDateTime agora = LocalDateTime.now();
+        for (ClaimValidacao v : claimValidacaoRepository
+                .findByClaim_IdAndStResultadoAndFgExcluidoFalseOrderByQtSimilaridadeDesc(claimId, ST_PENDENTE)) {
+            if (v.getItem() != null && Objects.equals(v.getItem().getId(), itemIdMantido)) continue;
+            v.setStResultado(ST_DESCARTADO);
+            v.setDtValidacao(agora);
             claimValidacaoRepository.save(v);
         }
+    }
+
+    /**
+     * Reprova o par claim↔item: o registro fica marcado como {@link #ST_REPROVADO}
+     * (permanente e visível no match) e os demais candidatos daquele claim voltam a
+     * ficar disponíveis, para o operador tentar outro item.
+     *
+     * @return true se havia candidato pendente após a reprovação.
+     */
+    @Transactional
+    public boolean reprovarMatch(Long claimId, Long itemId) {
+        if (claimId == null || itemId == null) return false;
+        LocalDateTime agora = LocalDateTime.now();
+        boolean sobrouPendente = false;
+
+        for (ClaimValidacao v : claimValidacaoRepository.findByClaim_IdAndFgExcluidoFalseOrderByDtCadastroDesc(claimId)) {
+            String st = v.getStResultado() != null ? v.getStResultado() : "";
+            if (ST_REPROVADO.equalsIgnoreCase(st)) {
+                continue;
+            }
+            boolean mesmoItem = v.getItem() != null && Objects.equals(v.getItem().getId(), itemId);
+            if (mesmoItem) {
+                v.setStResultado(ST_REPROVADO);
+                v.setDtValidacao(agora);
+                claimValidacaoRepository.save(v);
+            } else if (ST_DESCARTADO.equalsIgnoreCase(st) || ST_CONFIRMADO.equalsIgnoreCase(st)) {
+                // Descartados na abertura do pedido reprovado voltam à fila.
+                v.setStResultado(ST_PENDENTE);
+                v.setDtValidacao(null);
+                claimValidacaoRepository.save(v);
+                sobrouPendente = true;
+            } else if (ST_PENDENTE.equalsIgnoreCase(st)) {
+                sobrouPendente = true;
+            }
+        }
+        return sobrouPendente;
+    }
+
+    /** True quando este par claim↔item já foi reprovado (bloqueia novo pedido). */
+    @Transactional(readOnly = true)
+    public boolean isReprovado(Long claimId, Long itemId) {
+        if (claimId == null || itemId == null) return false;
+        return claimValidacaoRepository
+                .existsByClaim_IdAndItem_IdAndStResultadoAndFgExcluidoFalse(claimId, itemId, ST_REPROVADO);
+    }
+
+    /** Devolve o claim ao pool de match após uma reprovação (usado só em claims PERDA). */
+    @Transactional
+    public void devolverAoPoolDeMatch(Claim claim, boolean temPendente) {
+        if (claim == null) return;
+        claim.setStatus(statusItemService.findByNomeOrDefault(
+                temPendente ? STATUS_MATCH : STATUS_AGUARDANDO_MATCH,
+                temPendente ? STATUS_MATCH : STATUS_AGUARDANDO_MATCH));
+        claimRepository.save(claim);
+    }
+
+    private Set<Long> itensReprovados(Long claimId) {
+        return claimValidacaoRepository
+                .findByClaim_IdAndStResultadoAndFgExcluidoFalseOrderByQtSimilaridadeDesc(claimId, ST_REPROVADO)
+                .stream()
+                .map(v -> v.getItem() != null ? v.getItem().getId() : null)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
     }
 
     private void invalidarPendentes(Long claimId) {
@@ -291,6 +384,7 @@ public class MatchService {
 
     private MatchCandidatoResponse toCandidato(ClaimValidacao v) {
         Item i = v.getItem();
+        boolean reprovado = ST_REPROVADO.equalsIgnoreCase(v.getStResultado());
         return new MatchCandidatoResponse(
                 idCodec.encodeItemId(i.getId()),
                 i.getCdItem(),
@@ -306,6 +400,8 @@ public class MatchService {
                 i.getHrEncontrado(),
                 i.getTpPrioridade(),
                 i.getStatus() != null ? i.getStatus().getNmStatus() : null,
-                v.getQtSimilaridade());
+                v.getQtSimilaridade(),
+                v.getStResultado(),
+                reprovado);
     }
 }

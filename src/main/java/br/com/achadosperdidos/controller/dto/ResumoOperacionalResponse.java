@@ -17,5 +17,7 @@ public record ResumoOperacionalResponse(
         long finalizados,
         long descartados,
         long devolvidosHoje,
-        long sensiveis
+        long sensiveis,
+        /** Downloads de wallpaper no portal público (card "Wallpapers Baixados"). */
+        long wallpapersBaixados
 ) {}
