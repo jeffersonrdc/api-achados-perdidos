@@ -44,9 +44,20 @@ public class MatchService {
     public static final String STATUS_AGUARDANDO_MATCH = "Aguardando Match";
     public static final String STATUS_MATCH = "Match";
 
-    /** Status finais / indisponíveis — excluídos do match. */
+    /**
+     * Status do item que ficam fora do match: os que ainda não passaram pela
+     * triagem (não estão disponíveis no estoque) e os finais/indisponíveis.
+     */
     private static final Set<String> STATUS_EXCLUIDOS = Set.of(
-            "Aguardando triagem", "Aguardando retirada", "Devolvido", "Descartado", "Finalizado");
+            "Aguardando triagem", "Em triagem", "Em Análise",
+            "Aguardando retirada", "Devolvido", "Descartado", "Finalizado");
+
+    /**
+     * Resultados que mantêm o candidato visível no painel de match — e que,
+     * portanto, contam para {@code hasMatch} na listagem de claims.
+     */
+    public static final List<String> RESULTADOS_VISIVEIS =
+            List.of(ST_PENDENTE, ST_CONFIRMADO, ST_REPROVADO);
     /** Status que o motor de match pode alterar automaticamente. */
     private static final Set<String> STATUS_GERENCIADOS = Set.of(
             "Claim Aberto", STATUS_AGUARDANDO_MATCH, STATUS_MATCH);
@@ -179,9 +190,12 @@ public class MatchService {
         Long claimId = idCodec.decodeClaimId(idClaimAssinado);
         return claimValidacaoRepository
                 .findByClaim_IdAndStResultadoInAndFgExcluidoFalseOrderByQtSimilaridadeDesc(
-                        claimId, List.of(ST_PENDENTE, ST_CONFIRMADO, ST_REPROVADO))
+                        claimId, RESULTADOS_VISIVEIS)
                 .stream()
-                .filter(v -> v.getItem() != null && !statusExcluido(v.getItem()))
+                // Item indisponível só é escondido enquanto é apenas um candidato:
+                // decisões já tomadas (em pedido / reprovado) permanecem à vista.
+                .filter(v -> v.getItem() != null
+                        && (!ST_PENDENTE.equalsIgnoreCase(v.getStResultado()) || !statusExcluido(v.getItem())))
                 .sorted(Comparator.comparing((ClaimValidacao v) -> ST_REPROVADO.equalsIgnoreCase(v.getStResultado())))
                 .map(this::toCandidato)
                 .toList();

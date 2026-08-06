@@ -394,8 +394,12 @@ public class ClaimService {
                         ? validacoes.stream().map(ClaimValidacao::getItem)
                         .filter(java.util.Objects::nonNull).findFirst().orElse(null)
                         : null);
+        // Conta o mesmo conjunto que o painel de match exibe (pendentes, o que está
+        // em pedido e os reprovados), para a listagem não dizer "sem match" quando
+        // o detalhe mostra candidatos.
         long qtMatches = validacoes.stream()
-                .filter(v -> MatchService.ST_PENDENTE.equalsIgnoreCase(v.getStResultado()))
+                .filter(v -> MatchService.RESULTADOS_VISIVEIS.stream()
+                        .anyMatch(st -> st.equalsIgnoreCase(v.getStResultado())))
                 .count();
         return new ClaimResponse(
                 idCodec.encodeClaimId(c.getId()),
