@@ -46,7 +46,7 @@ public class MatchService {
 
     /** Status finais / indisponíveis — excluídos do match. */
     private static final Set<String> STATUS_EXCLUIDOS = Set.of(
-            "Aguardando retirada", "Devolvido", "Descartado", "Finalizado");
+            "Aguardando triagem", "Aguardando retirada", "Devolvido", "Descartado", "Finalizado");
     /** Status que o motor de match pode alterar automaticamente. */
     private static final Set<String> STATUS_GERENCIADOS = Set.of(
             "Claim Aberto", STATUS_AGUARDANDO_MATCH, STATUS_MATCH);
@@ -181,6 +181,7 @@ public class MatchService {
                 .findByClaim_IdAndStResultadoInAndFgExcluidoFalseOrderByQtSimilaridadeDesc(
                         claimId, List.of(ST_PENDENTE, ST_CONFIRMADO, ST_REPROVADO))
                 .stream()
+                .filter(v -> v.getItem() != null && !statusExcluido(v.getItem()))
                 .sorted(Comparator.comparing((ClaimValidacao v) -> ST_REPROVADO.equalsIgnoreCase(v.getStResultado())))
                 .map(this::toCandidato)
                 .toList();
