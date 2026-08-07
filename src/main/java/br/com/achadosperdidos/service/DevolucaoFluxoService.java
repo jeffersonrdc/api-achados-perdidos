@@ -116,11 +116,7 @@ public class DevolucaoFluxoService {
         historicoService.registrar(d, CREATED, "Ticket reaberto",
                 "Novo candidato do match encaminhado após reprovação anterior.", "SISTEMA", null, null, null);
 
-        DevolucaoAcaoToken token = tokenService.gerar(d, ACAO_CHOOSE_METHOD, 15, false);
-        EmailService.Resultado email = enviarEmailEscolherModalidade(d, claim, token);
-        historicoService.registrar(d, DELIVERY_METHOD_PENDING, "Aguardando modalidade",
-                "E-mail enviado para escolha de modalidade de devolução.",
-                "SISTEMA", null, email, null);
+        enviarEscolhaModalidade(d, claim, "E-mail enviado para escolha de modalidade de devolução.");
         return d;
     }
 
@@ -145,9 +141,15 @@ public class DevolucaoFluxoService {
         auditoriaContext.marcarContexto();
         var existente = devolucaoRepository.findByClaim_IdAndFgExcluidoFalse(claim.getId());
         if (existente.isPresent() && !CANCELLED.equals(existente.get().getTpStatus())) {
-            // Idempotente: não regenera token nem reenvia e-mail.
-            // Novo token só na criação ou em POST .../emails/resend.
-            return existente.get();
+            Devolucao ticket = existente.get();
+            // Ticket aberto pelo match antes da aprovação: sem isto o solicitante receberia
+            // apenas o e-mail de aprovação e nunca a instrução para escolher a modalidade,
+            // travando o fluxo em "Aguardando solicitante escolher modalidade".
+            if (claimAprovado(claim)
+                    && (DELIVERY_METHOD_PENDING.equals(ticket.getTpStatus()) || CREATED.equals(ticket.getTpStatus()))) {
+                enviarEscolhaModalidade(ticket, claim, "E-mail de escolha de modalidade enviado após a aprovação.");
+            }
+            return ticket;
         }
         if (existente.isPresent()) {
             // Ticket cancelado numa reprovação anterior: há UNIQUE (IDR_Claim), então
@@ -183,12 +185,36 @@ public class DevolucaoFluxoService {
         historicoService.registrar(d, CREATED, "Ticket criado",
                 "Devolução criada após aprovação do pedido.", "SISTEMA", null, null, null);
 
+        // O e-mail diz que o pedido foi aprovado — só sai quando ele realmente foi.
+        // Abrir o ticket pelo match apenas o prepara; a aprovação é que notifica.
+        if (claimAprovado(claim)) {
+            enviarEscolhaModalidade(d, claim, "E-mail enviado para escolha de modalidade de devolução.");
+        }
+        return d;
+    }
+
+    private static boolean claimAprovado(Claim claim) {
+        String st = claim != null && claim.getStatus() != null ? claim.getStatus().getNmStatus() : "";
+        return st != null && st.toLowerCase(Locale.ROOT).contains("aprov");
+    }
+
+    /**
+     * Gera o token e dispara o e-mail de escolha de modalidade, registrando no
+     * histórico o resultado <b>real</b> do envio. Quando o SMTP falha, o ticket não
+     * pode dizer "e-mail enviado" — era isso que deixava o operador sem saber que o
+     * solicitante nunca havia sido avisado.
+     */
+    private EmailService.Resultado enviarEscolhaModalidade(Devolucao d, Claim claim, String descricaoSucesso) {
         DevolucaoAcaoToken token = tokenService.gerar(d, ACAO_CHOOSE_METHOD, 15, false);
         EmailService.Resultado email = enviarEmailEscolherModalidade(d, claim, token);
-        historicoService.registrar(d, DELIVERY_METHOD_PENDING, "Aguardando modalidade",
-                "E-mail enviado para escolha de modalidade de devolução.",
+        historicoService.registrar(d, DELIVERY_METHOD_PENDING,
+                email.enviado() ? "Aguardando modalidade" : "Falha ao enviar e-mail de modalidade",
+                email.enviado() ? descricaoSucesso
+                        : "O e-mail de escolha de modalidade NÃO foi entregue: "
+                          + (email.erro() != null ? email.erro() : "erro desconhecido")
+                          + ". Corrija o SMTP e use \"Reenviar último e-mail\".",
                 "SISTEMA", null, email, null);
-        return d;
+        return email;
     }
 
     @Transactional
@@ -355,7 +381,7 @@ public class DevolucaoFluxoService {
             devolucaoRepository.save(d);
         }
         historicoService.registrar(d, SHIPPING_QUOTE_PENDING, "Cotação registrada",
-                "Valor: " + payload.amount() + " " + c.getSgMoeda(),
+                "Valor: " + formatarMoeda(payload.amount()),
                 "OPERADOR", usuarioLogado(), null, null);
 
         if (Boolean.TRUE.equals(payload.sendEmail())) {
@@ -371,10 +397,12 @@ public class DevolucaoFluxoService {
         Claim claim = requireClaim(d);
         var cotacao = cotacaoRepository.findFirstByDevolucao_IdAndFgExcluidoFalseOrderByDtInformadaDesc(d.getId())
                 .orElseThrow(() -> new IllegalArgumentException("Nenhuma cotação cadastrada."));
-        DevolucaoAcaoToken token = tokenService.gerar(d, ACAO_PAYMENT_PROOF, 15, true);
+        // Uso único: depois de enviar o comprovante o link precisa expirar, senão
+        // o solicitante consegue reenviar arquivos num ticket já pago.
+        DevolucaoAcaoToken token = tokenService.gerar(d, ACAO_PAYMENT_PROOF, 15, false);
         Map<String, String> vars = variaveisBase(d, claim);
         vars.put("linkAcao", montarLink("/devolucao/comprovante-pagamento", token.getCdToken()));
-        vars.put("valorFrete", cotacao.getVlValor().toPlainString());
+        vars.put("valorFrete", formatarMoeda(cotacao.getVlValor()));
         vars.put("instrucoesPagamento", cotacao.getDsInstrucoesPagamento());
         EmailService.Resultado email = emailService.enviar("DEVOLUCAO_SHIPPING_COTACAO", claim.getNmEmail(), vars);
         if (SHIPPING_QUOTE_PENDING.equals(d.getTpStatus()) || SHIPPING_QUOTE_SENT.equals(d.getTpStatus())) {
@@ -424,7 +452,10 @@ public class DevolucaoFluxoService {
                 .orElseThrow(() -> new IllegalArgumentException("Nenhuma postagem cadastrada."));
         DevolucaoAcaoToken token = tokenService.gerar(d, ACAO_VIEW_TRACKING, 30, true);
         Map<String, String> vars = variaveisBase(d, claim);
-        vars.put("linkAcao", montarLink("/devolucao/rastreio", token.getCdToken()));
+        // "Ver rastreio" leva ao site dos Correios com o código já preenchido —
+        // é lá que o solicitante acompanha a entrega, não no portal.
+        vars.put("linkAcao", linkRastreioCorreios(postagem.getCdRastreio()));
+        vars.put("linkPortal", montarLink("/devolucao/rastreio", token.getCdToken()));
         vars.put("rastreio", postagem.getCdRastreio());
         EmailService.Resultado email = emailService.enviar("DEVOLUCAO_POSTAGEM", claim.getNmEmail(), vars);
         if (POSTED.equals(d.getTpStatus())) {
@@ -556,8 +587,15 @@ public class DevolucaoFluxoService {
             }
             default -> enviarEmail(d, claim, tp, null);
         };
-        historicoService.registrar(d, tp, "E-mail reenviado",
-                "Evento: " + tp, "OPERADOR", usuarioLogado(), email, null);
+        // O histórico precisa distinguir reenvio efetivo de tentativa falha — antes
+        // registrava "E-mail reenviado" mesmo quando nada era entregue.
+        historicoService.registrar(d, tp,
+                email.enviado() ? "E-mail reenviado" : "Falha ao reenviar e-mail",
+                email.enviado()
+                        ? "Evento: " + tp
+                        : "Evento: " + tp + " — não entregue: "
+                          + (email.erro() != null ? email.erro() : "erro desconhecido"),
+                "OPERADOR", usuarioLogado(), email, null);
         return Map.of("tpEvento", tp, "enviado", email.enviado(), "erro", email.erro() != null ? email.erro() : "");
     }
 
@@ -656,13 +694,23 @@ public class DevolucaoFluxoService {
             transitar(d, SHIPPING_ADDRESS_PENDING);
             DevolucaoAcaoToken addrToken = tokenService.gerar(d, ACAO_SHIPPING_ADDRESS, 15, false);
             Claim claim = d.getClaim();
-            if (claim != null) {
-                enviarEmail(d, claim, "DEVOLUCAO_SHIPPING_ENDERECO",
-                        montarLink("/devolucao/endereco", addrToken.getCdToken()));
-            }
+            EmailService.Resultado emailEndereco = claim != null
+                    ? enviarEmail(d, claim, "DEVOLUCAO_SHIPPING_ENDERECO",
+                            montarLink("/devolucao/endereco", addrToken.getCdToken()))
+                    : null;
             marcarAtualizacaoOperador(d);
             historicoService.registrar(d, SHIPPING_ADDRESS_PENDING, "Modalidade: Correios",
                     "Solicitante escolheu envio pelos Correios.", "SOLICITANTE", null, null, null);
+            // O disparo do e-mail de endereço não aparecia no histórico: o operador não
+            // via a notificação nem uma eventual falha de SMTP.
+            historicoService.registrar(d, SHIPPING_ADDRESS_PENDING,
+                    emailEndereco != null && emailEndereco.enviado()
+                            ? "E-mail de endereço enviado" : "Falha ao enviar e-mail de endereço",
+                    emailEndereco != null && emailEndereco.enviado()
+                            ? "Solicitado o endereço de entrega ao solicitante."
+                            : "Não entregue: " + (emailEndereco != null && emailEndereco.erro() != null
+                                    ? emailEndereco.erro() : "solicitante sem e-mail"),
+                    "SISTEMA", null, emailEndereco, null);
         }
         tokenService.marcarUsado(token);
         return Map.of("method", method, "tpStatus", d.getTpStatus(), "protocolo",
@@ -894,6 +942,20 @@ public class DevolucaoFluxoService {
         return vars;
     }
 
+    /** Moeda no padrão brasileiro: R$ 1.000,00 — usado em e-mails e histórico. */
+    private static String formatarMoeda(java.math.BigDecimal valor) {
+        if (valor == null) return "";
+        return java.text.NumberFormat
+                .getCurrencyInstance(java.util.Locale.of("pt", "BR"))
+                .format(valor);
+    }
+
+    /** Rastreamento oficial dos Correios com o código já na URL. */
+    private static String linkRastreioCorreios(String cdRastreio) {
+        String cod = cdRastreio == null ? "" : cdRastreio.trim().toUpperCase(Locale.ROOT);
+        return "https://rastreamento.correios.com.br/app/index.php?objetos=" + cod;
+    }
+
     private String montarLink(String path, String cdToken) {
         String base = portalBaseUrlService.resolve();
         String p = path.startsWith("/") ? path : "/" + path;
@@ -1038,6 +1100,10 @@ public class DevolucaoFluxoService {
                 item.getCategoria() != null ? item.getCategoria().getNmCategoria() : null,
                 item.getNmLocalEncontrado(),
                 d.getDsObservacao(),
+                // Descrição e detalhes ocultos vêm do pedido: sem eles a aba de devolução
+                // exibia caixas vazias, sem o operador saber se faltava dado ou carregamento.
+                claim != null ? claim.getDsObjeto() : null,
+                claim != null ? claim.getDsDetalhesOcultos() : null,
                 nextAction(d.getTpStatus()),
                 allowedActions(d.getTpStatus()),
                 options,

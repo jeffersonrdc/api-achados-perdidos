@@ -20,6 +20,10 @@ public record DevolucaoDetalheResponse(
         String nmCategoria,
         String nmLocalEncontrado,
         String dsObservacao,
+        /** Descrição do item informada pelo solicitante no pedido (claim). */
+        String dsObjeto,
+        /** Detalhes ocultos usados para validar a posse do item. */
+        String dsDetalhesOcultos,
         String nextAction,
         List<String> allowedActions,
         List<DevolucaoPickupOptionResponse> pickupOptions,
