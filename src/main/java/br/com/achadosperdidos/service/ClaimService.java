@@ -217,13 +217,16 @@ public class ClaimService {
         Long ev = idCodec.decodeEventoId(idEvento);
         String tipoNorm = (tipo != null && !tipo.isBlank()) ? normalizarTipo(tipo) : null;
         var categorias = claimRepository.findDistinctCategorias(ev, tipoNorm).stream()
+                .sorted(java.util.Comparator.comparing(Categoria::getNmCategoria, String.CASE_INSENSITIVE_ORDER))
                 .map(cat -> new br.com.achadosperdidos.controller.dto.ColetaFiltrosResponse.CategoriaArvore(
                         idCodec.encodeCategoriaId(cat.getId()), cat.getNmCategoria(), List.of()))
                 .toList();
         var status = claimRepository.findDistinctStatus(ev, tipoNorm).stream()
                 .map(s -> new br.com.achadosperdidos.controller.dto.ColetaFiltrosResponse.Opcao(s.getNmStatus(), s.getNmStatus()))
                 .toList();
-        var locais = claimRepository.findDistinctLocais(ev, tipoNorm);
+        var locais = claimRepository.findDistinctLocais(ev, tipoNorm).stream()
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .toList();
         return new br.com.achadosperdidos.controller.dto.ColetaFiltrosResponse(categorias, status, locais, List.of());
     }
 

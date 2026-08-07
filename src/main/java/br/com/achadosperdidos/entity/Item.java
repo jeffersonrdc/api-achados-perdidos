@@ -22,6 +22,7 @@ public class Item {
     @Column(name = "CD_Item", nullable = false, length = 50) private String cdItem;
     @Column(name = "NM_Titulo", nullable = false, length = 200) private String nmTitulo;
     @Column(name = "DS_Item", columnDefinition = "TEXT") private String dsItem;
+    @Column(name = "DS_Wallpaper", length = 300) private String dsWallpaper;
     @Column(name = "DS_Observacoes", columnDefinition = "TEXT") private String dsObservacoes;
     @Column(name = "NM_Marca", length = 100) private String nmMarca;
     @Column(name = "NM_Modelo", length = 100) private String nmModelo;
@@ -54,6 +55,7 @@ public class Item {
     public String getCdItem() { return cdItem; } public void setCdItem(String v) { this.cdItem = v; }
     public String getNmTitulo() { return nmTitulo; } public void setNmTitulo(String v) { this.nmTitulo = v; }
     public String getDsItem() { return dsItem; } public void setDsItem(String v) { this.dsItem = v; }
+    public String getDsWallpaper() { return dsWallpaper; } public void setDsWallpaper(String v) { this.dsWallpaper = v; }
     public String getDsObservacoes() { return dsObservacoes; } public void setDsObservacoes(String v) { this.dsObservacoes = v; }
     public String getNmMarca() { return nmMarca; } public void setNmMarca(String v) { this.nmMarca = v; }
     public String getNmModelo() { return nmModelo; } public void setNmModelo(String v) { this.nmModelo = v; }

@@ -11,6 +11,7 @@ public record ItemUpdateRequest(
         String idStatus,
         String nmTitulo,
         String dsItem,
+        String dsWallpaper,
         String dsObservacoes,
         String nmMarca,
         String nmModelo,

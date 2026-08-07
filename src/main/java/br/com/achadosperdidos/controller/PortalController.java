@@ -196,6 +196,22 @@ public class PortalController {
         return portalService.listarModelos(marca);
     }
 
+    @GetMapping("/cores")
+    @SecurityRequirements
+    @Operation(summary = "Listar cores públicas",
+            description = "Nomes ativos para o select de cor no formulário /registrar.")
+    public List<String> listarCores() {
+        return portalService.listarCores();
+    }
+
+    @GetMapping("/estados")
+    @SecurityRequirements
+    @Operation(summary = "Listar estados do objeto públicos",
+            description = "Nomes ativos para o select de estado no formulário /registrar.")
+    public List<String> listarEstados() {
+        return portalService.listarEstados();
+    }
+
     @GetMapping("/eventos/{idEvento}/locais")
     @SecurityRequirements
     @Operation(summary = "Listar locais do evento no portal")

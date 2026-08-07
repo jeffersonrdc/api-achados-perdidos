@@ -9,7 +9,8 @@ import java.util.List;
 
 @Repository
 public interface CorRepository extends JpaRepository<Cor, Long>, JpaSpecificationExecutor<Cor> {
-    List<Cor> findByFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAscNmCorAsc();
+    /** Select: ordem alfabética por nome. */
+    List<Cor> findByFgExcluidoFalseAndFgAtivoTrueOrderByNmCorAsc();
     List<Cor> findByFgExcluidoFalseOrderByOrOrdemAscNmCorAsc();
     boolean existsByNmCorIgnoreCaseAndFgExcluidoFalse(String nmCor);
     boolean existsByNmCorIgnoreCaseAndIdNotAndFgExcluidoFalse(String nmCor, Long id);

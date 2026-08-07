@@ -55,6 +55,7 @@ public class PortalService {
     private final StatusItemService statusItemService;
     private final CriancaService criancaService;
     private final CatalogoService catalogoService;
+    private final EstadoService estadoService;
     private final EmailService emailService;
     private final PortalContatosConfigService portalContatosConfigService;
     private final PerfilRepository perfilRepository;
@@ -83,6 +84,7 @@ public class PortalService {
                          StatusItemService statusItemService,
                          CriancaService criancaService,
                          CatalogoService catalogoService,
+                         EstadoService estadoService,
                          EmailService emailService,
                          PortalContatosConfigService portalContatosConfigService,
                          PerfilRepository perfilRepository,
@@ -107,6 +109,7 @@ public class PortalService {
         this.statusItemService = statusItemService;
         this.criancaService = criancaService;
         this.catalogoService = catalogoService;
+        this.estadoService = estadoService;
         this.emailService = emailService;
         this.portalContatosConfigService = portalContatosConfigService;
         this.perfilRepository = perfilRepository;
@@ -368,6 +371,18 @@ public class PortalService {
     @Transactional(readOnly = true)
     public List<String> listarModelos(String marca) {
         return catalogoService.listarModelos(marca);
+    }
+
+    /** Cores ativas para selects do formulário público. */
+    @Transactional(readOnly = true)
+    public List<String> listarCores() {
+        return catalogoService.listarCores();
+    }
+
+    /** Estados do objeto ativos para selects do formulário público. */
+    @Transactional(readOnly = true)
+    public List<String> listarEstados() {
+        return estadoService.listarNomesAtivos();
     }
 
     /** Locais do evento para os selects de localização (slim, público). */
@@ -785,6 +800,7 @@ public class PortalService {
                 i.getNmModelo(),
                 i.getNmCor(),
                 i.getNmEstado(),
+                i.getDsTags(),
                 i.getDtEncontrado(),
                 i.getHrEncontrado(),
                 i.getNmLocalEncontrado(),

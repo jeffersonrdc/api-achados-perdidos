@@ -19,5 +19,10 @@ public record TriagemFilaResponse(
         LocalDate dtEncontrado,
         LocalTime hrEncontrado,
         String nmLocalEncontrado,
-        String nmRecebidoPor
+        String nmPosto,
+        String nmRecebidoPor,
+        String dsItem,
+        String dsWallpaper,
+        String dsObservacoes,
+        String dsTags
 ) {}

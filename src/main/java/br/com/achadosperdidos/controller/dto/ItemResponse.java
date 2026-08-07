@@ -6,7 +6,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 
 public record ItemResponse(
-        String id, String cdItem, String nmTitulo, String dsItem, String dsObservacoes,
+        String id, String cdItem, String nmTitulo, String dsItem, String dsWallpaper, String dsObservacoes,
         String nmMarca, String nmModelo, String nmCor, String nmEstado, String dsTags,
         LocalDate dtEncontrado, LocalTime hrEncontrado, String nmLocalEncontrado, String nmPosto,
         String nmEncontradoPor, String nmOperador,

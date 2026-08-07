@@ -10,7 +10,8 @@ import java.util.Optional;
 
 @Repository
 public interface MarcaRepository extends JpaRepository<Marca, Long>, JpaSpecificationExecutor<Marca> {
-    List<Marca> findByFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAscNmMarcaAsc();
+    /** Select: ordem alfabética por nome. */
+    List<Marca> findByFgExcluidoFalseAndFgAtivoTrueOrderByNmMarcaAsc();
     List<Marca> findByFgExcluidoFalseOrderByOrOrdemAscNmMarcaAsc();
     Optional<Marca> findByNmMarcaIgnoreCaseAndFgExcluidoFalse(String nmMarca);
     boolean existsByNmMarcaIgnoreCaseAndFgExcluidoFalse(String nmMarca);

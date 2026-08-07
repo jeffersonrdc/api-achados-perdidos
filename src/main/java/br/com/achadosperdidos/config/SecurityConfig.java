@@ -91,6 +91,8 @@ public class SecurityConfig {
                                 "/api/v1/portal/subcategorias/**",
                                 "/api/v1/portal/marcas",
                                 "/api/v1/portal/modelos",
+                                "/api/v1/portal/cores",
+                                "/api/v1/portal/estados",
                                 "/api/v1/portal/respostas/**",
                                 "/api/v1/portal/devolucoes/**").permitAll()
                         .requestMatchers(HttpMethod.POST,

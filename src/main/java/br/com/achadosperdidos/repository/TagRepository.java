@@ -10,17 +10,18 @@ import java.util.List;
 
 @Repository
 public interface TagRepository extends JpaRepository<Tag, Long>, JpaSpecificationExecutor<Tag> {
+    /** Select: ordem alfabética por nome. */
     @EntityGraph(attributePaths = {"subcategoria", "subcategoria.categoriaPai"})
-    List<Tag> findByFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAscNmTagAsc();
+    List<Tag> findByFgExcluidoFalseAndFgAtivoTrueOrderByNmTagAsc();
 
     @EntityGraph(attributePaths = {"subcategoria", "subcategoria.categoriaPai"})
-    List<Tag> findByFgExcluidoFalseOrderByOrOrdemAscNmTagAsc();
+    List<Tag> findByFgExcluidoFalseOrderByNmTagAsc();
 
     @EntityGraph(attributePaths = {"subcategoria", "subcategoria.categoriaPai"})
-    List<Tag> findBySubcategoria_IdAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAscNmTagAsc(Long idSubcategoria);
+    List<Tag> findBySubcategoria_IdAndFgExcluidoFalseAndFgAtivoTrueOrderByNmTagAsc(Long idSubcategoria);
 
     @EntityGraph(attributePaths = {"subcategoria", "subcategoria.categoriaPai"})
-    List<Tag> findBySubcategoria_IdAndFgExcluidoFalseOrderByOrOrdemAscNmTagAsc(Long idSubcategoria);
+    List<Tag> findBySubcategoria_IdAndFgExcluidoFalseOrderByNmTagAsc(Long idSubcategoria);
 
     boolean existsByNmTagIgnoreCaseAndSubcategoria_IdAndFgExcluidoFalse(String nmTag, Long idSubcategoria);
     boolean existsByNmTagIgnoreCaseAndSubcategoria_IdAndIdNotAndFgExcluidoFalse(String nmTag, Long idSubcategoria, Long id);

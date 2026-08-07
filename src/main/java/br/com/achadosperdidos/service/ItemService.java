@@ -96,6 +96,7 @@ public class ItemService {
         item.setCdItem(gerarCodigoItem());
         item.setNmTitulo(request.nmTitulo().trim());
         item.setDsItem(request.dsItem());
+        item.setDsWallpaper(blankToNull(request.dsWallpaper()));
         item.setDsObservacoes(request.dsObservacoes());
         item.setNmMarca(request.nmMarca());
         item.setNmModelo(request.nmModelo());
@@ -140,6 +141,7 @@ public class ItemService {
         }
         if (request.nmTitulo() != null && !request.nmTitulo().isBlank()) item.setNmTitulo(request.nmTitulo().trim());
         if (request.dsItem() != null) item.setDsItem(request.dsItem());
+        if (request.dsWallpaper() != null) item.setDsWallpaper(blankToNull(request.dsWallpaper()));
         if (request.dsObservacoes() != null) item.setDsObservacoes(request.dsObservacoes());
         if (request.nmMarca() != null) item.setNmMarca(request.nmMarca());
         if (request.nmModelo() != null) item.setNmModelo(request.nmModelo());
@@ -416,8 +418,9 @@ public class ItemService {
                 i.getSubcategoria() != null ? i.getSubcategoria().getNmCategoria() : null,
                 i.getNmMarca(), i.getNmModelo(), i.getNmCor(), i.getTpPrioridade(), i.getFgSensivel(),
                 i.getNmEstado(),
-                i.getDtEncontrado(), i.getNmLocalEncontrado(), responsavel,
+                i.getDtEncontrado(), i.getNmLocalEncontrado(), i.getNmPosto(), responsavel,
                 i.getStatus() != null ? i.getStatus().getNmStatus() : null,
+                i.getDsItem(), i.getDsWallpaper(), i.getDsObservacoes(), i.getDsTags(),
                 loc != null && loc.getDeposito() != null ? loc.getDeposito().getNmDeposito() : null,
                 loc != null ? loc.getNmSetor() : null,
                 loc != null ? loc.getNmCorredor() : null,
@@ -450,7 +453,8 @@ public class ItemService {
     private ItemResponse toResponse(Item i) {
         String operador = i.getUsuarioCadastro() != null ? i.getUsuarioCadastro().getNmUsuario() : i.getNmEncontradoPor();
         return new ItemResponse(
-                idCodec.encodeItemId(i.getId()), i.getCdItem(), i.getNmTitulo(), i.getDsItem(), i.getDsObservacoes(),
+                idCodec.encodeItemId(i.getId()), i.getCdItem(), i.getNmTitulo(), i.getDsItem(), i.getDsWallpaper(),
+                i.getDsObservacoes(),
                 i.getNmMarca(), i.getNmModelo(), i.getNmCor(), i.getNmEstado(), i.getDsTags(),
                 i.getDtEncontrado(), i.getHrEncontrado(), i.getNmLocalEncontrado(), i.getNmPosto(),
                 i.getNmEncontradoPor(), operador,

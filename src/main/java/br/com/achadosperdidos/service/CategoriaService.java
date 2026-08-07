@@ -37,7 +37,7 @@ public class CategoriaService {
 
     @Transactional(readOnly = true)
     public List<CategoriaResponse> findAll() {
-        return categoriaRepository.findByCategoriaPaiIsNullAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc().stream().map(this::toResponse).toList();
+        return categoriaRepository.findByCategoriaPaiIsNullAndFgExcluidoFalseAndFgAtivoTrueOrderByNmCategoriaAsc().stream().map(this::toResponse).toList();
     }
 
     /** Lista categorias-pai ou filhos (paginado) para o painel admin. */
@@ -53,8 +53,8 @@ public class CategoriaService {
     public List<CategoriaResponse> findSubcategorias(String idPaiToken, boolean incluirInativos) {
         Long idPai = idCodec.decodeCategoriaId(idPaiToken);
         var lista = incluirInativos
-                ? categoriaRepository.findByCategoriaPai_IdAndFgExcluidoFalseOrderByOrOrdemAsc(idPai)
-                : categoriaRepository.findByCategoriaPai_IdAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc(idPai);
+                ? categoriaRepository.findByCategoriaPai_IdAndFgExcluidoFalseOrderByNmCategoriaAsc(idPai)
+                : categoriaRepository.findByCategoriaPai_IdAndFgExcluidoFalseAndFgAtivoTrueOrderByNmCategoriaAsc(idPai);
         return lista.stream().map(this::toResponse).toList();
     }
 
@@ -87,7 +87,7 @@ public class CategoriaService {
             return cb.and(ps.toArray(new Predicate[0]));
         };
         Page<Categoria> result = categoriaRepository.findAll(spec,
-                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.ASC, "orOrdem").and(Sort.by(Sort.Direction.ASC, "nmCategoria"))));
+                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.ASC, "nmCategoria")));
         var content = result.getContent().stream().map(this::toResponse).toList();
         return ApiPage.paged(content, new PaginationMeta(p, l, result.getTotalElements(), result.getTotalPages()));
     }
@@ -95,13 +95,13 @@ public class CategoriaService {
     /** Categorias-pai ativas (entidades) para montagem de árvore. */
     @Transactional(readOnly = true)
     public List<br.com.achadosperdidos.entity.Categoria> findPaisAtivos() {
-        return categoriaRepository.findByCategoriaPaiIsNullAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc();
+        return categoriaRepository.findByCategoriaPaiIsNullAndFgExcluidoFalseAndFgAtivoTrueOrderByNmCategoriaAsc();
     }
 
     /** Subcategorias (entidades) ativas de uma categoria-pai por id numérico. */
     @Transactional(readOnly = true)
     public List<br.com.achadosperdidos.entity.Categoria> findSubcategoriasEntidades(Long idPai) {
-        return categoriaRepository.findByCategoriaPai_IdAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc(idPai);
+        return categoriaRepository.findByCategoriaPai_IdAndFgExcluidoFalseAndFgAtivoTrueOrderByNmCategoriaAsc(idPai);
     }
 
     @Transactional(readOnly = true)

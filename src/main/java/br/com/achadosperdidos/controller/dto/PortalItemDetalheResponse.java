@@ -17,6 +17,7 @@ public record PortalItemDetalheResponse(
         String nmModelo,
         String nmCor,
         String nmEstado,
+        String dsTags,
         LocalDate dtEncontrado,
         LocalTime hrEncontrado,
         String nmLocalEncontrado,

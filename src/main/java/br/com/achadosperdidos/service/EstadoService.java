@@ -36,6 +36,12 @@ public class EstadoService {
     }
 
     @Transactional(readOnly = true)
+    public List<String> listarNomesAtivos() {
+        return estadoRepository.findByFgExcluidoFalseAndFgAtivoTrueOrderByNmEstadoAsc()
+                .stream().map(Estado::getNmEstado).toList();
+    }
+
+    @Transactional(readOnly = true)
     public ApiPage<EstadoResponse> findAll(boolean incluirInativos, Integer page, Integer limit, String q) {
         int p = PaginationParams.resolvePage(page);
         int l = PaginationParams.resolveLimit(limit);
@@ -52,7 +58,7 @@ public class EstadoService {
             return cb.and(ps.toArray(new Predicate[0]));
         };
         Page<Estado> result = estadoRepository.findAll(spec,
-                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.ASC, "orOrdem").and(Sort.by(Sort.Direction.ASC, "nmEstado"))));
+                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.ASC, "nmEstado")));
         var content = result.getContent().stream().map(this::toResponse).toList();
         return ApiPage.paged(content, new PaginationMeta(p, l, result.getTotalElements(), result.getTotalPages()));
     }

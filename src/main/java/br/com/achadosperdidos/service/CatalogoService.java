@@ -51,13 +51,13 @@ public class CatalogoService {
 
     @Transactional(readOnly = true)
     public List<String> listarCores() {
-        return corRepository.findByFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAscNmCorAsc()
+        return corRepository.findByFgExcluidoFalseAndFgAtivoTrueOrderByNmCorAsc()
                 .stream().map(Cor::getNmCor).toList();
     }
 
     @Transactional(readOnly = true)
     public List<String> listarMarcas() {
-        return marcaRepository.findByFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAscNmMarcaAsc()
+        return marcaRepository.findByFgExcluidoFalseAndFgAtivoTrueOrderByNmMarcaAsc()
                 .stream().map(Marca::getNmMarca).toList();
     }
 
@@ -65,7 +65,7 @@ public class CatalogoService {
     public List<String> listarModelos(String nmMarca) {
         if (nmMarca == null || nmMarca.isBlank()) return List.of();
         return modeloRepository
-                .findByMarca_NmMarcaAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAscNmModeloAsc(nmMarca.trim())
+                .findByMarca_NmMarcaAndFgExcluidoFalseAndFgAtivoTrueOrderByNmModeloAsc(nmMarca.trim())
                 .stream().map(Modelo::getNmModelo).toList();
     }
 
@@ -77,7 +77,7 @@ public class CatalogoService {
         int l = PaginationParams.resolveLimit(limit);
         Specification<Marca> spec = catalogoSpec(incluirInativos, q, "nmMarca");
         Page<Marca> result = marcaRepository.findAll(spec,
-                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.ASC, "orOrdem").and(Sort.by(Sort.Direction.ASC, "nmMarca"))));
+                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.ASC, "nmMarca")));
         var content = result.getContent().stream().map(this::toMarca).toList();
         return ApiPage.paged(content, new PaginationMeta(p, l, result.getTotalElements(), result.getTotalPages()));
     }
@@ -145,7 +145,7 @@ public class CatalogoService {
             return cb.and(ps.toArray(new Predicate[0]));
         };
         Page<Modelo> result = modeloRepository.findAll(spec,
-                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.ASC, "orOrdem").and(Sort.by(Sort.Direction.ASC, "nmModelo"))));
+                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.ASC, "nmModelo")));
         var content = result.getContent().stream().map(this::toModelo).toList();
         return ApiPage.paged(content, new PaginationMeta(p, l, result.getTotalElements(), result.getTotalPages()));
     }
@@ -207,7 +207,7 @@ public class CatalogoService {
         int l = PaginationParams.resolveLimit(limit);
         Specification<Cor> spec = catalogoSpec(incluirInativos, q, "nmCor");
         Page<Cor> result = corRepository.findAll(spec,
-                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.ASC, "orOrdem").and(Sort.by(Sort.Direction.ASC, "nmCor"))));
+                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.ASC, "nmCor")));
         var content = result.getContent().stream().map(this::toCor).toList();
         return ApiPage.paged(content, new PaginationMeta(p, l, result.getTotalElements(), result.getTotalPages()));
     }

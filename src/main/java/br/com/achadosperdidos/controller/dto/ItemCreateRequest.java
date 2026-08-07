@@ -13,6 +13,7 @@ public record ItemCreateRequest(
         String idStatus,
         @NotBlank String nmTitulo,
         String dsItem,
+        String dsWallpaper,
         String dsObservacoes,
         String nmMarca,
         String nmModelo,

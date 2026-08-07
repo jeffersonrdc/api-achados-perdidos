@@ -281,12 +281,18 @@ public class TriagemService {
             triagem.setLocalizacaoInicial(r.idLocalizacaoInicial().isBlank() ? null
                     : localizacaoService.findEntity(idCodec.decodeLocalizacaoId(r.idLocalizacaoInicial())));
         }
-        if (r.nmEstado() != null) triagem.setNmEstado(r.nmEstado());
+        if (r.nmEstado() != null) {
+            triagem.setNmEstado(r.nmEstado());
+            item.setNmEstado(r.nmEstado().isBlank() ? null : r.nmEstado().trim());
+        }
         if (r.dsTags() != null) {
             triagem.setDsTags(r.dsTags());
             item.setDsTags(r.dsTags().isBlank() ? null : r.dsTags().trim());
         }
-        if (r.dsObservacao() != null) triagem.setDsObservacao(r.dsObservacao());
+        if (r.dsObservacao() != null) {
+            triagem.setDsObservacao(r.dsObservacao());
+            item.setDsObservacoes(r.dsObservacao().isBlank() ? null : r.dsObservacao().trim());
+        }
         if (r.dsSugestaoIa() != null) triagem.setDsSugestaoIa(r.dsSugestaoIa());
         if (r.vlConfiancaIa() != null) triagem.setVlConfiancaIa(r.vlConfiancaIa());
         triagem.setDtAlteracao(LocalDateTime.now());
@@ -350,6 +356,14 @@ public class TriagemService {
 
     private TriagemResponse toResponse(Triagem t) {
         Item i = t.getItem();
+        String operador = t.getOperador() != null
+                ? t.getOperador().getNmUsuario()
+                : (i.getUsuarioCadastro() != null ? i.getUsuarioCadastro().getNmUsuario() : i.getNmEncontradoPor());
+        String tags = t.getDsTags() != null && !t.getDsTags().isBlank() ? t.getDsTags() : i.getDsTags();
+        String estado = t.getNmEstado() != null && !t.getNmEstado().isBlank() ? t.getNmEstado() : i.getNmEstado();
+        String obs = t.getDsObservacao() != null && !t.getDsObservacao().isBlank()
+                ? t.getDsObservacao()
+                : i.getDsObservacoes();
         return new TriagemResponse(
                 idCodec.encodeTriagemId(t.getId()),
                 idCodec.encodeItemId(i.getId()),
@@ -358,19 +372,32 @@ public class TriagemService {
                 i.getStatus() != null ? i.getStatus().getNmStatus() : null,
                 t.getTpStatus(),
                 t.getOperador() != null ? idCodec.encodeUsuarioId(t.getOperador().getId()) : null,
-                t.getOperador() != null ? t.getOperador().getNmUsuario() : null,
-                t.getNmEstado(),
-                t.getDsTags(),
+                operador,
+                estado,
+                i.getCategoria() != null ? i.getCategoria().getNmCategoria() : null,
+                i.getSubcategoria() != null ? i.getSubcategoria().getNmCategoria() : null,
+                i.getNmCor(),
+                i.getNmMarca(),
+                i.getNmModelo(),
+                i.getDsItem(),
+                i.getDsWallpaper(),
+                tags,
                 t.getDsObservacao(),
+                obs,
                 t.getDsSugestaoIa(),
                 t.getVlConfiancaIa(),
                 t.getLocalizacaoInicial() != null ? idCodec.encodeLocalizacaoId(t.getLocalizacaoInicial().getId()) : null,
+                i.getNmPosto(),
+                i.getNmLocalEncontrado(),
+                i.getFgSensivel(),
+                i.getTpPrioridade(),
                 t.getDtInicio(),
                 t.getDtConclusao());
     }
 
     /** Resposta baseada apenas no item, quando ainda não há registro de triagem. */
     private TriagemResponse toResponseFromItem(Item i) {
+        String operador = i.getUsuarioCadastro() != null ? i.getUsuarioCadastro().getNmUsuario() : i.getNmEncontradoPor();
         return new TriagemResponse(
                 null,
                 idCodec.encodeItemId(i.getId()),
@@ -379,13 +406,25 @@ public class TriagemService {
                 i.getStatus() != null ? i.getStatus().getNmStatus() : null,
                 null,
                 null,
-                i.getUsuarioCadastro() != null ? i.getUsuarioCadastro().getNmUsuario() : i.getNmEncontradoPor(),
+                operador,
                 i.getNmEstado(),
+                i.getCategoria() != null ? i.getCategoria().getNmCategoria() : null,
+                i.getSubcategoria() != null ? i.getSubcategoria().getNmCategoria() : null,
+                i.getNmCor(),
+                i.getNmMarca(),
+                i.getNmModelo(),
+                i.getDsItem(),
+                i.getDsWallpaper(),
+                i.getDsTags(),
                 null,
                 i.getDsObservacoes(),
                 null,
                 null,
                 null,
+                i.getNmPosto(),
+                i.getNmLocalEncontrado(),
+                i.getFgSensivel(),
+                i.getTpPrioridade(),
                 null,
                 null);
     }
@@ -408,6 +447,11 @@ public class TriagemService {
                 i.getDtEncontrado(),
                 i.getHrEncontrado(),
                 i.getNmLocalEncontrado(),
-                recebido);
+                i.getNmPosto(),
+                recebido,
+                i.getDsItem(),
+                i.getDsWallpaper(),
+                i.getDsObservacoes(),
+                i.getDsTags());
     }
 }

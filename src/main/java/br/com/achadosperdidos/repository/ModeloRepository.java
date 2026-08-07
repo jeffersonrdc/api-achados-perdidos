@@ -10,7 +10,8 @@ import java.util.List;
 
 @Repository
 public interface ModeloRepository extends JpaRepository<Modelo, Long>, JpaSpecificationExecutor<Modelo> {
-    List<Modelo> findByMarca_NmMarcaAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAscNmModeloAsc(String nmMarca);
+    /** Select: ordem alfabética por nome. */
+    List<Modelo> findByMarca_NmMarcaAndFgExcluidoFalseAndFgAtivoTrueOrderByNmModeloAsc(String nmMarca);
 
     @EntityGraph(attributePaths = {"marca"})
     List<Modelo> findByFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAscNmModeloAsc();

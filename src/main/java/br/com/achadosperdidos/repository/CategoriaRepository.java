@@ -11,11 +11,11 @@ import java.util.List;
 public interface CategoriaRepository extends JpaRepository<Categoria, Long>, JpaSpecificationExecutor<Categoria> {
     List<Categoria> findByFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc();
     List<Categoria> findByFgExcluidoFalseOrderByOrOrdemAsc();
-    // ---- Hierarquia pai/filho (coleta de itens) ----
-    List<Categoria> findByCategoriaPaiIsNullAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc();
-    List<Categoria> findByCategoriaPaiIsNullAndFgExcluidoFalseOrderByOrOrdemAsc();
-    List<Categoria> findByCategoriaPai_IdAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc(Long idPai);
-    List<Categoria> findByCategoriaPai_IdAndFgExcluidoFalseOrderByOrOrdemAsc(Long idPai);
+    // ---- Hierarquia pai/filho (selects / coleta) — ordem alfabética ----
+    List<Categoria> findByCategoriaPaiIsNullAndFgExcluidoFalseAndFgAtivoTrueOrderByNmCategoriaAsc();
+    List<Categoria> findByCategoriaPaiIsNullAndFgExcluidoFalseOrderByNmCategoriaAsc();
+    List<Categoria> findByCategoriaPai_IdAndFgExcluidoFalseAndFgAtivoTrueOrderByNmCategoriaAsc(Long idPai);
+    List<Categoria> findByCategoriaPai_IdAndFgExcluidoFalseOrderByNmCategoriaAsc(Long idPai);
     List<Categoria> findByCategoriaPaiIsNotNullAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAsc();
     List<Categoria> findByCategoriaPaiIsNotNullAndFgExcluidoFalseOrderByOrOrdemAsc();
     boolean existsByNmCategoriaIgnoreCaseAndFgExcluidoFalse(String nmCategoria);

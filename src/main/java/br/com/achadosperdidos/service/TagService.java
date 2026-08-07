@@ -45,12 +45,12 @@ public class TagService {
         if (idSubcategoria != null && !idSubcategoria.isBlank()) {
             Long idSub = idCodec.decodeCategoriaId(idSubcategoria);
             lista = incluirInativos
-                    ? tagRepository.findBySubcategoria_IdAndFgExcluidoFalseOrderByOrOrdemAscNmTagAsc(idSub)
-                    : tagRepository.findBySubcategoria_IdAndFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAscNmTagAsc(idSub);
+                    ? tagRepository.findBySubcategoria_IdAndFgExcluidoFalseOrderByNmTagAsc(idSub)
+                    : tagRepository.findBySubcategoria_IdAndFgExcluidoFalseAndFgAtivoTrueOrderByNmTagAsc(idSub);
         } else {
             lista = incluirInativos
-                    ? tagRepository.findByFgExcluidoFalseOrderByOrOrdemAscNmTagAsc()
-                    : tagRepository.findByFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAscNmTagAsc();
+                    ? tagRepository.findByFgExcluidoFalseOrderByNmTagAsc()
+                    : tagRepository.findByFgExcluidoFalseAndFgAtivoTrueOrderByNmTagAsc();
         }
         return lista.stream().map(this::toResponse).toList();
     }
@@ -76,7 +76,7 @@ public class TagService {
             return cb.and(ps.toArray(new Predicate[0]));
         };
         Page<Tag> result = tagRepository.findAll(spec,
-                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.ASC, "orOrdem").and(Sort.by(Sort.Direction.ASC, "nmTag"))));
+                PageRequest.of(p - 1, l, Sort.by(Sort.Direction.ASC, "nmTag")));
         var content = result.getContent().stream().map(this::toResponse).toList();
         return ApiPage.paged(content, new PaginationMeta(p, l, result.getTotalElements(), result.getTotalPages()));
     }
