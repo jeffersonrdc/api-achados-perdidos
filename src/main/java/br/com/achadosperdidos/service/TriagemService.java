@@ -40,9 +40,12 @@ public class TriagemService {
     private static final String STATUS_EM_TRIAGEM = "Em triagem";
     /** Status legado: gerado por versões anteriores do botão "Analisar item". */
     private static final String STATUS_EM_ANALISE = "Em Análise";
-    /** Status que mantêm o item na fila da tela /triagem (e nos filtros). */
+    /** Status que mantêm o item na fila da tela /triagem. */
     private static final List<String> STATUS_FILA = List.of(
             STATUS_AGUARDANDO, STATUS_EM_ANALISE, STATUS_EM_TRIAGEM);
+    /** Status exibidos no filtro da tela /triagem. */
+    private static final List<String> STATUS_FILTRO = List.of(
+            STATUS_AGUARDANDO, STATUS_EM_TRIAGEM);
 
     private final TriagemRepository triagemRepository;
     private final ItemRepository itemRepository;
@@ -242,7 +245,7 @@ public class TriagemService {
     @Transactional(readOnly = true)
     public ColetaFiltrosResponse filtros(String idEvento) {
         ColetaFiltrosResponse base = itemService.coletaFiltros(idEvento);
-        List<ColetaFiltrosResponse.Opcao> status = STATUS_FILA.stream()
+        List<ColetaFiltrosResponse.Opcao> status = STATUS_FILTRO.stream()
                 .map(s -> new ColetaFiltrosResponse.Opcao(s, s))
                 .toList();
         return new ColetaFiltrosResponse(base.categorias(), status, base.locais(), base.prioridades());
