@@ -182,18 +182,20 @@ public class PortalController {
     @GetMapping("/marcas")
     @SecurityRequirements
     @Operation(summary = "Listar marcas públicas",
-            description = "Nomes ativos para o select de marca no formulário /registrar.")
-    public List<String> listarMarcas() {
-        return portalService.listarMarcas();
+            description = "Nomes ativos; com `subcategoria`, filtra via marca_subcategoria.")
+    public List<String> listarMarcas(
+            @Parameter(description = "Nome da subcategoria") @RequestParam(required = false) String subcategoria) {
+        return portalService.listarMarcas(subcategoria);
     }
 
     @GetMapping("/modelos")
     @SecurityRequirements
     @Operation(summary = "Listar modelos públicos por marca",
-            description = "Cascata marca → modelo. Sem `marca`, retorna lista vazia.")
+            description = "Cascata marca (+ subcategoria) → modelo. Sem `marca`, retorna lista vazia.")
     public List<String> listarModelos(
-            @Parameter(description = "Nome da marca") @RequestParam(required = false) String marca) {
-        return portalService.listarModelos(marca);
+            @Parameter(description = "Nome da marca") @RequestParam(required = false) String marca,
+            @Parameter(description = "Nome da subcategoria") @RequestParam(required = false) String subcategoria) {
+        return portalService.listarModelos(marca, subcategoria);
     }
 
     @GetMapping("/cores")

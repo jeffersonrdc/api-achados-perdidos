@@ -9,8 +9,8 @@ import java.util.List;
 
 @Repository
 public interface EstadoRepository extends JpaRepository<Estado, Long>, JpaSpecificationExecutor<Estado> {
-    /** Select: ordem alfabética por nome. */
-    List<Estado> findByFgExcluidoFalseAndFgAtivoTrueOrderByNmEstadoAsc();
+    /** Select do formulário: ordem de conservação (OR_Ordem). */
+    List<Estado> findByFgExcluidoFalseAndFgAtivoTrueOrderByOrOrdemAscNmEstadoAsc();
     List<Estado> findByFgExcluidoFalseOrderByOrOrdemAscNmEstadoAsc();
     boolean existsByNmEstadoIgnoreCaseAndFgExcluidoFalse(String nmEstado);
     boolean existsByNmEstadoIgnoreCaseAndIdNotAndFgExcluidoFalse(String nmEstado, Long id);

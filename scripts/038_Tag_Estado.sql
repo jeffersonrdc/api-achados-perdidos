@@ -1,7 +1,7 @@
 -- =====================================================================
 -- 038_Tag_Estado.sql
 -- Catálogos da tela /caracteristicas:
---   1) `estado` -> estados de conservação (Novo, Bom, Avariado...).
+--   1) `estado` -> estados de conservação (Novo, Bom estado, Usado, Danificado).
 --   2) `tag`    -> detalhes do item vinculados a uma subcategoria
 --                 (ex.: Celular -> Capinha, Carregador...).
 --
@@ -53,10 +53,9 @@ CREATE TABLE IF NOT EXISTS tag (
 -- ---------------------------------------------------------------------
 INSERT INTO estado (NM_Estado, DS_Estado, OR_Ordem) VALUES
   ('Novo', 'Sem sinais de uso', 1),
-  ('Bom estado', 'Pequenos sinais de uso, funcional', 2),
+  ('Bom estado', 'Pequenos sinais de uso, plenamente funcional', 2),
   ('Usado', 'Sinais evidentes de uso, funcional', 3),
-  ('Avariado', 'Danos que podem afetar o uso', 4),
-  ('Danificado', 'Danificado / sem condições de uso', 5)
+  ('Danificado', 'Com danos que comprometem o uso', 4)
 ON DUPLICATE KEY UPDATE
   DS_Estado = VALUES(DS_Estado),
   OR_Ordem = VALUES(OR_Ordem);

@@ -35,16 +35,21 @@ public class CatalogoController {
     @GetMapping("/marcas")
     @PreAuthorize("@authz.pode('item.listar')")
     @Operation(summary = "Listar nomes de marcas",
-            description = "Retorna apenas nomes ativos para selects da coleta.")
-    public List<String> marcas() { return catalogoService.listarMarcas(); }
+            description = "Retorna nomes ativos. Com `subcategoria`, filtra via marca_subcategoria (como tags por sub).")
+    public List<String> marcas(
+            @Parameter(description = "Nome da subcategoria para restringir o catálogo")
+            @RequestParam(required = false) String subcategoria) {
+        return catalogoService.listarMarcas(subcategoria);
+    }
 
     @GetMapping("/modelos")
     @PreAuthorize("@authz.pode('item.listar')")
     @Operation(summary = "Listar nomes de modelos",
-            description = "Quando `marca` é informada, filtra os modelos dessa marca.")
+            description = "Filtra por marca; opcionalmente por subcategoria (genéricos + vinculados).")
     public List<String> modelos(
-            @Parameter(description = "Nome da marca para filtrar modelos") @RequestParam(required = false) String marca) {
-        return catalogoService.listarModelos(marca);
+            @Parameter(description = "Nome da marca para filtrar modelos") @RequestParam(required = false) String marca,
+            @Parameter(description = "Nome da subcategoria para restringir o catálogo") @RequestParam(required = false) String subcategoria) {
+        return catalogoService.listarModelos(marca, subcategoria);
     }
 
     // ---- CRUD admin: marcas ----

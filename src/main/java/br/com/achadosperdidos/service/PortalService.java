@@ -361,16 +361,27 @@ public class PortalService {
         return tagService.findAll(false, idSubcategoria);
     }
 
-    /** Marcas ativas para selects do formulário público. */
+    /** Marcas ativas para selects do formulário público (opcionalmente por subcategoria). */
     @Transactional(readOnly = true)
     public List<String> listarMarcas() {
-        return catalogoService.listarMarcas();
+        return catalogoService.listarMarcas(null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<String> listarMarcas(String subcategoria) {
+        return catalogoService.listarMarcas(subcategoria);
     }
 
     /** Modelos ativos da marca (cascata marca → modelo). */
     @Transactional(readOnly = true)
     public List<String> listarModelos(String marca) {
-        return catalogoService.listarModelos(marca);
+        return catalogoService.listarModelos(marca, null);
+    }
+
+    /** Modelos ativos da marca filtrados pela subcategoria (quando informada). */
+    @Transactional(readOnly = true)
+    public List<String> listarModelos(String marca, String subcategoria) {
+        return catalogoService.listarModelos(marca, subcategoria);
     }
 
     /** Cores ativas para selects do formulário público. */

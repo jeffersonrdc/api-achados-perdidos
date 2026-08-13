@@ -57,16 +57,57 @@ public class CatalogoService {
 
     @Transactional(readOnly = true)
     public List<String> listarMarcas() {
+        return listarMarcas(null);
+    }
+
+    /**
+     * Marcas ativas; quando {@code nmSubcategoria} é informado, restringe às
+     * vinculadas em {@code marca_subcategoria} (ou genéricas, sem vínculo).
+     * Mesmo espírito de {@code tag.IDR_Subcategoria}, com N:N para marcas multi-categoria.
+     */
+    @Transactional(readOnly = true)
+    public List<String> listarMarcas(String nmSubcategoria) {
+        if (nmSubcategoria != null && !nmSubcategoria.isBlank()) {
+            return marcaRepository.findAtivasBySubcategoria(nmSubcategoria.trim())
+                    .stream().map(Marca::getNmMarca).toList();
+        }
         return marcaRepository.findByFgExcluidoFalseAndFgAtivoTrueOrderByNmMarcaAsc()
                 .stream().map(Marca::getNmMarca).toList();
     }
 
     @Transactional(readOnly = true)
     public List<String> listarModelos(String nmMarca) {
+        return listarModelos(nmMarca, null);
+    }
+
+    /**
+     * Modelos da marca; quando {@code nmSubcategoria} é informado, restringe aos
+     * genéricos (IDR_Subcategoria NULL) e aos vinculados àquela subcategoria.
+     */
+    @Transactional(readOnly = true)
+    public List<String> listarModelos(String nmMarca, String nmSubcategoria) {
         if (nmMarca == null || nmMarca.isBlank()) return List.of();
-        return modeloRepository
-                .findByMarca_NmMarcaAndFgExcluidoFalseAndFgAtivoTrueOrderByNmModeloAsc(nmMarca.trim())
-                .stream().map(Modelo::getNmModelo).toList();
+        String marca = nmMarca.trim();
+        List<String> modelos;
+        if (nmSubcategoria != null && !nmSubcategoria.isBlank()) {
+            modelos = modeloRepository
+                    .findAtivosByMarcaAndSubcategoria(marca, nmSubcategoria.trim())
+                    .stream().map(Modelo::getNmModelo).toList();
+        } else {
+            modelos = modeloRepository
+                    .findByMarca_NmMarcaAndFgExcluidoFalseAndFgAtivoTrueOrderByNmModeloAsc(marca)
+                    .stream().map(Modelo::getNmModelo).toList();
+        }
+        // "Outro" sempre disponível e no final da lista (útil em coleta/portal/triagem).
+        List<String> semOutro = modelos.stream()
+                .filter(n -> n == null || !n.equalsIgnoreCase("Outro"))
+                .toList();
+        boolean temOutro = modelos.stream().anyMatch(n -> n != null && n.equalsIgnoreCase("Outro"));
+        List<String> saida = new ArrayList<>(semOutro);
+        saida.add(temOutro
+                ? modelos.stream().filter(n -> n != null && n.equalsIgnoreCase("Outro")).findFirst().orElse("Outro")
+                : "Outro");
+        return saida;
     }
 
     // ---- Marcas (CRUD) ----
@@ -95,7 +136,9 @@ public class CatalogoService {
         m.setFgAtivo(request.fgAtivo() == null || request.fgAtivo());
         m.setFgExcluido(false);
         m.setDtCadastro(LocalDateTime.now());
-        return toMarca(marcaRepository.save(m));
+        Marca salva = marcaRepository.save(m);
+        garantirModeloOutro(salva);
+        return toMarca(salva);
     }
 
     @Transactional
@@ -268,6 +311,21 @@ public class CatalogoService {
             }
             return cb.and(ps.toArray(new Predicate[0]));
         };
+    }
+
+    /** Garante o modelo "Outro" vinculado à marca (usado no create e no select). */
+    private void garantirModeloOutro(Marca marca) {
+        if (modeloRepository.existsByNmModeloIgnoreCaseAndMarca_IdAndFgExcluidoFalse("Outro", marca.getId())) {
+            return;
+        }
+        Modelo outro = new Modelo();
+        outro.setMarca(marca);
+        outro.setNmModelo("Outro");
+        outro.setOrOrdem(9999);
+        outro.setFgAtivo(true);
+        outro.setFgExcluido(false);
+        outro.setDtCadastro(LocalDateTime.now());
+        modeloRepository.save(outro);
     }
 
     private Marca findMarca(Long id) {

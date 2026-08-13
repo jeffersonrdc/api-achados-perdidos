@@ -9,6 +9,8 @@ import java.time.LocalDateTime;
 public class Modelo {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) @Column(name = "ID_Modelo") private Long id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "IDR_Marca", nullable = false) private Marca marca;
+    /** Subcategoria sugerida; null = genérico (exibe em qualquer subcategoria). */
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "IDR_Subcategoria") private Categoria subcategoria;
     @Column(name = "NM_Modelo", nullable = false, length = 120) private String nmModelo;
     @Column(name = "OR_Ordem", nullable = false) private Integer orOrdem = 0;
     @Column(name = "DT_Cadastro", nullable = false) private LocalDateTime dtCadastro;
@@ -17,6 +19,7 @@ public class Modelo {
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Excluido", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgExcluido = false;
     public Long getId() { return id; } public void setId(Long id) { this.id = id; }
     public Marca getMarca() { return marca; } public void setMarca(Marca v) { this.marca = v; }
+    public Categoria getSubcategoria() { return subcategoria; } public void setSubcategoria(Categoria v) { this.subcategoria = v; }
     public String getNmModelo() { return nmModelo; } public void setNmModelo(String v) { this.nmModelo = v; }
     public Integer getOrOrdem() { return orOrdem; } public void setOrOrdem(Integer v) { this.orOrdem = v; }
     public LocalDateTime getDtCadastro() { return dtCadastro; } public void setDtCadastro(LocalDateTime v) { this.dtCadastro = v; }
