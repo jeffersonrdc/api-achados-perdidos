@@ -1,5 +1,6 @@
 package br.com.achadosperdidos.service;
 
+import br.com.achadosperdidos.controller.dto.ClaimCreateItemRequest;
 import br.com.achadosperdidos.controller.dto.ClaimCreateRequest;
 import br.com.achadosperdidos.controller.dto.ClaimResponse;
 import br.com.achadosperdidos.controller.dto.ClaimUpdateRequest;
@@ -17,6 +18,7 @@ import br.com.achadosperdidos.repository.ClaimMensagemRepository;
 import br.com.achadosperdidos.repository.ClaimRepository;
 import br.com.achadosperdidos.repository.ClaimValidacaoRepository;
 import br.com.achadosperdidos.repository.EventoRepository;
+import br.com.achadosperdidos.repository.ItemRepository;
 import br.com.achadosperdidos.security.SignedResourceIdCodec;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -45,6 +47,7 @@ public class ClaimService {
 
     private final ClaimRepository claimRepository;
     private final EventoRepository eventoRepository;
+    private final ItemRepository itemRepository;
     private final CategoriaService categoriaService;
     private final LocalService localService;
     private final StatusItemService statusItemService;
@@ -54,6 +57,7 @@ public class ClaimService {
     private final SignedResourceIdCodec idCodec;
 
     public ClaimService(ClaimRepository claimRepository, EventoRepository eventoRepository,
+                        ItemRepository itemRepository,
                         CategoriaService categoriaService, LocalService localService,
                         StatusItemService statusItemService,
                         ClaimValidacaoRepository claimValidacaoRepository,
@@ -62,6 +66,7 @@ public class ClaimService {
                         SignedResourceIdCodec idCodec) {
         this.claimRepository = claimRepository;
         this.eventoRepository = eventoRepository;
+        this.itemRepository = itemRepository;
         this.categoriaService = categoriaService;
         this.localService = localService;
         this.statusItemService = statusItemService;
@@ -99,6 +104,65 @@ public class ClaimService {
         claim.setCdClaim(gerarProtocolo(claim.getId(), claim.getDtCadastro()));
         claim = claimRepository.save(claim);
         matchService.recalcularMatches(claim);
+        return toResponse(claimRepository.findById(claim.getId()).orElse(claim));
+    }
+
+    /**
+     * Pedido de retirada vinculado ao item (mesmo espírito do portal {@code /claims/item}).
+     * Usado pelo backoffice em /pedidos — IDs assinados do painel, não tokens públicos.
+     */
+    @Transactional
+    public ClaimResponse criarRetiradaDeItem(ClaimCreateItemRequest request) {
+        Long eventoId = idCodec.decodeEventoId(request.idEvento());
+        Evento evento = eventoRepository.findById(eventoId)
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Evento não encontrado."));
+        Item item = itemRepository.findById(idCodec.decodeItemId(request.idItem()))
+                .filter(i -> !Boolean.TRUE.equals(i.getFgExcluido()))
+                .filter(i -> i.getEvento() != null && i.getEvento().getId().equals(eventoId))
+                .filter(i -> !Boolean.TRUE.equals(i.getFgEntregue()))
+                .filter(i -> !Boolean.TRUE.equals(i.getFgDescartado()))
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Item não encontrado no evento."));
+
+        Claim claim = new Claim();
+        claim.setEvento(evento);
+        claim.setTpClaim(TIPO_RETIRADA);
+        claim.setCategoria(item.getCategoria());
+        claim.setSubcategoria(item.getSubcategoria());
+        claim.setStatus(statusItemService.findByNomeOrDefault(null, "Claim Aberto"));
+        claim.setNmNome(request.nmNome().trim());
+        claim.setNmEmail(request.nmEmail().trim().toLowerCase(Locale.ROOT));
+        claim.setNrTelefone(blankToNull(request.nrTelefone()));
+        claim.setNmContatoConfianca(blankToNull(request.nmContatoConfianca()));
+        claim.setNrTelefoneConfianca(blankToNull(request.nrTelefoneConfianca()));
+        claim.setDsRelacaoContatoConfianca(blankToNull(request.dsRelacaoContatoConfianca()));
+        claim.setNmObjeto(item.getNmTitulo());
+        claim.setDsObjeto(blankToNull(request.dsObjeto()));
+        claim.setDsDetalhesOcultos(blankToNull(request.dsDetalhesOcultos()));
+        claim.setNmMarca(item.getNmMarca());
+        claim.setNmModelo(item.getNmModelo());
+        claim.setNmCor(item.getNmCor());
+        claim.setNmEstado(item.getNmEstado());
+        claim.setDtPerdeu(item.getDtEncontrado());
+        claim.setNmLocal(item.getNmLocalEncontrado());
+        claim.setFgSensivel(Boolean.TRUE.equals(item.getFgSensivel()));
+        claim.setTpPrioridade(item.getTpPrioridade());
+        claim.setNmOperador(blankToNull(request.nmOperador()));
+        claim.setDtCadastro(LocalDateTime.now());
+        claim.setFgAtivo(true);
+        claim.setFgExcluido(false);
+        claim = claimRepository.save(claim);
+        claim.setCdClaim(gerarProtocolo(claim.getId(), claim.getDtCadastro()));
+        claim = claimRepository.save(claim);
+
+        ClaimValidacao validacao = new ClaimValidacao();
+        validacao.setEvento(evento);
+        validacao.setClaim(claim);
+        validacao.setItem(item);
+        validacao.setStResultado("PENDENTE");
+        validacao.setDtCadastro(LocalDateTime.now());
+        validacao.setFgExcluido(false);
+        claimValidacaoRepository.save(validacao);
+
         return toResponse(claimRepository.findById(claim.getId()).orElse(claim));
     }
 

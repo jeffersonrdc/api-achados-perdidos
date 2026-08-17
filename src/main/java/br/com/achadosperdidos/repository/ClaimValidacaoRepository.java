@@ -2,6 +2,8 @@ package br.com.achadosperdidos.repository;
 
 import br.com.achadosperdidos.entity.ClaimValidacao;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
@@ -21,4 +23,21 @@ public interface ClaimValidacaoRepository extends JpaRepository<ClaimValidacao, 
     /** Reprovação é definitiva: usado para bloquear novo pedido do mesmo par claim↔item. */
     boolean existsByClaim_IdAndItem_IdAndStResultadoAndFgExcluidoFalse(
             Long claimId, Long itemId, String stResultado);
+
+    /**
+     * Pedido de retirada ainda em aberto (Claim Aberto / em Análise), mesmo se o item
+     * continuar com status de estoque.
+     */
+    @Query("""
+            SELECT CASE WHEN COUNT(v) > 0 THEN true ELSE false END
+              FROM ClaimValidacao v
+             WHERE v.item.id = :itemId
+               AND v.fgExcluido = false
+               AND v.claim.fgExcluido = false
+               AND v.claim.tpClaim = 'RETIRADA'
+               AND v.claim.status.nmStatus IN :claimPendentes
+            """)
+    boolean existsRetiradaPendenteNoPortal(
+            @Param("itemId") Long itemId,
+            @Param("claimPendentes") Collection<String> claimPendentes);
 }

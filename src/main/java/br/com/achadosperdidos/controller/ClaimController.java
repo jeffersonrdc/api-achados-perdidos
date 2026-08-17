@@ -1,6 +1,7 @@
 package br.com.achadosperdidos.controller;
 
 import br.com.achadosperdidos.controller.dto.ClaimAprovarRequest;
+import br.com.achadosperdidos.controller.dto.ClaimCreateItemRequest;
 import br.com.achadosperdidos.controller.dto.ClaimCreateRequest;
 import br.com.achadosperdidos.controller.dto.ClaimHistoricoResponse;
 import br.com.achadosperdidos.controller.dto.ClaimMensagemCreateRequest;
@@ -56,6 +57,14 @@ public class ClaimController {
     @Operation(summary = "Criar claim (backoffice)")
     public ResponseEntity<ClaimResponse> create(@Valid @RequestBody ClaimCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(claimService.create(request));
+    }
+
+    @PostMapping("/item")
+    @PreAuthorize("@authz.pode('claim.criar')")
+    @Operation(summary = "Criar pedido de retirada vinculado a um item",
+            description = "Gera um claim RETIRADA + claim_validacao PENDENTE para o item do estoque (tela /pedidos).")
+    public ResponseEntity<ClaimResponse> createRetiradaItem(@Valid @RequestBody ClaimCreateItemRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(claimService.criarRetiradaDeItem(request));
     }
 
     @GetMapping

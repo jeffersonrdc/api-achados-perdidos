@@ -8,6 +8,7 @@ import br.com.achadosperdidos.exception.RecursoNaoEncontradoException;
 import br.com.achadosperdidos.repository.ArquivoRepository;
 import br.com.achadosperdidos.repository.ClaimMensagemRepository;
 import br.com.achadosperdidos.repository.ClaimRepository;
+import br.com.achadosperdidos.repository.ClaimValidacaoRepository;
 import br.com.achadosperdidos.repository.ContatoRepository;
 import br.com.achadosperdidos.repository.CriancaRepository;
 import br.com.achadosperdidos.repository.DevolucaoRepository;
@@ -48,10 +49,13 @@ public class ArquivoService {
     private static final Set<String> TIPOS_PUBLICOS_EVENTO = Set.of("LOGO", "HERO", "WALLPAPER");
     private static final List<String> STATUS_PORTAL = List.of(
             "Em estoque", "Com pedido de devolucao", "Aguardando retirada");
+    private static final List<String> CLAIM_STATUS_OCULTA_PORTAL = List.of(
+            "Claim Aberto", "Claim em Análise");
 
     private final ArquivoRepository arquivoRepository;
     private final ItemRepository itemRepository;
     private final ClaimRepository claimRepository;
+    private final ClaimValidacaoRepository claimValidacaoRepository;
     private final ClaimMensagemRepository claimMensagemRepository;
     private final CriancaRepository criancaRepository;
     private final DevolucaoRepository devolucaoRepository;
@@ -64,7 +68,8 @@ public class ArquivoService {
     private final ImageThumbnailService imageThumbnailService;
 
     public ArquivoService(ArquivoRepository arquivoRepository, ItemRepository itemRepository,
-                          ClaimRepository claimRepository, ClaimMensagemRepository claimMensagemRepository,
+                          ClaimRepository claimRepository, ClaimValidacaoRepository claimValidacaoRepository,
+                          ClaimMensagemRepository claimMensagemRepository,
                           CriancaRepository criancaRepository,
                           DevolucaoRepository devolucaoRepository, ContatoRepository contatoRepository,
                           EventoRepository eventoRepository,
@@ -75,6 +80,7 @@ public class ArquivoService {
         this.arquivoRepository = arquivoRepository;
         this.itemRepository = itemRepository;
         this.claimRepository = claimRepository;
+        this.claimValidacaoRepository = claimValidacaoRepository;
         this.claimMensagemRepository = claimMensagemRepository;
         this.criancaRepository = criancaRepository;
         this.devolucaoRepository = devolucaoRepository;
@@ -339,6 +345,9 @@ public class ArquivoService {
                 .filter(t -> "CONCLUIDA".equalsIgnoreCase(t.getTpStatus()))
                 .isPresent();
         if (!triagemOk) {
+            throw new RecursoNaoEncontradoException("Arquivo não disponível no portal.");
+        }
+        if (claimValidacaoRepository.existsRetiradaPendenteNoPortal(item.getId(), CLAIM_STATUS_OCULTA_PORTAL)) {
             throw new RecursoNaoEncontradoException("Arquivo não disponível no portal.");
         }
         return a;

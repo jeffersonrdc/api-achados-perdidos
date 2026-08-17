@@ -35,7 +35,10 @@ public interface ItemRepository extends JpaRepository<Item, Long>, JpaSpecificat
     Page<Item> findByEvento_IdAndFgExcluidoFalseAndFgAtivoTrueAndFgEntregueFalseAndFgDescartadoFalse(
             Long eventoId, Pageable pageable);
 
-    /** Itens públicos no portal: estoque (ou pós-claim) E triagem já concluída. */
+    /**
+     * Itens públicos no portal: estoque (ou pós-claim), triagem concluída e
+     * sem pedido de retirada pendente (Claim Aberto / em Análise).
+     */
     @EntityGraph(attributePaths = {"evento", "categoria", "status", "localAtual"})
     @Query("""
             SELECT i FROM Item i
@@ -51,10 +54,19 @@ public interface ItemRepository extends JpaRepository<Item, Long>, JpaSpecificat
                     AND t.fgExcluido = false
                     AND t.tpStatus = 'CONCLUIDA'
                )
+               AND NOT EXISTS (
+                 SELECT 1 FROM ClaimValidacao v
+                  WHERE v.item.id = i.id
+                    AND v.fgExcluido = false
+                    AND v.claim.fgExcluido = false
+                    AND v.claim.tpClaim = 'RETIRADA'
+                    AND v.claim.status.nmStatus IN :claimPendentes
+               )
             """)
     Page<Item> findCatalogoPortal(
             @Param("eventoId") Long eventoId,
             @Param("statuses") Collection<String> statuses,
+            @Param("claimPendentes") Collection<String> claimPendentes,
             Pageable pageable);
 
     /** Itens públicos no portal: apenas os que já chegaram ao estoque (não entregues/descartados). */

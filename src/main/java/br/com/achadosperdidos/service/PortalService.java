@@ -33,6 +33,9 @@ public class PortalService {
     /** Status que tornam o item visível na consulta pública (após triagem, no estoque). */
     private static final List<String> STATUS_PORTAL = List.of(
             "Em estoque", "Com pedido de devolucao", "Aguardando retirada");
+    /** Pedido de retirada em andamento: item sai do catálogo mesmo se continuar Em estoque. */
+    private static final List<String> CLAIM_STATUS_OCULTA_PORTAL = List.of(
+            "Claim Aberto", "Claim em Análise");
     private static final int MAX_COMPROVANTES_RETIRADA = 5;
     private static final long MAX_BYTES_COMPROVANTE = 10L * 1024 * 1024;
     private static final Set<String> MIME_COMPROVANTE = Set.of(
@@ -411,8 +414,9 @@ public class PortalService {
         int l = PaginationParams.resolveLimit(limit);
         Long eventoId = idCodec.decodeEventoIdAssinado(idEvento);
         // Só aparecem no portal após "Concluir triagem" (triagem CONCLUIDA) e status de estoque/pós-claim.
+        // Pedido de retirada com Claim Aberto (ou em Análise) oculta o item, mesmo Em estoque.
         Page<Item> result = itemRepository.findCatalogoPortal(
-                eventoId, STATUS_PORTAL, PageRequest.of(p - 1, l));
+                eventoId, STATUS_PORTAL, CLAIM_STATUS_OCULTA_PORTAL, PageRequest.of(p - 1, l));
         var filtrados = result.getContent().stream()
                 .filter(i -> pesquisa == null || pesquisa.isBlank() || matchesPesquisa(i, pesquisa))
                 .toList();
@@ -461,6 +465,7 @@ public class PortalService {
                 .filter(i -> !Boolean.TRUE.equals(i.getFgDescartado()))
                 .filter(i -> i.getStatus() != null && STATUS_PORTAL.contains(i.getStatus().getNmStatus()))
                 .filter(this::triagemConcluida)
+                .filter(i -> !temRetiradaPendenteNoPortal(i.getId()))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Item não encontrado no evento."));
 
         Claim claim = new Claim();
@@ -768,6 +773,10 @@ public class PortalService {
                 .isPresent();
     }
 
+    private boolean temRetiradaPendenteNoPortal(Long itemId) {
+        return claimValidacaoRepository.existsRetiradaPendenteNoPortal(itemId, CLAIM_STATUS_OCULTA_PORTAL);
+    }
+
     private static void aplicarContatoConfianca(
             Claim claim, String nmContato, String nrTelefone, String dsRelacao) {
         claim.setNmContatoConfianca(blankToNull(nmContato));
@@ -792,6 +801,7 @@ public class PortalService {
                 .filter(x -> x.getEvento().getId().equals(eventoId))
                 .filter(x -> x.getStatus() != null && STATUS_PORTAL.contains(x.getStatus().getNmStatus()))
                 .filter(this::triagemConcluida)
+                .filter(x -> !temRetiradaPendenteNoPortal(x.getId()))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Item não encontrado no catálogo público."));
         String idFoto = arquivoService.fotoPrincipalItem(i.getId())
                 .map(a -> idCodec.encodeArquivoId(a.getId()))

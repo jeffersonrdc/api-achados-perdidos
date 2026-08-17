@@ -55,6 +55,13 @@ class PortalIntegrationTest extends IntegrationTestBase {
         String idClaim = objectMapper.readTree(claimResult.getResponse().getContentAsString())
                 .get("idClaim").asText();
 
+        // Claim Aberto some o item do catálogo público, mesmo que continue Em estoque.
+        mockMvc.perform(get("/api/v1/portal/eventos/" + idEvento + "/itens"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isEmpty());
+        mockMvc.perform(get("/api/v1/portal/eventos/" + idEvento + "/itens/" + idItem))
+                .andExpect(status().isNotFound());
+
         MockMultipartFile comprovante = new MockMultipartFile(
                 "anexos", "nota-fiscal.pdf", MediaType.APPLICATION_PDF_VALUE, "%PDF-1.4 teste".getBytes());
         mockMvc.perform(multipart(
