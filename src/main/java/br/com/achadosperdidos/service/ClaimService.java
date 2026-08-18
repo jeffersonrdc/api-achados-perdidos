@@ -4,6 +4,7 @@ import br.com.achadosperdidos.controller.dto.ClaimCreateItemRequest;
 import br.com.achadosperdidos.controller.dto.ClaimCreateRequest;
 import br.com.achadosperdidos.controller.dto.ClaimResponse;
 import br.com.achadosperdidos.controller.dto.ClaimUpdateRequest;
+import br.com.achadosperdidos.controller.dto.DevolucaoRapidaResponse;
 import br.com.achadosperdidos.entity.Claim;
 import br.com.achadosperdidos.entity.Categoria;
 import br.com.achadosperdidos.entity.Evento;
@@ -37,6 +38,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 @Service
@@ -54,7 +56,10 @@ public class ClaimService {
     private final ClaimValidacaoRepository claimValidacaoRepository;
     private final ClaimMensagemRepository claimMensagemRepository;
     private final MatchService matchService;
+    private final DevolucaoFluxoService devolucaoFluxoService;
     private final SignedResourceIdCodec idCodec;
+    private static final List<String> CLAIM_STATUS_OCULTA_PORTAL = List.of(
+            "Claim Aberto", "Claim em Análise");
 
     public ClaimService(ClaimRepository claimRepository, EventoRepository eventoRepository,
                         ItemRepository itemRepository,
@@ -63,6 +68,7 @@ public class ClaimService {
                         ClaimValidacaoRepository claimValidacaoRepository,
                         ClaimMensagemRepository claimMensagemRepository,
                         MatchService matchService,
+                        DevolucaoFluxoService devolucaoFluxoService,
                         SignedResourceIdCodec idCodec) {
         this.claimRepository = claimRepository;
         this.eventoRepository = eventoRepository;
@@ -73,6 +79,7 @@ public class ClaimService {
         this.claimValidacaoRepository = claimValidacaoRepository;
         this.claimMensagemRepository = claimMensagemRepository;
         this.matchService = matchService;
+        this.devolucaoFluxoService = devolucaoFluxoService;
         this.idCodec = idCodec;
     }
 
@@ -164,6 +171,74 @@ public class ClaimService {
         claimValidacaoRepository.save(validacao);
 
         return toResponse(claimRepository.findById(claim.getId()).orElse(claim));
+    }
+
+    /**
+     * Retirada presencial no evento: gera o pedido já aprovado, conclui a devolução,
+     * dá baixa no estoque e envia o recibo por e-mail.
+     */
+    @Transactional
+    public DevolucaoRapidaResponse criarDevolucaoRapida(ClaimCreateItemRequest request) {
+        Long eventoId = idCodec.decodeEventoId(request.idEvento());
+        Evento evento = eventoRepository.findById(eventoId)
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Evento não encontrado."));
+        Item item = itemRepository.findById(idCodec.decodeItemId(request.idItem()))
+                .filter(i -> !Boolean.TRUE.equals(i.getFgExcluido()))
+                .filter(i -> i.getEvento() != null && i.getEvento().getId().equals(eventoId))
+                .filter(i -> !Boolean.TRUE.equals(i.getFgEntregue()))
+                .filter(i -> !Boolean.TRUE.equals(i.getFgDescartado()))
+                .orElseThrow(() -> new RecursoNaoEncontradoException("Item não encontrado no evento."));
+        String statusItem = item.getStatus() != null ? item.getStatus().getNmStatus() : "";
+        if (!"Em estoque".equalsIgnoreCase(statusItem)) {
+            throw new IllegalArgumentException("A devolução rápida só é permitida para item Em estoque.");
+        }
+        if (claimValidacaoRepository.existsRetiradaPendenteNoPortal(item.getId(), CLAIM_STATUS_OCULTA_PORTAL)) {
+            throw new IllegalArgumentException("Este item já possui um pedido de retirada em aberto.");
+        }
+
+        Claim claim = new Claim();
+        claim.setEvento(evento);
+        claim.setTpClaim(TIPO_RETIRADA);
+        claim.setCategoria(item.getCategoria());
+        claim.setSubcategoria(item.getSubcategoria());
+        claim.setStatus(statusItemService.findByNomeOrDefault(null, "Claim Aprovado"));
+        claim.setNmNome(request.nmNome().trim());
+        claim.setNmEmail(request.nmEmail().trim().toLowerCase(Locale.ROOT));
+        claim.setNrTelefone(blankToNull(request.nrTelefone()));
+        claim.setNmContatoConfianca(blankToNull(request.nmContatoConfianca()));
+        claim.setNrTelefoneConfianca(blankToNull(request.nrTelefoneConfianca()));
+        claim.setDsRelacaoContatoConfianca(blankToNull(request.dsRelacaoContatoConfianca()));
+        claim.setNmObjeto(item.getNmTitulo());
+        claim.setDsObjeto(blankToNull(request.dsObjeto()));
+        claim.setDsDetalhesOcultos(blankToNull(request.dsDetalhesOcultos()));
+        claim.setNmMarca(item.getNmMarca());
+        claim.setNmModelo(item.getNmModelo());
+        claim.setNmCor(item.getNmCor());
+        claim.setNmEstado(item.getNmEstado());
+        claim.setDtPerdeu(item.getDtEncontrado());
+        claim.setNmLocal(item.getNmLocalEncontrado());
+        claim.setFgSensivel(Boolean.TRUE.equals(item.getFgSensivel()));
+        claim.setTpPrioridade(item.getTpPrioridade());
+        String operador = blankToNull(request.nmOperador());
+        claim.setNmOperador(operador);
+        claim.setDsJustificativaAprovacao("Devolução rápida: item entregue presencialmente no local do evento.");
+        claim.setDtCadastro(LocalDateTime.now());
+        claim.setFgAtivo(true);
+        claim.setFgExcluido(false);
+        claim = claimRepository.save(claim);
+        claim.setCdClaim(gerarProtocolo(claim.getId(), claim.getDtCadastro()));
+        claim = claimRepository.save(claim);
+
+        ClaimValidacao validacao = new ClaimValidacao();
+        validacao.setEvento(evento);
+        validacao.setClaim(claim);
+        validacao.setItem(item);
+        validacao.setStResultado(MatchService.ST_CONFIRMADO);
+        validacao.setDtCadastro(LocalDateTime.now());
+        validacao.setFgExcluido(false);
+        claimValidacaoRepository.save(validacao);
+
+        return devolucaoFluxoService.concluirDevolucaoRapida(claim, item);
     }
 
     @Transactional
@@ -452,15 +527,7 @@ public class ClaimService {
     private ClaimResponse toResponse(Claim c, long qtMensagensNaoLidas) {
         List<ClaimValidacao> validacoes = claimValidacaoRepository
                 .findByClaim_IdAndFgExcluidoFalseOrderByDtCadastroDesc(c.getId());
-        Item itemVinculado = validacoes.stream()
-                .filter(v -> MatchService.ST_CONFIRMADO.equalsIgnoreCase(v.getStResultado()))
-                .map(ClaimValidacao::getItem)
-                .filter(java.util.Objects::nonNull)
-                .findFirst()
-                .orElseGet(() -> ClaimService.TIPO_RETIRADA.equalsIgnoreCase(c.getTpClaim())
-                        ? validacoes.stream().map(ClaimValidacao::getItem)
-                        .filter(java.util.Objects::nonNull).findFirst().orElse(null)
-                        : null);
+        Item itemVinculado = itemVinculadoDasValidacoes(validacoes);
         // Conta o mesmo conjunto que o painel de match exibe (pendentes, o que está
         // em pedido e os reprovados), para a listagem não dizer "sem match" quando
         // o detalhe mostra candidatos.
@@ -521,5 +588,30 @@ public class ClaimService {
             map.put((Long) row[0], (Long) row[1]);
         }
         return map;
+    }
+
+    /** Item já associado ao pedido (confirmação de match ou vínculo PENDENTE da retirada). */
+    Item itemVinculadoDoClaim(Claim c) {
+        return itemVinculadoDasValidacoes(
+                claimValidacaoRepository.findByClaim_IdAndFgExcluidoFalseOrderByDtCadastroDesc(c.getId()));
+    }
+
+    private Item itemVinculadoDasValidacoes(List<ClaimValidacao> validacoes) {
+        Item confirmado = validacoes.stream()
+                .filter(v -> MatchService.ST_CONFIRMADO.equalsIgnoreCase(v.getStResultado()))
+                .map(ClaimValidacao::getItem)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+        if (confirmado != null) {
+            return confirmado;
+        }
+        return validacoes.stream()
+                .filter(v -> v.getItem() != null)
+                .filter(v -> !MatchService.ST_REPROVADO.equalsIgnoreCase(v.getStResultado()))
+                .filter(v -> !MatchService.ST_DESCARTADO.equalsIgnoreCase(v.getStResultado()))
+                .map(ClaimValidacao::getItem)
+                .findFirst()
+                .orElse(null);
     }
 }

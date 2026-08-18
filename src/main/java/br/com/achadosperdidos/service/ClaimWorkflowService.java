@@ -83,9 +83,7 @@ public class ClaimWorkflowService {
     public ClaimResponse aprovar(String idClaim, ClaimAprovarRequest req) {
         Claim claim = findClaim(idClaim);
         String justificativa = req.dsJustificativa().trim();
-        Item item = itemRepository.findById(idCodec.decodeItemId(req.idItem()))
-                .filter(i -> !Boolean.TRUE.equals(i.getFgExcluido()))
-                .orElseThrow(() -> new RecursoNaoEncontradoException("Item não encontrado."));
+        Item item = resolverItemParaAprovacao(claim, req.idItem());
         if (!item.getEvento().getId().equals(claim.getEvento().getId())) {
             throw new IllegalArgumentException("Item e pedido pertencem a eventos diferentes.");
         }
@@ -105,16 +103,30 @@ public class ClaimWorkflowService {
         validacao.setFgExcluido(false);
         validacaoRepository.save(validacao);
 
+        String idItemAssinado = idCodec.encodeItemId(item.getId());
         // Ticket do novo fluxo (PICKUP/SHIPPING) + e-mail de escolha de modalidade.
         devolucaoFluxoService.criarTicketPosAprovacao(claim, item);
         // Claim resolvido: os candidatos restantes saem da fila do match.
         matchService.descartarPendentes(claim.getId(), item.getId());
-        workflowService.transitarSePermitido(req.idItem(), "Aguardando retirada",
+        workflowService.transitarSePermitido(idItemAssinado, "Aguardando retirada",
                 "Pedido de devolução aprovado — item reservado para retirada.");
 
         var email = emailService.enviar("CLAIM_APROVACAO", claim.getNmEmail(), variaveis(claim, justificativa));
         gravarHistorico(claim, item, "APROVACAO", null, justificativa, email);
         return response(claim);
+    }
+
+    private Item resolverItemParaAprovacao(Claim claim, String idItemAssinado) {
+        if (idItemAssinado != null && !idItemAssinado.isBlank()) {
+            return itemRepository.findById(idCodec.decodeItemId(idItemAssinado))
+                    .filter(i -> !Boolean.TRUE.equals(i.getFgExcluido()))
+                    .orElseThrow(() -> new RecursoNaoEncontradoException("Item não encontrado."));
+        }
+        Item vinculado = claimService.itemVinculadoDoClaim(claim);
+        if (vinculado == null || Boolean.TRUE.equals(vinculado.getFgExcluido())) {
+            throw new IllegalArgumentException("Pedido sem item vinculado para aprovar.");
+        }
+        return vinculado;
     }
 
     @Transactional

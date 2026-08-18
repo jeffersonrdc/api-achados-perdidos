@@ -85,7 +85,13 @@ public class ItemController {
             @RequestParam(required = false) String idCategoria,
             @RequestParam(required = false) String deposito,
             @RequestParam(required = false) String tpPrioridade,
-            @RequestParam(required = false) String data) {
+            @RequestParam(required = false) String data,
+            @Parameter(description = "Se true, oculta itens com pedido de retirada em aberto (devolução rápida).")
+            @RequestParam(required = false, defaultValue = "false") boolean disponivelDevolucaoRapida) {
+        if (disponivelDevolucaoRapida) {
+            return itemService.listarEstoqueDevolucaoRapida(
+                    idEvento, page, limit, q, idCategoria, deposito, tpPrioridade, data);
+        }
         return itemService.listarEstoque(idEvento, page, limit, q, idCategoria, deposito, tpPrioridade, data);
     }
 

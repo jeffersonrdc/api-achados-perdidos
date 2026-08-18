@@ -11,13 +11,16 @@ import br.com.achadosperdidos.controller.dto.ClaimRetornoRequest;
 import br.com.achadosperdidos.controller.dto.ClaimResponse;
 import br.com.achadosperdidos.controller.dto.ClaimSolicitarInfoRequest;
 import br.com.achadosperdidos.controller.dto.ClaimUpdateRequest;
+import br.com.achadosperdidos.controller.dto.DevolucaoRapidaResponse;
 import br.com.achadosperdidos.controller.dto.DevolucaoResponse;
+import br.com.achadosperdidos.controller.dto.EstoqueItemResponse;
 import br.com.achadosperdidos.controller.dto.MatchCandidatoResponse;
 import br.com.achadosperdidos.pagination.ApiPage;
 import br.com.achadosperdidos.service.ClaimMensagemService;
 import br.com.achadosperdidos.service.ClaimService;
 import br.com.achadosperdidos.service.ClaimWorkflowService;
 import br.com.achadosperdidos.service.DevolucaoFluxoService;
+import br.com.achadosperdidos.service.ItemService;
 import br.com.achadosperdidos.service.MatchService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -41,15 +44,17 @@ public class ClaimController {
     private final ClaimMensagemService claimMensagemService;
     private final MatchService matchService;
     private final DevolucaoFluxoService devolucaoFluxoService;
+    private final ItemService itemService;
 
     public ClaimController(ClaimService claimService, ClaimWorkflowService claimWorkflowService,
                            ClaimMensagemService claimMensagemService, MatchService matchService,
-                           DevolucaoFluxoService devolucaoFluxoService) {
+                           DevolucaoFluxoService devolucaoFluxoService, ItemService itemService) {
         this.claimService = claimService;
         this.claimWorkflowService = claimWorkflowService;
         this.claimMensagemService = claimMensagemService;
         this.matchService = matchService;
         this.devolucaoFluxoService = devolucaoFluxoService;
+        this.itemService = itemService;
     }
 
     @PostMapping
@@ -65,6 +70,49 @@ public class ClaimController {
             description = "Gera um claim RETIRADA + claim_validacao PENDENTE para o item do estoque (tela /pedidos).")
     public ResponseEntity<ClaimResponse> createRetiradaItem(@Valid @RequestBody ClaimCreateItemRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(claimService.criarRetiradaDeItem(request));
+    }
+
+    @GetMapping("/devolucao-rapida")
+    @PreAuthorize("@authz.pode('devolucao-rapida.acessar') or @authz.pode('claim.criar')")
+    @Operation(summary = "Itens disponíveis para devolução rápida",
+            description = "Somente itens Em estoque, não entregues e sem pedido de retirada em aberto.")
+    public ApiPage<EstoqueItemResponse> listarItensDevolucaoRapida(
+            @Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String idCategoria,
+            @RequestParam(required = false) String deposito,
+            @RequestParam(required = false) String tpPrioridade,
+            @RequestParam(required = false) String data) {
+        return itemService.listarEstoqueDevolucaoRapida(
+                idEvento, page, limit, q, idCategoria, deposito, tpPrioridade, data);
+    }
+
+    @GetMapping("/devolucao-rapida/itens")
+    @PreAuthorize("@authz.pode('devolucao-rapida.acessar') or @authz.pode('claim.criar')")
+    @Operation(summary = "Itens disponíveis para devolução rápida")
+    public ApiPage<EstoqueItemResponse> listarItensDevolucaoRapidaAlias(
+            @Parameter(description = "ID assinado do evento", required = true) @RequestParam String idEvento,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String idCategoria,
+            @RequestParam(required = false) String deposito,
+            @RequestParam(required = false) String tpPrioridade,
+            @RequestParam(required = false) String data) {
+        return listarItensDevolucaoRapida(
+                idEvento, page, limit, q, idCategoria, deposito, tpPrioridade, data);
+    }
+
+    @PostMapping("/devolucao-rapida")
+    @PreAuthorize("@authz.pode('claim.criar')")
+    @Operation(summary = "Devolução rápida (retirada presencial no evento)",
+            description = "Registra o pedido já aprovado, conclui a devolução, tira o item do estoque "
+                    + "e envia o recibo de retirada por e-mail.")
+    public ResponseEntity<DevolucaoRapidaResponse> createDevolucaoRapida(
+            @Valid @RequestBody ClaimCreateItemRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(claimService.criarDevolucaoRapida(request));
     }
 
     @GetMapping

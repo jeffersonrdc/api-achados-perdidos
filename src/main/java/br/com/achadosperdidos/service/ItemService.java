@@ -9,6 +9,7 @@ import br.com.achadosperdidos.controller.dto.ItemLocalizacaoRequest;
 import br.com.achadosperdidos.controller.dto.ItemResponse;
 import br.com.achadosperdidos.controller.dto.ItemUpdateRequest;
 import br.com.achadosperdidos.entity.Claim;
+import br.com.achadosperdidos.entity.ClaimValidacao;
 import br.com.achadosperdidos.entity.Evento;
 import br.com.achadosperdidos.entity.Item;
 import br.com.achadosperdidos.entity.Localizacao;
@@ -22,6 +23,8 @@ import br.com.achadosperdidos.repository.ItemRepository;
 import br.com.achadosperdidos.repository.LocalRepository;
 import br.com.achadosperdidos.security.SignedResourceIdCodec;
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -316,6 +319,24 @@ public class ItemService {
     public ApiPage<EstoqueItemResponse> listarEstoque(String idEvento, Integer page, Integer limit,
                                                       String q, String idCategoria, String deposito,
                                                       String tpPrioridade, String data) {
+        return listarEstoque(idEvento, page, limit, q, idCategoria, deposito, tpPrioridade, data, false);
+    }
+
+    /**
+     * Itens "Em estoque" elegíveis à devolução rápida: sem entrega/descarte e
+     * sem pedido de retirada em aberto (Claim Aberto / em Análise).
+     */
+    @Transactional(readOnly = true)
+    public ApiPage<EstoqueItemResponse> listarEstoqueDevolucaoRapida(
+            String idEvento, Integer page, Integer limit, String q, String idCategoria,
+            String deposito, String tpPrioridade, String data) {
+        return listarEstoque(idEvento, page, limit, q, idCategoria, deposito, tpPrioridade, data, true);
+    }
+
+    private ApiPage<EstoqueItemResponse> listarEstoque(String idEvento, Integer page, Integer limit,
+                                                       String q, String idCategoria, String deposito,
+                                                       String tpPrioridade, String data,
+                                                       boolean somenteDevolucaoRapida) {
         int p = PaginationParams.resolvePage(page);
         int l = PaginationParams.resolveLimit(limit);
         Long eventoId = idCodec.decodeEventoId(idEvento);
@@ -327,6 +348,22 @@ public class ItemService {
             ps.add(cb.isFalse(root.get("fgExcluido")));
             ps.add(cb.equal(root.get("evento").get("id"), eventoId));
             ps.add(cb.equal(root.get("status").get("nmStatus"), STATUS_ESTOQUE));
+            if (somenteDevolucaoRapida) {
+                ps.add(cb.isFalse(root.get("fgEntregue")));
+                ps.add(cb.isFalse(root.get("fgDescartado")));
+                if (query != null) {
+                    Subquery<Long> sq = query.subquery(Long.class);
+                    Root<ClaimValidacao> v = sq.from(ClaimValidacao.class);
+                    sq.select(v.get("id"));
+                    sq.where(
+                            cb.equal(v.get("item").get("id"), root.get("id")),
+                            cb.isFalse(v.get("fgExcluido")),
+                            cb.isFalse(v.get("claim").get("fgExcluido")),
+                            cb.equal(v.get("claim").get("tpClaim"), "RETIRADA"),
+                            v.get("claim").get("status").get("nmStatus").in(CLAIM_STATUS_PENDENTES));
+                    ps.add(cb.not(cb.exists(sq)));
+                }
+            }
             if (categoriaId != null) ps.add(cb.equal(root.get("categoria").get("id"), categoriaId));
             if (deposito != null && !deposito.isBlank())
                 ps.add(cb.equal(root.get("localizacao").get("deposito").get("nmDeposito"), deposito));

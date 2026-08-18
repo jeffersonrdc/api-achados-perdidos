@@ -11,7 +11,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -191,6 +194,86 @@ public class DevolucaoFluxoService {
             enviarEscolhaModalidade(d, claim, "E-mail enviado para escolha de modalidade de devolução.");
         }
         return d;
+    }
+
+    public static final String TP_EMAIL_DEVOLUCAO_RAPIDA = "DEVOLUCAO_RAPIDA_RECIBO";
+    private static final DateTimeFormatter FMT_DATA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    private static final DateTimeFormatter FMT_HORA = DateTimeFormatter.ofPattern("HH:mm");
+    private static final DateTimeFormatter FMT_DATA_HORA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+
+    /**
+     * Finaliza no ato a retirada feita no local do evento: ticket COMPLETED,
+     * item sai do estoque e o solicitante recebe o recibo por e-mail.
+     */
+    @Transactional
+    public DevolucaoRapidaResponse concluirDevolucaoRapida(Claim claim, Item item) {
+        auditoriaContext.marcarContexto();
+        var existente = devolucaoRepository.findByClaim_IdAndFgExcluidoFalse(claim.getId());
+        if (existente.isPresent() && !CANCELLED.equals(existente.get().getTpStatus())) {
+            throw new IllegalArgumentException("Já existe uma devolução para este pedido.");
+        }
+
+        LocalDateTime agora = agora();
+        Devolucao d = new Devolucao();
+        d.setEvento(item.getEvento());
+        d.setItem(item);
+        d.setClaim(claim);
+        d.setTpClaimOrigem(ClaimService.TIPO_RETIRADA);
+        d.setTpDevolucao(ClaimService.TIPO_RETIRADA);
+        d.setTpMetodo("PICKUP");
+        d.setTpStatus(COMPLETED);
+        d.setNmRecebedor(claim.getNmNome());
+        d.setNrCpf(claim.getNrCpf());
+        d.setDsObservacao(claim.getDsObjeto());
+        d.setFgAssinado(true);
+        d.setFgItemConferido(true);
+        d.setFgDocumentoConferido(true);
+        d.setDtConferencia(agora);
+        d.setFgConcluido(true);
+        d.setDtDevolucao(agora);
+        d.setDtConclusao(agora);
+        d.setDtCadastro(agora);
+        d.setFgAtivo(true);
+        d.setFgExcluido(false);
+        d = devolucaoRepository.save(d);
+        d.setCdProtocolo(String.format(Locale.ROOT, "DEV-%d-%06d", agora.getYear(), d.getId()));
+        d = devolucaoRepository.save(d);
+
+        String idItemToken = idCodec.encodeItemId(item.getId());
+        workflowService.transitarSePermitido(idItemToken, "Aguardando retirada",
+                "Devolução rápida — item reservado para entrega no local.");
+        workflowService.transitarSePermitido(idItemToken, "Devolvido",
+                "Devolução rápida — item entregue no local do evento.");
+        Item atual = itemRepository.findById(item.getId()).orElse(item);
+        atual.setFgEntregue(true);
+        atual.setDtAlteracao(agora);
+        itemRepository.save(atual);
+
+        Map<String, String> vars = variaveisReciboRapida(d, claim, atual);
+        EmailService.Resultado email = claim.getNmEmail() != null
+                ? emailService.enviar(TP_EMAIL_DEVOLUCAO_RAPIDA, claim.getNmEmail(), vars)
+                : new EmailService.Resultado(false, "Solicitante sem e-mail cadastrado.");
+        historicoService.registrar(d, COMPLETED, "Devolução rápida concluída",
+                email.enviado()
+                        ? "Item entregue no local do evento. Recibo enviado ao solicitante."
+                        : "Item entregue no local. Recibo NÃO enviado: "
+                          + (email.erro() != null ? email.erro() : "erro desconhecido"),
+                "OPERADOR", usuarioLogado(), email, null);
+
+        String aviso = email.enviado()
+                ? null
+                : (email.erro() != null ? email.erro() : "E-mail de recibo não enviado.");
+        return new DevolucaoRapidaResponse(
+                idCodec.encodeClaimId(claim.getId()),
+                claim.getCdClaim(),
+                idCodec.encodeDevolucaoId(d.getId()),
+                d.getCdProtocolo(),
+                idCodec.encodeItemId(atual.getId()),
+                atual.getCdItem(),
+                atual.getNmTitulo(),
+                claim.getNmEmail(),
+                email.enviado(),
+                aviso);
     }
 
     private static boolean claimAprovado(Claim claim) {
@@ -585,6 +668,7 @@ public class DevolucaoFluxoService {
                 enviarPostagem(idToken);
                 yield new EmailService.Resultado(true, null);
             }
+            case "DEVOLUCAO_PICKUP_CONFIRMADO" -> enviarEmailPickupConfirmado(d, claim, opcaoSelecionada(d));
             default -> enviarEmail(d, claim, tp, null);
         };
         // O histórico precisa distinguir reenvio efetivo de tentativa falha — antes
@@ -759,7 +843,7 @@ public class DevolucaoFluxoService {
         Claim claim = d.getClaim();
         EmailService.Resultado email = null;
         if (claim != null) {
-            email = enviarEmail(d, claim, "DEVOLUCAO_PICKUP_CONFIRMADO", null);
+            email = enviarEmailPickupConfirmado(d, claim, op);
         }
         historicoService.registrar(d, READY_FOR_PICKUP, "Agendamento confirmado",
                 "Opção: " + op.getDtOpcao() + " " + op.getHrInicio() + "-" + op.getHrFim(),
@@ -928,6 +1012,62 @@ public class DevolucaoFluxoService {
         return emailService.enviar(tpEvento, claim.getNmEmail(), vars);
     }
 
+    private EmailService.Resultado enviarEmailPickupConfirmado(Devolucao d, Claim claim, DevolucaoPickupOpcao op) {
+        if (claim == null || claim.getNmEmail() == null || claim.getNmEmail().isBlank()) {
+            return new EmailService.Resultado(false, "E-mail do solicitante ausente.");
+        }
+        Map<String, String> vars = variaveisBase(d, claim);
+        vars.putAll(variaveisEnderecoRetirada(op));
+        return emailService.enviar("DEVOLUCAO_PICKUP_CONFIRMADO", claim.getNmEmail(), vars);
+    }
+
+    private DevolucaoPickupOpcao opcaoSelecionada(Devolucao d) {
+        return pickupOpcaoRepository
+                .findByDevolucao_IdAndFgExcluidoFalseOrderByDtOpcaoAscHrInicioAsc(d.getId())
+                .stream()
+                .filter(o -> Boolean.TRUE.equals(o.getFgSelecionada()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private Map<String, String> variaveisEnderecoRetirada(DevolucaoPickupOpcao op) {
+        Map<String, String> vars = new LinkedHashMap<>();
+        if (op == null) {
+            vars.put("localRetirada", "—");
+            vars.put("local", "—");
+            vars.put("pontoRetirada", "—");
+            vars.put("endereco", "—");
+            vars.put("observacao", "—");
+            vars.put("dataRetirada", "—");
+            vars.put("horarioRetirada", "—");
+            return vars;
+        }
+        Local local = op.getLocal();
+        String nomeLocal = primeiroNaoVazio(op.getNmLocal(), local != null ? local.getNmLocal() : null);
+        String endereco = primeiroNaoVazio(
+                local != null ? local.getDsObservacao() : null,
+                op.getDsNotas());
+        vars.put("localRetirada", nvl(nomeLocal));
+        vars.put("local", nvl(nomeLocal));
+        vars.put("pontoRetirada", nvl(nomeLocal));
+        vars.put("endereco", nvl(endereco));
+        vars.put("observacao", nvl(op.getDsNotas()));
+        vars.put("dataRetirada", op.getDtOpcao() != null ? op.getDtOpcao().format(FMT_DATA) : "—");
+        String inicio = op.getHrInicio() != null ? op.getHrInicio().format(FMT_HORA) : "";
+        String fim = op.getHrFim() != null ? op.getHrFim().format(FMT_HORA) : "";
+        String horario = (inicio + (inicio.isBlank() || fim.isBlank() ? "" : " – ") + fim).trim();
+        vars.put("horarioRetirada", horario.isBlank() ? "—" : horario);
+        return vars;
+    }
+
+    private static String primeiroNaoVazio(String... valores) {
+        if (valores == null) return null;
+        for (String v : valores) {
+            if (v != null && !v.isBlank()) return v.trim();
+        }
+        return null;
+    }
+
     private Map<String, String> variaveisBase(Devolucao d, Claim claim) {
         Map<String, String> vars = new LinkedHashMap<>();
         vars.put("nome", claim != null && claim.getNmNome() != null ? claim.getNmNome() : d.getNmRecebedor());
@@ -940,6 +1080,62 @@ public class DevolucaoFluxoService {
                 ? String.valueOf(d.getEvento().getDtInicio().getYear()) : String.valueOf(agora().getYear()));
         vars.put("linkAcao", "");
         return vars;
+    }
+
+    private Map<String, String> variaveisReciboRapida(Devolucao d, Claim claim, Item item) {
+        Map<String, String> vars = new LinkedHashMap<>();
+        Evento evento = item.getEvento() != null ? item.getEvento() : d.getEvento();
+        LocalDateTime agora = d.getDtConclusao() != null ? d.getDtConclusao() : agora();
+        vars.put("nome", nvl(claim.getNmNome()));
+        vars.put("nomeSolicitante", nvl(claim.getNmNome()));
+        vars.put("email", nvl(claim.getNmEmail()));
+        vars.put("telefone", formatarTelefone(claim.getNrTelefone()));
+        vars.put("contatoConfianca", nvl(claim.getNmContatoConfianca()));
+        vars.put("telefoneConfianca", formatarTelefone(claim.getNrTelefoneConfianca()));
+        vars.put("relacaoConfianca", nvl(claim.getDsRelacaoContatoConfianca()));
+        vars.put("objeto", nvl(item.getNmTitulo()));
+        vars.put("marca", nvl(item.getNmMarca()));
+        vars.put("modelo", nvl(item.getNmModelo()));
+        vars.put("cor", nvl(item.getNmCor()));
+        vars.put("estado", nvl(item.getNmEstado()));
+        vars.put("categoria", item.getCategoria() != null ? nvl(item.getCategoria().getNmCategoria()) : "—");
+        vars.put("descricao", nvl(claim.getDsObjeto()));
+        vars.put("protocolo", nvl(claim.getCdClaim()));
+        vars.put("protocoloDevolucao", nvl(d.getCdProtocolo()));
+        vars.put("cdItem", nvl(item.getCdItem()));
+        vars.put("evento", evento != null ? nvl(evento.getNmEvento()) : "—");
+        vars.put("localEncontrado", nvl(item.getNmLocalEncontrado()));
+        vars.put("localRetirada", nvl(item.getNmLocalEncontrado()));
+        vars.put("dataEncontrado", formatarData(item.getDtEncontrado(), item.getHrEncontrado()));
+        vars.put("dataRetirada", agora.format(FMT_DATA_HORA));
+        vars.put("operador", nvl(claim.getNmOperador()));
+        vars.put("observacao", nvl(claim.getDsObjeto()));
+        vars.put("ano", evento != null && evento.getDtInicio() != null
+                ? String.valueOf(evento.getDtInicio().getYear())
+                : String.valueOf(agora.getYear()));
+        return vars;
+    }
+
+    private static String nvl(String v) {
+        return v == null || v.isBlank() ? "—" : v.trim();
+    }
+
+    private static String formatarData(LocalDate data, LocalTime hora) {
+        if (data == null) return "—";
+        if (hora == null) return data.format(FMT_DATA);
+        return data.format(FMT_DATA) + " " + hora.format(FMT_HORA);
+    }
+
+    private static String formatarTelefone(String raw) {
+        if (raw == null || raw.isBlank()) return "—";
+        String d = raw.replaceAll("\\D", "");
+        if (d.length() == 11) {
+            return "(" + d.substring(0, 2) + ") " + d.substring(2, 7) + "-" + d.substring(7);
+        }
+        if (d.length() == 10) {
+            return "(" + d.substring(0, 2) + ") " + d.substring(2, 6) + "-" + d.substring(6);
+        }
+        return raw.trim();
     }
 
     /** Moeda no padrão brasileiro: R$ 1.000,00 — usado em e-mails e histórico. */
