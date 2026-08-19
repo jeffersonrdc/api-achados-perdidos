@@ -36,7 +36,7 @@ public class ItemController {
 
     @PostMapping
     @PreAuthorize("@authz.pode('item.criar')")
-    @Operation(summary = "Registrar item coletado (já entra no estoque)")
+    @Operation(summary = "Registrar item coletado (entra na fila de triagem)")
     public ResponseEntity<ItemResponse> create(@Valid @RequestBody ItemCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(itemService.create(request));
     }

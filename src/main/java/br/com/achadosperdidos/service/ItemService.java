@@ -475,6 +475,7 @@ public class ItemService {
         item.setFgAtivo(false);
         item.setDtAlteracao(LocalDateTime.now());
         itemRepository.save(item);
+        matchService.recalcularMatchesPorItemAposStatus(item);
     }
 
     private Item findEntity(Long id) {

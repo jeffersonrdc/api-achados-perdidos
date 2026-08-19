@@ -56,11 +56,13 @@ public class TriagemService {
     private final UsuarioContextService usuarioContextService;
     private final AuditoriaContextService auditoriaContext;
     private final SignedResourceIdCodec idCodec;
+    private final MatchService matchService;
 
     public TriagemService(TriagemRepository triagemRepository, ItemRepository itemRepository,
                           ItemService itemService, WorkflowService workflowService, CategoriaService categoriaService,
                           LocalizacaoService localizacaoService, UsuarioContextService usuarioContextService,
-                          AuditoriaContextService auditoriaContext, SignedResourceIdCodec idCodec) {
+                          AuditoriaContextService auditoriaContext, SignedResourceIdCodec idCodec,
+                          MatchService matchService) {
         this.triagemRepository = triagemRepository;
         this.itemRepository = itemRepository;
         this.itemService = itemService;
@@ -70,6 +72,7 @@ public class TriagemService {
         this.usuarioContextService = usuarioContextService;
         this.auditoriaContext = auditoriaContext;
         this.idCodec = idCodec;
+        this.matchService = matchService;
     }
 
     /** Inicia a triagem: transiciona o item para "Em triagem" e abre o registro. */
@@ -143,7 +146,9 @@ public class TriagemService {
         triagem.setDtConclusao(LocalDateTime.now());
         if (triagem.getOperador() == null) triagem.setOperador(usuarioLogadoOuNulo());
         triagemRepository.save(triagem);
-        // Libera ao estoque: a partir daqui o item é visível em /estoque e no portal público.
+        itemRepository.save(item);
+        // Libera ao estoque: a partir daqui o item é visível em /estoque e no portal.
+        // O match claim↔item é disparado na transição de status (WorkflowService).
         garantirEmEstoque(idItem);
         return toResponse(triagem);
     }
@@ -327,7 +332,10 @@ public class TriagemService {
     private void garantirEmEstoque(String idItem) {
         Item item = findItem(idItem);
         String status = item.getStatus() != null ? item.getStatus().getNmStatus() : "";
-        if (STATUS_ESTOQUE.equalsIgnoreCase(status)) return;
+        if (STATUS_ESTOQUE.equalsIgnoreCase(status)) {
+            matchService.recalcularMatchesPorItem(item);
+            return;
+        }
         String motivo = "Item disponível no estoque após triagem";
         if (workflowService.transitarSePermitido(idItem, STATUS_ESTOQUE, motivo)) return;
         // Conclusão sem passar pelo botão "Analisar item": entra em triagem e segue ao estoque.

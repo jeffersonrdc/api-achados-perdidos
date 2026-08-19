@@ -3,15 +3,11 @@ package br.com.achadosperdidos.service;
 import br.com.achadosperdidos.config.S3Properties;
 import br.com.achadosperdidos.controller.dto.ArmazenamentoConfigRequest;
 import br.com.achadosperdidos.controller.dto.ArmazenamentoConfigResponse;
-import br.com.achadosperdidos.controller.dto.ArmazenamentoTesteResponse;
+import br.com.achadosperdidos.storage.ArquivoStorageProvider;
 import br.com.achadosperdidos.storage.ArquivoStorageRouter;
-import br.com.achadosperdidos.storage.LocalArquivoStorage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mockito;
-
-import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -21,13 +17,9 @@ import static org.mockito.Mockito.when;
 
 class ArmazenamentoConfigServiceTest {
 
-    @TempDir
-    Path tempDir;
-
     private SistemaParametroService parametros;
     private ArquivoStorageRouter router;
     private S3Properties s3Properties;
-    private LocalArquivoStorage local;
     private ArmazenamentoConfigService service;
 
     @BeforeEach
@@ -35,18 +27,16 @@ class ArmazenamentoConfigServiceTest {
         parametros = Mockito.mock(SistemaParametroService.class);
         router = Mockito.mock(ArquivoStorageRouter.class);
         s3Properties = new S3Properties();
-        local = new LocalArquivoStorage(tempDir.toString());
-        when(router.provedorPadrao()).thenReturn(br.com.achadosperdidos.storage.ArquivoStorageProvider.LOCAL);
-        when(router.resolve(br.com.achadosperdidos.storage.ArquivoStorageProvider.LOCAL)).thenReturn(local);
-        service = new ArmazenamentoConfigService(parametros, router, s3Properties, local);
+        when(router.provedorPadrao()).thenReturn(ArquivoStorageProvider.S3);
+        when(router.s3Disponivel()).thenReturn(true);
+        service = new ArmazenamentoConfigService(parametros, router, s3Properties);
     }
 
     @Test
-    void obterRetornaLocalPorPadrao() {
+    void obterSempreS3() {
         ArmazenamentoConfigResponse cfg = service.obter();
-        assertEquals("LOCAL", cfg.provider());
-        assertFalse(cfg.s3Configurado());
-        assertNotNull(cfg.diretorioLocal());
+        assertEquals("S3", cfg.provider());
+        assertNull(cfg.diretorioLocal());
     }
 
     @Test
@@ -56,16 +46,23 @@ class ArmazenamentoConfigServiceTest {
     }
 
     @Test
-    void salvarLocalPersisteParametro() {
-        ArmazenamentoConfigResponse cfg = service.salvar(new ArmazenamentoConfigRequest("LOCAL"));
-        assertEquals("LOCAL", cfg.provider());
-        verify(parametros).set(eq(SistemaParametroService.ARQUIVO_STORAGE_PROVIDER), eq("LOCAL"), anyString());
+    void salvarLocalERejeitado() {
+        assertThrows(IllegalArgumentException.class,
+                () -> service.salvar(new ArmazenamentoConfigRequest("LOCAL")));
     }
 
     @Test
-    void testarLocalComSucesso() {
-        ArmazenamentoTesteResponse r = service.testar("LOCAL");
-        assertTrue(r.sucesso());
+    void salvarS3ComBucketPersiste() {
+        s3Properties.setBucket("achados-assets");
+        ArmazenamentoConfigResponse cfg = service.salvar(new ArmazenamentoConfigRequest("S3"));
+        assertEquals("S3", cfg.provider());
+        verify(parametros).set(eq(SistemaParametroService.ARQUIVO_STORAGE_PROVIDER), eq("S3"), anyString());
+    }
+
+    @Test
+    void testarLocalInformaDesativado() {
+        var r = service.testar("LOCAL");
+        assertFalse(r.sucesso());
         assertEquals("LOCAL", r.provider());
     }
 }

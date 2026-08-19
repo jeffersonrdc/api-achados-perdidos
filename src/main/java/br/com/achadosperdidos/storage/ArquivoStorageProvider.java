@@ -6,7 +6,7 @@ public enum ArquivoStorageProvider {
     S3;
 
     public static ArquivoStorageProvider from(String raw) {
-        if (raw == null || raw.isBlank()) return LOCAL;
+        if (raw == null || raw.isBlank()) return S3;
         return switch (raw.trim().toUpperCase()) {
             case "S3", "AWS", "AWS_S3" -> S3;
             case "LOCAL", "DISK", "FILESYSTEM" -> LOCAL;

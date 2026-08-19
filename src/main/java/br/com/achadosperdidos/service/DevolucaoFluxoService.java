@@ -249,10 +249,7 @@ public class DevolucaoFluxoService {
         atual.setDtAlteracao(agora);
         itemRepository.save(atual);
 
-        Map<String, String> vars = variaveisReciboRapida(d, claim, atual);
-        EmailService.Resultado email = claim.getNmEmail() != null
-                ? emailService.enviar(TP_EMAIL_DEVOLUCAO_RAPIDA, claim.getNmEmail(), vars)
-                : new EmailService.Resultado(false, "Solicitante sem e-mail cadastrado.");
+        EmailService.Resultado email = enviarReciboRetiradaPresencial(d, claim, atual);
         historicoService.registrar(d, COMPLETED, "Devolução rápida concluída",
                 email.enviado()
                         ? "Item entregue no local do evento. Recibo enviado ao solicitante."
@@ -603,14 +600,19 @@ public class DevolucaoFluxoService {
         }
         concluir(d, "Devolução presencial concluída.");
         Claim claim = d.getClaim();
-        if (claim != null && claim.getNmEmail() != null) {
-            EmailService.Resultado email = enviarEmail(d, claim, "DEVOLUCAO_CONCLUIDA", null);
-            historicoService.registrar(d, COMPLETED, "Devolução concluída",
-                    "Baixa presencial registrada.", "OPERADOR", usuarioLogado(), email, null);
-        } else {
-            historicoService.registrar(d, COMPLETED, "Devolução concluída",
-                    "Baixa presencial registrada.", "OPERADOR", usuarioLogado(), null, null);
+        EmailService.Resultado email = null;
+        String detalhe = "Baixa presencial registrada.";
+        if (isRetiradaPresencialAgendada(d) && claim != null) {
+            email = enviarReciboRetiradaPresencial(d, claim, d.getItem());
+            detalhe = email.enviado()
+                    ? "Baixa presencial com agendamento. Recibo enviado ao solicitante."
+                    : "Baixa presencial com agendamento. Recibo NÃO enviado: "
+                      + (email.erro() != null ? email.erro() : "erro desconhecido");
+        } else if (claim != null && claim.getNmEmail() != null && !claim.getNmEmail().isBlank()) {
+            email = enviarEmail(d, claim, "DEVOLUCAO_CONCLUIDA", null);
         }
+        historicoService.registrar(d, COMPLETED, "Devolução concluída",
+                detalhe, "OPERADOR", usuarioLogado(), email, null);
         return toListResponse(d);
     }
 
@@ -629,13 +631,22 @@ public class DevolucaoFluxoService {
         }
         d.setTpStatus(destino);
         d.setDtAlteracao(agora());
+        EmailService.Resultado email = null;
+        String detalhe = "Novo status: " + destino;
         if (COMPLETED.equals(destino)) {
             concluir(d, "Status atualizado para concluído.");
+            if (isRetiradaPresencialAgendada(d)) {
+                email = enviarReciboRetiradaPresencial(d, d.getClaim(), d.getItem());
+                detalhe = email.enviado()
+                        ? "Retirada presencial com agendamento concluída. Recibo enviado ao solicitante."
+                        : "Retirada presencial concluída. Recibo NÃO enviado: "
+                          + (email.erro() != null ? email.erro() : "erro desconhecido");
+            }
         } else {
             devolucaoRepository.save(d);
         }
         historicoService.registrar(d, destino, "Status atualizado",
-                "Novo status: " + destino, "OPERADOR", usuarioLogado(), null, null);
+                detalhe, "OPERADOR", usuarioLogado(), email, null);
         return toListResponse(d);
     }
 
@@ -645,7 +656,7 @@ public class DevolucaoFluxoService {
         Claim claim = requireClaim(d);
         String tp = req != null && req.tpEvento() != null && !req.tpEvento().isBlank()
                 ? req.tpEvento().trim().toUpperCase(Locale.ROOT)
-                : sugerirEmailPorStatus(d.getTpStatus());
+                : sugerirEmailPorStatus(d);
         EmailService.Resultado email = switch (tp) {
             case "DEVOLUCAO_ESCOLHER_MODALIDADE" -> {
                 DevolucaoAcaoToken token = tokenService.gerar(d, ACAO_CHOOSE_METHOD, 15, false);
@@ -669,6 +680,7 @@ public class DevolucaoFluxoService {
                 yield new EmailService.Resultado(true, null);
             }
             case "DEVOLUCAO_PICKUP_CONFIRMADO" -> enviarEmailPickupConfirmado(d, claim, opcaoSelecionada(d));
+            case TP_EMAIL_DEVOLUCAO_RAPIDA -> enviarReciboRetiradaPresencial(d, claim, d.getItem());
             default -> enviarEmail(d, claim, tp, null);
         };
         // O histórico precisa distinguir reenvio efetivo de tentativa falha — antes
@@ -1021,6 +1033,38 @@ public class DevolucaoFluxoService {
         return emailService.enviar("DEVOLUCAO_PICKUP_CONFIRMADO", claim.getNmEmail(), vars);
     }
 
+    /** PICKUP/presencial com horário escolhido pelo solicitante. */
+    private boolean isRetiradaPresencialAgendada(Devolucao d) {
+        if (d == null) return false;
+        String metodo = d.getTpMetodo() != null ? d.getTpMetodo().trim().toUpperCase(Locale.ROOT) : "";
+        if (!"PICKUP".equals(metodo) && !"PRESENCIAL".equals(metodo)) return false;
+        return opcaoSelecionada(d) != null;
+    }
+
+    /** Mesmo template/SMTP da devolução rápida (DEVOLUCAO_RAPIDA_RECIBO). */
+    private EmailService.Resultado enviarReciboRetiradaPresencial(Devolucao d, Claim claim, Item item) {
+        if (claim == null || claim.getNmEmail() == null || claim.getNmEmail().isBlank()) {
+            return new EmailService.Resultado(false, "Solicitante sem e-mail cadastrado.");
+        }
+        if (item == null) {
+            return new EmailService.Resultado(false, "Devolução sem item vinculado.");
+        }
+        Map<String, String> vars = variaveisReciboRapida(d, claim, item);
+        DevolucaoPickupOpcao op = opcaoSelecionada(d);
+        if (op != null) {
+            Map<String, String> agenda = variaveisEnderecoRetirada(op);
+            vars.put("localRetirada", agenda.getOrDefault("localRetirada", vars.get("localRetirada")));
+        }
+        Usuario operador = usuarioLogado();
+        if (operador != null && operador.getNmUsuario() != null && !operador.getNmUsuario().isBlank()) {
+            vars.put("operador", operador.getNmUsuario().trim());
+        }
+        if (d.getDsObservacao() != null && !d.getDsObservacao().isBlank()) {
+            vars.put("observacao", d.getDsObservacao().trim());
+        }
+        return emailService.enviar(TP_EMAIL_DEVOLUCAO_RAPIDA, claim.getNmEmail(), vars);
+    }
+
     private DevolucaoPickupOpcao opcaoSelecionada(Devolucao d) {
         return pickupOpcaoRepository
                 .findByDevolucao_IdAndFgExcluidoFalseOrderByDtOpcaoAscHrInicioAsc(d.getId())
@@ -1201,8 +1245,13 @@ public class DevolucaoFluxoService {
         return toDetalhe(d);
     }
 
-    private String sugerirEmailPorStatus(String status) {
-        return switch (status == null ? "" : status) {
+    private String sugerirEmailPorStatus(Devolucao d) {
+        String status = d.getTpStatus() == null ? "" : d.getTpStatus();
+        if (isRetiradaPresencialAgendada(d)
+                && (COMPLETED.equals(status) || CONCLUIDO.equals(status) || DELIVERED.equals(status))) {
+            return TP_EMAIL_DEVOLUCAO_RAPIDA;
+        }
+        return switch (status) {
             case DELIVERY_METHOD_PENDING, CREATED -> "DEVOLUCAO_ESCOLHER_MODALIDADE";
             case PICKUP_OPTIONS_PREPARED, PICKUP_OPTIONS_SENT, PICKUP_CONFIRMATION_PENDING -> "DEVOLUCAO_PICKUP_OPCOES";
             case SHIPPING_ADDRESS_PENDING, SHIPPING_SELECTED -> "DEVOLUCAO_SHIPPING_ENDERECO";

@@ -61,6 +61,7 @@ public class PortalService {
     private final EstadoService estadoService;
     private final EmailService emailService;
     private final PortalContatosConfigService portalContatosConfigService;
+    private final PortalCategoriaCapaService portalCategoriaCapaService;
     private final PerfilRepository perfilRepository;
     private final UsuarioRepository usuarioRepository;
     private final WallpaperDownloadRepository wallpaperDownloadRepository;
@@ -90,6 +91,7 @@ public class PortalService {
                          EstadoService estadoService,
                          EmailService emailService,
                          PortalContatosConfigService portalContatosConfigService,
+                         PortalCategoriaCapaService portalCategoriaCapaService,
                          PerfilRepository perfilRepository,
                          UsuarioRepository usuarioRepository,
                          WallpaperDownloadRepository wallpaperDownloadRepository,
@@ -115,6 +117,7 @@ public class PortalService {
         this.estadoService = estadoService;
         this.emailService = emailService;
         this.portalContatosConfigService = portalContatosConfigService;
+        this.portalCategoriaCapaService = portalCategoriaCapaService;
         this.perfilRepository = perfilRepository;
         this.usuarioRepository = usuarioRepository;
         this.wallpaperDownloadRepository = wallpaperDownloadRepository;
@@ -421,8 +424,10 @@ public class PortalService {
                 .filter(i -> pesquisa == null || pesquisa.isBlank() || matchesPesquisa(i, pesquisa))
                 .toList();
         var fotos = arquivoService.fotosPrincipaisPorItens(filtrados.stream().map(Item::getId).toList());
+        var capas = portalCategoriaCapaService.capasAtivasPorCategorias(
+                filtrados.stream().map(PortalCategoriaCapaService::idCategoriaRaiz).toList());
         var content = filtrados.stream()
-                .map(i -> toCatalogoItem(i, fotos.get(i.getId())))
+                .map(i -> toCatalogoItem(i, fotoPublicaDoItem(i, fotos.get(i.getId()), capas)))
                 .toList();
         return ApiPage.paged(content, new PaginationMeta(p, l, result.getTotalElements(), result.getTotalPages()));
     }
@@ -752,6 +757,11 @@ public class PortalService {
                 idFoto);
     }
 
+    private static Arquivo fotoPublicaDoItem(Item i, Arquivo fotoOriginal, Map<Long, Arquivo> capas) {
+        Arquivo capa = capas.get(PortalCategoriaCapaService.idCategoriaRaiz(i));
+        return capa != null ? capa : fotoOriginal;
+    }
+
     /** Local exibido no card: achado → posto → local atual. */
     private static String localPublico(Item i) {
         if (i.getNmLocalEncontrado() != null && !i.getNmLocalEncontrado().isBlank()) {
@@ -803,12 +813,22 @@ public class PortalService {
                 .filter(this::triagemConcluida)
                 .filter(x -> !temRetiradaPendenteNoPortal(x.getId()))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Item não encontrado no catálogo público."));
-        String idFoto = arquivoService.fotoPrincipalItem(i.getId())
-                .map(a -> idCodec.encodeArquivoId(a.getId()))
-                .orElse(null);
-        List<String> idsFotos = arquivoService.fotosItem(i.getId()).stream()
-                .map(a -> idCodec.encodeArquivoId(a.getId()))
-                .toList();
+        String idFoto;
+        List<String> idsFotos;
+        Arquivo capa = portalCategoriaCapaService.capasAtivasPorCategorias(
+                        List.of(PortalCategoriaCapaService.idCategoriaRaiz(i)))
+                .get(PortalCategoriaCapaService.idCategoriaRaiz(i));
+        if (capa != null) {
+            idFoto = idCodec.encodeArquivoId(capa.getId());
+            idsFotos = List.of(idFoto);
+        } else {
+            idFoto = arquivoService.fotoPrincipalItem(i.getId())
+                    .map(a -> idCodec.encodeArquivoId(a.getId()))
+                    .orElse(null);
+            idsFotos = arquivoService.fotosItem(i.getId()).stream()
+                    .map(a -> idCodec.encodeArquivoId(a.getId()))
+                    .toList();
+        }
         return new PortalItemDetalheResponse(
                 idCodec.encodeItemId(i.getId()),
                 i.getCdItem(),

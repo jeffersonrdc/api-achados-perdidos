@@ -37,8 +37,15 @@ public class S3Properties {
 
     public String fullKey(String relativeKey) {
         String rel = relativeKey == null ? "" : relativeKey.replace('\\', '/').replaceAll("^/+", "");
-        if (prefix == null || prefix.isBlank()) return rel;
-        String p = prefix.replaceAll("^/+", "").replaceAll("/+$", "");
-        return p.isBlank() ? rel : p + "/" + rel;
+        String p = prefixNormalizado();
+        return p.isEmpty() ? rel : p + "/" + rel;
+    }
+
+    /** Prefixo vazio ou comentário acidental (ex.: {@code # opcional}) não entra na key. */
+    public String prefixNormalizado() {
+        if (prefix == null || prefix.isBlank()) return "";
+        String p = prefix.trim();
+        if (p.startsWith("#")) return "";
+        return p.replaceAll("^/+", "").replaceAll("/+$", "");
     }
 }

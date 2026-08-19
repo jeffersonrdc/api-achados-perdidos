@@ -60,7 +60,7 @@ public class ArquivoController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("@authz.pode('arquivo.gerenciar')")
+    @PreAuthorize("@authz.podeQualquer('arquivo.gerenciar', 'item.editar', 'claim.editar', 'triagem.salvar')")
     @Operation(summary = "Excluir arquivo (soft delete)")
     public ResponseEntity<Void> delete(@Parameter(description = "ID assinado do arquivo") @PathVariable String id) {
         arquivoService.excluir(id);

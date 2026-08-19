@@ -118,6 +118,7 @@ public class SignedResourceIdCodec {
             case "CRIANCA" -> decodeCriancaId(token);
             case "EVENTO" -> decodeEventoId(token);
             case "CONTATO" -> decodeContatoId(token);
+            case "CATEGORIA" -> decodeCategoriaId(token);
             default -> decodeNumeric(token);
         };
     }
@@ -131,6 +132,7 @@ public class SignedResourceIdCodec {
             case "CRIANCA" -> encodeCriancaId(id);
             case "EVENTO" -> encodeEventoId(id);
             case "CONTATO" -> encodeContatoId(id);
+            case "CATEGORIA" -> encodeCategoriaId(id);
             default -> String.valueOf(id);
         };
     }

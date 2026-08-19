@@ -9,7 +9,7 @@ class ArquivoStorageProviderTest {
     @Test
     void parseiaAliases() {
         assertEquals(ArquivoStorageProvider.LOCAL, ArquivoStorageProvider.from("local"));
-        assertEquals(ArquivoStorageProvider.LOCAL, ArquivoStorageProvider.from(null));
+        assertEquals(ArquivoStorageProvider.S3, ArquivoStorageProvider.from(null));
         assertEquals(ArquivoStorageProvider.S3, ArquivoStorageProvider.from("S3"));
         assertEquals(ArquivoStorageProvider.S3, ArquivoStorageProvider.from("aws_s3"));
     }

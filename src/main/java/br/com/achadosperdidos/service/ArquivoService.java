@@ -15,6 +15,7 @@ import br.com.achadosperdidos.repository.DevolucaoRepository;
 import br.com.achadosperdidos.repository.EventoConfiguracaoRepository;
 import br.com.achadosperdidos.repository.EventoRepository;
 import br.com.achadosperdidos.repository.ItemRepository;
+import br.com.achadosperdidos.repository.PortalCategoriaCapaRepository;
 import br.com.achadosperdidos.repository.TriagemRepository;
 import br.com.achadosperdidos.security.SignedResourceIdCodec;
 import br.com.achadosperdidos.storage.ArquivoStorage;
@@ -63,6 +64,7 @@ public class ArquivoService {
     private final EventoRepository eventoRepository;
     private final EventoConfiguracaoRepository eventoConfiguracaoRepository;
     private final TriagemRepository triagemRepository;
+    private final PortalCategoriaCapaRepository portalCategoriaCapaRepository;
     private final SignedResourceIdCodec idCodec;
     private final ArquivoStorageRouter storageRouter;
     private final ImageThumbnailService imageThumbnailService;
@@ -75,6 +77,7 @@ public class ArquivoService {
                           EventoRepository eventoRepository,
                           EventoConfiguracaoRepository eventoConfiguracaoRepository,
                           TriagemRepository triagemRepository,
+                          PortalCategoriaCapaRepository portalCategoriaCapaRepository,
                           SignedResourceIdCodec idCodec, ArquivoStorageRouter storageRouter,
                           ImageThumbnailService imageThumbnailService) {
         this.arquivoRepository = arquivoRepository;
@@ -88,6 +91,7 @@ public class ArquivoService {
         this.eventoRepository = eventoRepository;
         this.eventoConfiguracaoRepository = eventoConfiguracaoRepository;
         this.triagemRepository = triagemRepository;
+        this.portalCategoriaCapaRepository = portalCategoriaCapaRepository;
         this.idCodec = idCodec;
         this.storageRouter = storageRouter;
         this.imageThumbnailService = imageThumbnailService;
@@ -121,13 +125,27 @@ public class ArquivoService {
     @Transactional
     public ArquivoResponse upload(String tpEntidade, String idEntidade, String tpArquivo,
                                   MultipartFile file, Boolean fgPrincipal) {
-        if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("Arquivo não enviado ou vazio.");
-        }
-        validarMime(file.getContentType());
         String tipo = tpEntidade.trim().toUpperCase();
         Long idEnt = idCodec.decodeEntidadeId(tipo, idEntidade);
         Evento evento = resolverEvento(tipo, idEnt);
+        return uploadComEvento(tipo, idEnt, tpArquivo, file, evento, fgPrincipal);
+    }
+
+    /**
+     * Upload vinculando o metadado a um evento já resolvido (ex.: capa de categoria, que não tem evento próprio).
+     */
+    @Transactional
+    public ArquivoResponse uploadComEvento(String tpEntidade, Long idEntidade, String tpArquivo,
+                                           MultipartFile file, Evento evento, Boolean fgPrincipal) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("Arquivo não enviado ou vazio.");
+        }
+        if (evento == null) {
+            throw new RecursoNaoEncontradoException("Evento não encontrado para vincular o arquivo.");
+        }
+        validarMime(file.getContentType());
+        String tipo = tpEntidade.trim().toUpperCase();
+        Long idEnt = idEntidade;
 
         String extensao = extrair(file.getOriginalFilename());
         String nomeFisico = UUID.randomUUID().toString().replace("-", "") + extensao;
@@ -140,7 +158,6 @@ public class ArquivoService {
         } catch (IOException e) {
             throw new UncheckedIOException("Falha ao ler o arquivo enviado.", e);
         }
-        // Miniatura persistida para listagens (portal/painel) — falha não impede o upload.
         gerarEPersistirThumb(storage, relPath, file.getContentType(), file.getSize(),
                 file.getOriginalFilename() != null ? file.getOriginalFilename() : nomeFisico);
 
@@ -314,7 +331,7 @@ public class ArquivoService {
                 .toList();
     }
 
-    private Arquivo findArquivoAtivo(String idArquivo) {
+    public Arquivo findArquivoAtivo(String idArquivo) {
         return arquivoRepository.findById(idCodec.decodeArquivoId(idArquivo))
                 .filter(x -> !Boolean.TRUE.equals(x.getFgExcluido()))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Arquivo não encontrado."));
@@ -324,14 +341,19 @@ public class ArquivoService {
         Arquivo a = arquivoRepository.findById(idCodec.decodeArquivoIdAssinado(idArquivo))
                 .filter(x -> !Boolean.TRUE.equals(x.getFgExcluido()))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Arquivo não encontrado."));
-        if ("EVENTO".equalsIgnoreCase(a.getTpEntidade())
-                && TIPOS_PUBLICOS_EVENTO.contains(a.getTpArquivo() == null ? "" : a.getTpArquivo().toUpperCase())) {
+        String tpArq = a.getTpArquivo() == null ? "" : a.getTpArquivo().toUpperCase();
+        if ("EVENTO".equalsIgnoreCase(a.getTpEntidade()) && TIPOS_PUBLICOS_EVENTO.contains(tpArq)) {
             eventoRepository.findById(a.getIdEntidade())
                     .filter(e -> !Boolean.TRUE.equals(e.getFgExcluido()) && Boolean.TRUE.equals(e.getFgAtivo()))
                     .orElseThrow(() -> new RecursoNaoEncontradoException("Arquivo não disponível no portal."));
             return a;
         }
-        if (!"ITEM".equalsIgnoreCase(a.getTpEntidade()) || !"FOTO".equalsIgnoreCase(a.getTpArquivo())) {
+        if ("CATEGORIA".equalsIgnoreCase(a.getTpEntidade())
+                && PortalCategoriaCapaService.TP_ARQUIVO.equals(tpArq)
+                && portalCategoriaCapaRepository.existsByArquivo_IdAndFgExcluidoFalse(a.getId())) {
+            return a;
+        }
+        if (!"ITEM".equalsIgnoreCase(a.getTpEntidade()) || !"FOTO".equals(tpArq)) {
             throw new RecursoNaoEncontradoException("Arquivo não disponível no portal.");
         }
         var item = itemRepository.findById(a.getIdEntidade())
@@ -348,6 +370,10 @@ public class ArquivoService {
             throw new RecursoNaoEncontradoException("Arquivo não disponível no portal.");
         }
         if (claimValidacaoRepository.existsRetiradaPendenteNoPortal(item.getId(), CLAIM_STATUS_OCULTA_PORTAL)) {
+            throw new RecursoNaoEncontradoException("Arquivo não disponível no portal.");
+        }
+        Long idCategoria = PortalCategoriaCapaService.idCategoriaRaiz(item);
+        if (idCategoria != null && portalCategoriaCapaRepository.existsByCategoria_IdAndFgExcluidoFalse(idCategoria)) {
             throw new RecursoNaoEncontradoException("Arquivo não disponível no portal.");
         }
         return a;
@@ -468,9 +494,11 @@ public class ArquivoService {
             case "CRIANCA" -> criancaRepository.findById(idEntidade).map(x -> x.getEvento()).orElse(null);
             case "DEVOLUCAO" -> devolucaoRepository.findById(idEntidade).map(x -> x.getEvento()).orElse(null);
             case "CONTATO" -> contatoRepository.findById(idEntidade).map(x -> x.getEvento()).orElse(null);
+            case "CATEGORIA" -> throw new IllegalArgumentException(
+                    "Arquivo de categoria deve ser enviado em /config/portal-categoria-capas.");
             default -> throw new IllegalArgumentException(
                     "Tipo de entidade inválido para arquivo: " + tpEntidade
-                            + ". Use EVENTO, ITEM, CLAIM, CLAIM_MENSAGEM, CRIANCA, DEVOLUCAO ou CONTATO.");
+                            + ". Use EVENTO, ITEM, CLAIM, CLAIM_MENSAGEM, CRIANCA, DEVOLUCAO, CONTATO ou CATEGORIA.");
         };
         if (evento == null) {
             throw new RecursoNaoEncontradoException(

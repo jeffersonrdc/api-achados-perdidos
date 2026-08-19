@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -25,8 +26,9 @@ import java.util.stream.Collectors;
 
 /**
  * Motor de match claim PERDA ↔ itens da coleta/estoque.
- * Critérios: mesma categoria (filtro); subcategoria/marca/modelo/cor só quando o claim informou;
- * se o claim tiver tags, exige ao menos uma em comum.
+ * Critérios: mesma categoria (filtro); subcategoria só quando ambos informaram;
+ * marca/modelo/cor quando o claim informou valor real (ignora "Outro");
+ * tags somam pontuação, mas não eliminam o candidato.
  * Persiste candidatos em {@code claim_validacao} com {@code ST_Resultado=PENDENTE}.
  */
 @Service
@@ -60,7 +62,9 @@ public class MatchService {
             List.of(ST_PENDENTE, ST_CONFIRMADO, ST_REPROVADO);
     /** Status que o motor de match pode alterar automaticamente. */
     private static final Set<String> STATUS_GERENCIADOS = Set.of(
-            "Claim Aberto", STATUS_AGUARDANDO_MATCH, STATUS_MATCH);
+            "Claim Aberto", "Claim em Análise", STATUS_AGUARDANDO_MATCH, STATUS_MATCH);
+    private static final Set<String> VALORES_PLACEHOLDER = Set.of(
+            "outro", "outra", "outros", "outras", "n/a", "na", "nao informado", "não informado");
     private static final int SCORE_MINIMO = 55;
     private static final int MAX_CANDIDATOS = 10;
 
@@ -139,16 +143,32 @@ public class MatchService {
     /**
      * Quando um item da coleta entra/atualiza: recalcula todos os claims PERDA do mesmo evento/categoria
      * para incluir (ou remover) este item entre os candidatos.
+     * Itens ainda na triagem são ignorados de propósito — o match só vale após o estoque.
      */
     @Transactional
     public int recalcularMatchesPorItem(Item item) {
+        return recalcularMatchesPorItem(item, false);
+    }
+
+    /**
+     * Recalcula claims do evento/categoria mesmo se o item estiver indisponível
+     * (saiu do estoque, descartado, excluído), para tirá-lo da fila de candidatos.
+     */
+    @Transactional
+    public int recalcularMatchesPorItemAposStatus(Item item) {
+        return recalcularMatchesPorItem(item, true);
+    }
+
+    private int recalcularMatchesPorItem(Item item, boolean mesmoIndisponivel) {
         if (item == null || item.getId() == null) return 0;
-        if (Boolean.TRUE.equals(item.getFgExcluido())
-                || Boolean.TRUE.equals(item.getFgDescartado())) {
-            return 0;
-        }
         if (item.getEvento() == null || item.getCategoria() == null) return 0;
-        if (statusExcluido(item)) return 0;
+        if (!mesmoIndisponivel) {
+            if (Boolean.TRUE.equals(item.getFgExcluido())
+                    || Boolean.TRUE.equals(item.getFgDescartado())) {
+                return 0;
+            }
+            if (statusExcluido(item)) return 0;
+        }
 
         List<Claim> claims = claimRepository.findPerdasParaMatch(
                 item.getEvento().getId(), ClaimService.TIPO_PERDA, item.getCategoria().getId());
@@ -328,36 +348,33 @@ public class MatchService {
     int calcularScore(Claim claim, Item item) {
         int camposInformados = 0;
 
-        if (claim.getSubcategoria() != null) {
+        if (claim.getSubcategoria() != null && item.getSubcategoria() != null) {
             camposInformados++;
-            if (item.getSubcategoria() == null
-                    || !Objects.equals(claim.getSubcategoria().getId(), item.getSubcategoria().getId())) {
+            if (!Objects.equals(claim.getSubcategoria().getId(), item.getSubcategoria().getId())) {
                 return 0;
             }
         }
-        if (informado(claim.getNmMarca())) {
+        if (informadoCatalogo(claim.getNmMarca())) {
             camposInformados++;
-            if (!equalsIgnore(claim.getNmMarca(), item.getNmMarca())) return 0;
+            if (!textoCompativel(claim.getNmMarca(), item.getNmMarca())) return 0;
         }
-        if (informado(claim.getNmModelo())) {
+        if (informadoCatalogo(claim.getNmModelo())) {
             camposInformados++;
-            if (!equalsIgnore(claim.getNmModelo(), item.getNmModelo())) return 0;
+            if (!textoCompativel(claim.getNmModelo(), item.getNmModelo())) return 0;
         }
-        if (informado(claim.getNmCor())) {
+        if (informadoCatalogo(claim.getNmCor())) {
             camposInformados++;
-            if (!equalsIgnore(claim.getNmCor(), item.getNmCor())) return 0;
+            if (!corCompativel(claim.getNmCor(), item.getNmCor())) return 0;
         }
 
         Set<String> claimTags = splitTags(claim.getDsTags());
-        if (!claimTags.isEmpty() && !temAoMenosUmaTag(claimTags, item)) {
-            return 0;
-        }
+        boolean tagsEmComum = !claimTags.isEmpty() && temAoMenosUmaTag(claimTags, item);
 
         // Categoria já filtrada. Score base sobe se houver poucos campos informados.
         int score = camposInformados == 0
                 ? 60
                 : Math.max(SCORE_MINIMO, 40 + camposInformados * 10);
-        if (!claimTags.isEmpty()) {
+        if (tagsEmComum) {
             score += 15;
         }
         return Math.min(100, score);
@@ -385,16 +402,44 @@ public class MatchService {
                 .collect(Collectors.toSet());
     }
 
-    private static boolean informado(String v) {
-        return v != null && !v.trim().isEmpty();
+    private static boolean informadoCatalogo(String v) {
+        String n = normalizar(v);
+        return !n.isEmpty() && !VALORES_PLACEHOLDER.contains(n);
     }
 
-    private static boolean equalsIgnore(String a, String b) {
-        if (a == null || b == null) return false;
-        String aa = a.trim();
-        String bb = b.trim();
+    /** Igualdade flexível: acento/hífen/espaço e um texto contido no outro (ex.: Wayfarer ⊂ Meta Wayfarer). */
+    private static boolean textoCompativel(String a, String b) {
+        String aa = normalizar(a);
+        String bb = normalizar(b);
         if (aa.isEmpty() || bb.isEmpty()) return false;
-        return aa.equalsIgnoreCase(bb);
+        if (aa.equals(bb)) return true;
+        String shorter = aa.length() <= bb.length() ? aa : bb;
+        String longer = aa.length() <= bb.length() ? bb : aa;
+        return shorter.length() >= 4 && longer.contains(shorter);
+    }
+
+    private static boolean corCompativel(String a, String b) {
+        return textoCompativel(normalizarCor(a), normalizarCor(b));
+    }
+
+    private static String normalizarCor(String v) {
+        String n = normalizar(v);
+        return switch (n) {
+            case "preta" -> "preto";
+            case "branca" -> "branco";
+            case "amarela" -> "amarelo";
+            case "vermelha" -> "vermelho";
+            default -> n;
+        };
+    }
+
+    private static String normalizar(String v) {
+        if (v == null) return "";
+        String s = v.trim().toLowerCase(Locale.ROOT);
+        s = Normalizer.normalize(s, Normalizer.Form.NFD).replaceAll("\\p{M}+", "");
+        s = s.replace('-', ' ').replace('/', ' ');
+        s = s.replaceAll("[^a-z0-9 ]+", " ");
+        return s.replaceAll("\\s+", " ").trim();
     }
 
     private MatchCandidatoResponse toCandidato(ClaimValidacao v) {

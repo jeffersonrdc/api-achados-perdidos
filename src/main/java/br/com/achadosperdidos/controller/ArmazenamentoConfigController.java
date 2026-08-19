@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/config/armazenamento")
-@Tag(name = "Configuração de Armazenamento", description = "Provedor padrão Local ou AWS S3 para novos uploads.")
+@Tag(name = "Configuração de Armazenamento", description = "Somente AWS S3 para upload e download.")
 @SecurityRequirement(name = "bearerAuth")
 public class ArmazenamentoConfigController {
 
@@ -32,7 +32,7 @@ public class ArmazenamentoConfigController {
 
     @PutMapping
     @PreAuthorize("@authz.pode('configuracao.gerenciar')")
-    @Operation(summary = "Definir provedor padrão (LOCAL ou S3)")
+    @Operation(summary = "Confirmar provedor S3")
     public ArmazenamentoConfigResponse salvar(@Valid @RequestBody ArmazenamentoConfigRequest request) {
         return service.salvar(request);
     }

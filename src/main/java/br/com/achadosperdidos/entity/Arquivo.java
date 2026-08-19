@@ -17,7 +17,7 @@ public class Arquivo {
     @Column(name = "NM_Arquivo", nullable = false, length = 255) private String nmArquivo;
     @Column(name = "NM_Path", nullable = false, length = 500) private String nmPath;
     /** LOCAL ou S3 — provedor físico deste registro (não muda ao trocar o padrão). */
-    @Column(name = "TP_Storage", nullable = false, length = 10) private String tpStorage = "LOCAL";
+    @Column(name = "TP_Storage", nullable = false, length = 10) private String tpStorage = "S3";
     @Column(name = "TP_Mime", length = 100) private String tpMime;
     @JdbcTypeCode(SqlTypes.TINYINT) @Column(name = "FG_Principal", nullable = false, columnDefinition = "TINYINT(1)") private Boolean fgPrincipal = false;
     @Column(name = "QT_Bytes") private Long qtBytes;

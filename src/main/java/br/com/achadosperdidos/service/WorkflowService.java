@@ -69,11 +69,13 @@ public class WorkflowService {
     private final UsuarioContextService usuarioContextService;
     private final AuditoriaContextService auditoriaContext;
     private final SignedResourceIdCodec idCodec;
+    private final MatchService matchService;
 
     public WorkflowService(ItemMovimentacaoRepository itemMovimentacaoRepository, ItemHistoricoRepository itemHistoricoRepository,
                            ItemRepository itemRepository, LocalizacaoService localizacaoService,
                            StatusItemService statusItemService, UsuarioContextService usuarioContextService,
-                           AuditoriaContextService auditoriaContext, SignedResourceIdCodec idCodec) {
+                           AuditoriaContextService auditoriaContext, SignedResourceIdCodec idCodec,
+                           MatchService matchService) {
         this.itemMovimentacaoRepository = itemMovimentacaoRepository;
         this.itemHistoricoRepository = itemHistoricoRepository;
         this.itemRepository = itemRepository;
@@ -82,6 +84,7 @@ public class WorkflowService {
         this.usuarioContextService = usuarioContextService;
         this.auditoriaContext = auditoriaContext;
         this.idCodec = idCodec;
+        this.matchService = matchService;
     }
 
     // ---------------------------------------------------------------------
@@ -120,6 +123,9 @@ public class WorkflowService {
         }
         item.setDtAlteracao(LocalDateTime.now());
         itemRepository.save(item);
+        // Match só é válido com item em estoque. Cadastro em /itens dispara cedo demais
+        // (Aguardando triagem); a conclusão da triagem precisa recalcular aqui.
+        matchService.recalcularMatchesPorItemAposStatus(item);
 
         ItemHistorico historico = registrarHistorico(item, statusAtual, statusNovo, request.dsObservacao());
 

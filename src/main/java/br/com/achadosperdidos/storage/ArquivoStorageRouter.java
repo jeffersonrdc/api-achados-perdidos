@@ -1,37 +1,27 @@
 package br.com.achadosperdidos.storage;
 
 import br.com.achadosperdidos.config.S3Properties;
-import br.com.achadosperdidos.service.SistemaParametroService;
 import org.springframework.beans.factory.BeanFactory;
 import org.springframework.stereotype.Component;
 
 /**
- * Roteia gravação pelo provedor padrão configurado e leitura pelo {@code TP_Storage}
- * persistido em cada arquivo (coexistência Local/S3).
- * <p>
- * Não referencia {@code S3ArquivoStorage} tipado: assim a API sobe em LOCAL
- * mesmo se o AWS SDK não estiver no classpath do IDE.
+ * Upload e download somente no S3. Disco local não é mais usado em runtime.
  */
 @Component
 public class ArquivoStorageRouter {
 
     static final String S3_BEAN = "s3ArquivoStorage";
 
-    private final LocalArquivoStorage local;
     private final BeanFactory beanFactory;
-    private final SistemaParametroService parametros;
     private final S3Properties s3Properties;
 
-    public ArquivoStorageRouter(LocalArquivoStorage local, BeanFactory beanFactory,
-                                SistemaParametroService parametros, S3Properties s3Properties) {
-        this.local = local;
+    public ArquivoStorageRouter(BeanFactory beanFactory, S3Properties s3Properties) {
         this.beanFactory = beanFactory;
-        this.parametros = parametros;
         this.s3Properties = s3Properties;
     }
 
     public ArquivoStorageProvider provedorPadrao() {
-        return ArquivoStorageProvider.from(parametros.get(SistemaParametroService.ARQUIVO_STORAGE_PROVIDER, "LOCAL"));
+        return ArquivoStorageProvider.S3;
     }
 
     public boolean s3Disponivel() {
@@ -39,36 +29,29 @@ public class ArquivoStorageRouter {
     }
 
     public ArquivoStorage paraEscrita() {
-        ArquivoStorageProvider provider = provedorPadrao();
-        if (provider == ArquivoStorageProvider.S3) {
-            if (!s3Disponivel()) {
-                throw new IllegalStateException(
-                        "Provedor padrão é S3, mas o AWS SDK não está no classpath. Atualize as dependências Maven e reinicie.");
-            }
-            if (!s3Properties.isConfigured()) {
-                throw new IllegalStateException(
-                        "Provedor padrão é S3, mas o bucket não está configurado (APP_S3_BUCKET).");
-            }
-        }
-        return resolve(provider);
+        return s3OuFalhar("Provedor padrão é S3");
     }
 
     public ArquivoStorage paraLeitura(String tpStorage) {
-        ArquivoStorageProvider provider = ArquivoStorageProvider.from(
-                tpStorage == null || tpStorage.isBlank() ? "LOCAL" : tpStorage);
-        return resolve(provider);
+        return s3OuFalhar("Leitura de arquivo");
     }
 
     public ArquivoStorage resolve(ArquivoStorageProvider provider) {
-        return switch (provider) {
-            case LOCAL -> local;
-            case S3 -> {
-                if (!s3Disponivel()) {
-                    throw new IllegalStateException(
-                            "Arquivo está em S3, mas o AWS SDK não está disponível no classpath.");
-                }
-                yield beanFactory.getBean(S3_BEAN, ArquivoStorage.class);
-            }
-        };
+        if (provider != ArquivoStorageProvider.S3) {
+            throw new IllegalStateException("Armazenamento em disco local foi desativado. Use somente S3.");
+        }
+        return s3OuFalhar("S3");
+    }
+
+    private ArquivoStorage s3OuFalhar(String contexto) {
+        if (!s3Disponivel()) {
+            throw new IllegalStateException(
+                    contexto + ", mas o AWS SDK não está no classpath. Atualize as dependências Maven e reinicie.");
+        }
+        if (!s3Properties.isConfigured()) {
+            throw new IllegalStateException(
+                    contexto + ", mas o bucket não está configurado (APP_S3_BUCKET).");
+        }
+        return beanFactory.getBean(S3_BEAN, ArquivoStorage.class);
     }
 }
