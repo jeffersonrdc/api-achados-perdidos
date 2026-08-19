@@ -5,14 +5,24 @@ Senhas só via env do subprocess (MYSQL_PWD), nunca na linha de comando.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
-
 import pymysql
+
+# Identificadores MySQL aceitos neste script (evita interpolar env em argv/SQL).
+_MYSQL_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+
+
+def mysql_ident(raw: str, label: str) -> str:
+    value = (raw or "").strip()
+    if _MYSQL_IDENT.fullmatch(value) is None:
+        raise SystemExit(f"{label} inválido: use só letras, números e underscore")
+    return value
 
 
 def load_env() -> dict[str, str]:
@@ -48,15 +58,17 @@ def apply_sql(conn: pymysql.connections.Connection, sql: str) -> None:
 
 def main() -> None:
     env = load_env()
+    db_name = mysql_ident(env["DB_NAME"], "DB_NAME")
+    db_user = mysql_ident(env["DB_USERNAME"], "DB_USERNAME")
     sql_path = Path(__file__).with_name("074_Arquivo_Somente_S3.sql")
     sql = sql_path.read_text(encoding="utf-8")
 
     remote = pymysql.connect(
         host=env["DB_HOST"],
         port=int(env.get("DB_PORT") or 3306),
-        user=env["DB_USERNAME"],
+        user=db_user,
         password=env["DB_PASSWORD"],
-        database=env["DB_NAME"],
+        database=db_name,
         charset="utf8mb4",
         autocommit=False,
     )
@@ -81,11 +93,11 @@ def main() -> None:
         mysql_bin("mysqldump"),
         "-h", env["DB_HOST"],
         "-P", env.get("DB_PORT") or "3306",
-        "-u", env["DB_USERNAME"],
+        "-u", db_user,
         "--single-transaction",
         "--routines",
         "--default-character-set=utf8mb4",
-        env["DB_NAME"],
+        db_name,
     ]
     with tempfile.NamedTemporaryFile(suffix=".sql", delete=False) as tmp:
         dump_path = Path(tmp.name)
@@ -98,28 +110,44 @@ def main() -> None:
     print("dump temporario bytes", dump_path.stat().st_size)
 
 
-    local_user = os.environ.get("LOCAL_DB_USER", "root")
+    local_user = mysql_ident(os.environ.get("LOCAL_DB_USER", "root"), "LOCAL_DB_USER")
     local_pwd = os.environ.get("LOCAL_DB_PASSWORD", "")
     local_env = os.environ.copy()
     local_env["MYSQL_PWD"] = local_pwd
-    create = subprocess.run(
-        [mysql_bin("mysql"), "-h", "127.0.0.1", "-u", local_user, "-e",
-         f"CREATE DATABASE IF NOT EXISTS `{env['DB_NAME']}` DEFAULT CHARACTER SET utf8mb4"],
-        env=local_env,
-        stderr=subprocess.PIPE,
+    local = pymysql.connect(
+        host="127.0.0.1",
+        user=local_user,
+        password=local_pwd,
+        charset="utf8mb4",
+        autocommit=True,
     )
-    if create.returncode != 0:
-        sys.stderr.write(create.stderr.decode("utf-8", errors="replace"))
-        raise SystemExit("mysql local CREATE DATABASE falhou (defina LOCAL_DB_USER/LOCAL_DB_PASSWORD)")
+    try:
+        with local.cursor() as cur:
+            # Identificador já validado em mysql_ident (não é bind de placeholder).
+            cur.execute(
+                "CREATE DATABASE IF NOT EXISTS `" + db_name + "` DEFAULT CHARACTER SET utf8mb4"
+            )
+    except pymysql.Error as exc:
+        raise SystemExit(
+            f"mysql local CREATE DATABASE falhou (defina LOCAL_DB_USER/LOCAL_DB_PASSWORD): {exc}"
+        ) from exc
+    finally:
+        local.close()
+    client_cnf = dump_path.with_suffix(".cnf")
+    client_cnf.write_text(
+        "[client]\nhost=127.0.0.1\nuser={0}\ndatabase={1}\n".format(local_user, db_name),
+        encoding="ascii",
+    )
     try:
         with dump_path.open("rb") as inp:
             load = subprocess.run(
-                [mysql_bin("mysql"), "-h", "127.0.0.1", "-u", local_user, env["DB_NAME"]],
+                [mysql_bin("mysql"), "--defaults-extra-file", str(client_cnf)],
                 env=local_env,
                 stdin=inp,
                 stderr=subprocess.PIPE,
             )
     finally:
+        client_cnf.unlink(missing_ok=True)
         dump_path.unlink(missing_ok=True)
     if load.returncode != 0:
         sys.stderr.write(load.stderr.decode("utf-8", errors="replace"))

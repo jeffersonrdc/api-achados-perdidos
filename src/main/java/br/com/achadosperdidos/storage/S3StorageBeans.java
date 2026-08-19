@@ -2,15 +2,16 @@ package br.com.achadosperdidos.storage;
 
 import br.com.achadosperdidos.config.S3Properties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Beans S3 — só são registrados se o AWS SDK estiver no classpath.
- * Assim a API sobe em modo LOCAL mesmo com classpath do IDE desatualizado.
+ * Cliente S3 real — desligado nos testes de integração ({@code app.s3.in-memory=true}).
  */
 @Configuration
 @ConditionalOnClass(name = "software.amazon.awssdk.services.s3.S3Client")
+@ConditionalOnProperty(name = "app.s3.in-memory", havingValue = "false", matchIfMissing = true)
 class S3StorageBeans {
 
     @Bean

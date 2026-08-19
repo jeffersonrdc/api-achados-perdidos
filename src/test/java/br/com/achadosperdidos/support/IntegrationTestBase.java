@@ -1,5 +1,6 @@
 package br.com.achadosperdidos.support;
 
+import br.com.achadosperdidos.storage.InMemoryS3StorageConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -24,7 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
-@Import(TestDataSeeder.class)
+@Import({TestDataSeeder.class, InMemoryS3StorageConfig.class})
 @TestPropertySource(properties = {
         "spring.jpa.hibernate.ddl-auto=create",
         "spring.jpa.open-in-view=false"

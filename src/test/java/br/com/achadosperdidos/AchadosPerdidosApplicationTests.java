@@ -1,10 +1,13 @@
 package br.com.achadosperdidos;
 
+import br.com.achadosperdidos.storage.InMemoryS3StorageConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.TestPropertySource;
 
 @SpringBootTest
+@Import(InMemoryS3StorageConfig.class)
 @TestPropertySource(properties = {
         "spring.datasource.url=jdbc:h2:mem:achados_perdidos_ctx;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE",
         "spring.datasource.username=sa",
