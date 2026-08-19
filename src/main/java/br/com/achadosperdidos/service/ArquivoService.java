@@ -487,6 +487,23 @@ public class ArquivoService {
                 .stream().map(this::toResponse).toList();
     }
 
+    /** Soft delete do metadado; remove original e miniatura no storage (melhor esforço). */
+    @Transactional
+    public void excluir(String idArquivo) {
+        Arquivo a = findArquivoAtivo(idArquivo);
+        a.setFgExcluido(true);
+        a.setFgAtivo(false);
+        a.setDtAlteracao(LocalDateTime.now());
+        arquivoRepository.save(a);
+        try {
+            ArquivoStorage storage = storageRouter.paraLeitura(a.getTpStorage());
+            storage.delete(a.getNmPath());
+            storage.delete(thumbKey(a.getNmPath()));
+        } catch (RuntimeException ignored) {
+            // metadado já inválido; órfão físico não bloqueia a exclusão no painel
+        }
+    }
+
     private ArquivoResponse toResponse(Arquivo a) {
         return new ArquivoResponse(
                 idCodec.encodeArquivoId(a.getId()),

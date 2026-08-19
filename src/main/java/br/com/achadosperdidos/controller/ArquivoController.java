@@ -59,6 +59,14 @@ public class ArquivoController {
                 .body(arquivoService.upload(tpEntidade, idEntidade, tpArquivo, file, fgPrincipal));
     }
 
+    @DeleteMapping("/{id}")
+    @PreAuthorize("@authz.pode('arquivo.gerenciar')")
+    @Operation(summary = "Excluir arquivo (soft delete)")
+    public ResponseEntity<Void> delete(@Parameter(description = "ID assinado do arquivo") @PathVariable String id) {
+        arquivoService.excluir(id);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/{id}/download")
     @PreAuthorize("@authz.pode('arquivo.listar')")
     @Operation(summary = "Baixar arquivo por ID assinado (streaming Local/S3)")
