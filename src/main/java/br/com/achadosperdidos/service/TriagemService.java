@@ -21,6 +21,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -57,12 +58,13 @@ public class TriagemService {
     private final AuditoriaContextService auditoriaContext;
     private final SignedResourceIdCodec idCodec;
     private final MatchService matchService;
+    private final ModulosConfigService modulosConfig;
 
     public TriagemService(TriagemRepository triagemRepository, ItemRepository itemRepository,
                           ItemService itemService, WorkflowService workflowService, CategoriaService categoriaService,
                           LocalizacaoService localizacaoService, UsuarioContextService usuarioContextService,
                           AuditoriaContextService auditoriaContext, SignedResourceIdCodec idCodec,
-                          MatchService matchService) {
+                          MatchService matchService, ModulosConfigService modulosConfig) {
         this.triagemRepository = triagemRepository;
         this.itemRepository = itemRepository;
         this.itemService = itemService;
@@ -73,11 +75,17 @@ public class TriagemService {
         this.auditoriaContext = auditoriaContext;
         this.idCodec = idCodec;
         this.matchService = matchService;
+        this.modulosConfig = modulosConfig;
+    }
+
+    private void exigirModuloTriagem() {
+        modulosConfig.exigirHabilitado("triagem");
     }
 
     /** Inicia a triagem: transiciona o item para "Em triagem" e abre o registro. */
     @Transactional
     public TriagemResponse iniciar(String idItem) {
+        exigirModuloTriagem();
         auditoriaContext.marcarContexto();
         Item item = findItem(idItem);
         workflowService.transitar(idItem, new ItemTransicaoRequest(STATUS_EM_TRIAGEM, "Triagem iniciada"));
@@ -101,6 +109,7 @@ public class TriagemService {
      */
     @Transactional
     public TriagemResponse analisar(String idItem) {
+        exigirModuloTriagem();
         auditoriaContext.marcarContexto();
         Item item = findItem(idItem);
         String statusAtual = item.getStatus() != null ? item.getStatus().getNmStatus() : "";
@@ -117,6 +126,7 @@ public class TriagemService {
     /** Salva a classificacao/observacoes da triagem sem encaminhar ao estoque. */
     @Transactional
     public TriagemResponse salvar(String idItem, TriagemSalvarRequest request) {
+        exigirModuloTriagem();
         auditoriaContext.marcarContexto();
         Item item = findItem(idItem);
         Triagem triagem = getOrCreate(item);
@@ -130,6 +140,7 @@ public class TriagemService {
      */
     @Transactional
     public TriagemResponse concluir(String idItem, TriagemSalvarRequest request) {
+        exigirModuloTriagem();
         auditoriaContext.marcarContexto();
         Item item = findItem(idItem);
         Triagem triagem = getOrCreate(item);
@@ -153,8 +164,31 @@ public class TriagemService {
         return toResponse(triagem);
     }
 
+    /**
+     * Libera o item direto ao estoque (e ao portal) sem passar pela fila de triagem.
+     * Cria/atualiza triagem CONCLUIDA para satisfazer o filtro do catálogo público.
+     */
+    @Transactional
+    public void liberarDiretoAoEstoque(Item item) {
+        auditoriaContext.marcarContexto();
+        Triagem triagem = getOrCreate(item);
+        if (triagem.getDtInicio() == null) {
+            triagem.setDtInicio(LocalDateTime.now());
+        }
+        triagem.setTpStatus(STATUS_CONCLUIDA);
+        triagem.setDtConclusao(LocalDateTime.now());
+        if (triagem.getOperador() == null) {
+            triagem.setOperador(usuarioLogadoOuNulo());
+        }
+        triagem.setDtAlteracao(LocalDateTime.now());
+        triagemRepository.save(triagem);
+        itemRepository.save(item);
+        garantirEmEstoque(idCodec.encodeItemId(item.getId()));
+    }
+
     @Transactional(readOnly = true)
     public TriagemResponse detalhe(String idItem) {
+        exigirModuloTriagem();
         Long itemId = idCodec.decodeItemId(idItem);
         // Itens ainda na fila (ex.: "Aguardando triagem") não possuem registro de triagem;
         // nesse caso devolve os dados do próprio item (sem 404).
@@ -171,6 +205,7 @@ public class TriagemService {
     public ApiPage<TriagemFilaResponse> fila(String idEvento, Integer page, Integer limit,
                                              String q, String idCategoria, String local,
                                              String tpPrioridade, String status, String data) {
+        exigirModuloTriagem();
         int p = PaginationParams.resolvePage(page);
         int l = PaginationParams.resolveLimit(limit);
         Long eventoId = idCodec.decodeEventoId(idEvento);
@@ -229,6 +264,7 @@ public class TriagemService {
     /** KPIs/cards da tela de triagem. */
     @Transactional(readOnly = true)
     public TriagemResumoResponse resumo(String idEvento, String data) {
+        exigirModuloTriagem();
         Long ev = idCodec.decodeEventoId(idEvento);
         LocalDate dia = parseData(data);
         long aguardando = itemRepository.count(filtros(ev, null, null, null, null, STATUS_AGUARDANDO, dia));
@@ -249,6 +285,7 @@ public class TriagemService {
     /** Opções para os filtros/selects (reaproveita a árvore de categorias/locais da coleta). */
     @Transactional(readOnly = true)
     public ColetaFiltrosResponse filtros(String idEvento) {
+        exigirModuloTriagem();
         ColetaFiltrosResponse base = itemService.coletaFiltros(idEvento);
         List<ColetaFiltrosResponse.Opcao> status = STATUS_FILTRO.stream()
                 .map(s -> new ColetaFiltrosResponse.Opcao(s, s))
@@ -259,6 +296,7 @@ public class TriagemService {
     /** Sugestao automatica (stub) baseada na categoria/titulo do item. */
     @Transactional(readOnly = true)
     public TriagemIaResponse sugestaoIa(String idItem) {
+        exigirModuloTriagem();
         Item item = findItem(idItem);
         String categoria = item.getCategoria() != null ? item.getCategoria().getNmCategoria() : "Outros";
         String sugestao = "Com base nas características, este item pode ser classificado como \""

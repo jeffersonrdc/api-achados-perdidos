@@ -25,6 +25,7 @@ import br.com.achadosperdidos.security.SignedResourceIdCodec;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -55,6 +56,8 @@ public class ItemService {
     private final UsuarioContextService usuarioContextService;
     private final AuditoriaContextService auditoriaContext;
     private final MatchService matchService;
+    private final FluxoConfigService fluxoConfig;
+    private final TriagemService triagemService;
 
     private static final Set<String> PRIORIDADES = Set.of("ALTA", "MEDIA", "BAIXA");
     // Status irrelevantes para o filtro de coleta (fluxo de claims).
@@ -68,7 +71,8 @@ public class ItemService {
                        StatusItemService statusItemService, WorkflowService workflowService,
                        LocalizacaoService localizacaoService, LocalRepository localRepository,
                        SignedResourceIdCodec idCodec, UsuarioContextService usuarioContextService,
-                       AuditoriaContextService auditoriaContext, MatchService matchService) {
+                       AuditoriaContextService auditoriaContext, MatchService matchService,
+                       FluxoConfigService fluxoConfig, @Lazy TriagemService triagemService) {
         this.itemRepository = itemRepository; this.eventoRepository = eventoRepository;
         this.claimRepository = claimRepository;
         this.categoriaService = categoriaService; this.statusItemService = statusItemService;
@@ -78,6 +82,8 @@ public class ItemService {
         this.idCodec = idCodec; this.usuarioContextService = usuarioContextService;
         this.auditoriaContext = auditoriaContext;
         this.matchService = matchService;
+        this.fluxoConfig = fluxoConfig;
+        this.triagemService = triagemService;
     }
 
     @Transactional
@@ -92,7 +98,8 @@ public class ItemService {
         if (request.idSubcategoria() != null && !request.idSubcategoria().isBlank()) {
             item.setSubcategoria(categoriaService.findEntity(idCodec.decodeCategoriaId(request.idSubcategoria())));
         }
-        // Cadastro entra na fila de triagem; só vai ao estoque (e ao portal) quando a triagem concluir.
+        // Cadastro entra na fila de triagem; só vai ao estoque (e ao portal) quando a triagem concluir
+        // — salvo se FLUXO_TRIAGEM_OBRIGATORIA=false (liberação direta).
         item.setStatus(request.idStatus() != null && !request.idStatus().isBlank()
                 ? statusItemService.findEntity(idCodec.decodeStatusId(request.idStatus()))
                 : statusItemService.findByNomeOrDefault(null, "Aguardando triagem"));
@@ -123,7 +130,12 @@ public class ItemService {
         Item salvo = itemRepository.save(item);
         // Inicia a linha do tempo de status do item (secao 11 do documento).
         workflowService.registrarHistorico(salvo, null, salvo.getStatus(), null);
-        matchService.recalcularMatchesPorItem(salvo);
+        if (!fluxoConfig.triagemObrigatoria()) {
+            triagemService.liberarDiretoAoEstoque(salvo);
+            salvo = findEntity(salvo.getId());
+        } else {
+            matchService.recalcularMatchesPorItem(salvo);
+        }
         return toResponse(salvo);
     }
 

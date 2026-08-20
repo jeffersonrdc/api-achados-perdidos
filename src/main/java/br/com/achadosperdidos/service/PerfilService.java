@@ -79,7 +79,11 @@ public class PerfilService {
     public List<PermissaoResponse> listarPermissoes(String id) {
         Long perfilId = idCodec.decodePerfilId(id);
         return perfilPermissaoRepository.findByPerfil_IdAndFgExcluidoFalse(perfilId)
-                .stream().map(pp -> permissaoService.toResponse(pp.getPermissao())).toList();
+                .stream()
+                .map(PerfilPermissao::getPermissao)
+                .filter(pe -> Boolean.TRUE.equals(pe.getFgAtivo()) && !Boolean.TRUE.equals(pe.getFgExcluido()))
+                .map(permissaoService::toResponse)
+                .toList();
     }
 
     /** Define (substitui) o conjunto de permissoes do perfil. */
@@ -128,7 +132,11 @@ public class PerfilService {
 
     private PerfilDetalheResponse toDetalhe(Perfil p) {
         List<PermissaoResponse> permissoes = perfilPermissaoRepository.findByPerfil_IdAndFgExcluidoFalse(p.getId())
-                .stream().map(pp -> permissaoService.toResponse(pp.getPermissao())).toList();
+                .stream()
+                .map(PerfilPermissao::getPermissao)
+                .filter(pe -> Boolean.TRUE.equals(pe.getFgAtivo()) && !Boolean.TRUE.equals(pe.getFgExcluido()))
+                .map(permissaoService::toResponse)
+                .toList();
         return new PerfilDetalheResponse(idCodec.encodePerfilId(p.getId()), p.getNmPerfil(), p.getDsPerfil(), p.getFgAtivo(), permissoes);
     }
 }

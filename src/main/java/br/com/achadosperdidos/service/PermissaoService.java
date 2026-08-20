@@ -52,6 +52,7 @@ public class PermissaoService {
 
     Permissao findByNome(String nmPermissao) {
         return permissaoRepository.findByNmPermissao(nmPermissao.trim())
+                .filter(p -> Boolean.TRUE.equals(p.getFgAtivo()) && !Boolean.TRUE.equals(p.getFgExcluido()))
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Permissão não encontrada: " + nmPermissao));
     }
 

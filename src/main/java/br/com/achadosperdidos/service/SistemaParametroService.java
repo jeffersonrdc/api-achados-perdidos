@@ -13,6 +13,7 @@ public class SistemaParametroService {
     public static final String PORTAL_TELEFONE_CENTRAL = "PORTAL_TELEFONE_CENTRAL";
     public static final String PORTAL_WHATSAPP = "PORTAL_WHATSAPP";
     public static final String PORTAL_EMAIL_SUPORTE = "PORTAL_EMAIL_SUPORTE";
+    public static final String FLUXO_TRIAGEM_OBRIGATORIA = "FLUXO_TRIAGEM_OBRIGATORIA";
 
     private final SistemaParametroRepository repository;
 
@@ -26,6 +27,13 @@ public class SistemaParametroService {
                 .map(SistemaParametro::getDsValor)
                 .filter(v -> v != null && !v.isBlank())
                 .orElse(padrao);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isTrue(String chave, boolean padrao) {
+        String raw = get(chave, padrao ? "true" : "false");
+        return "1".equals(raw) || "true".equalsIgnoreCase(raw) || "sim".equalsIgnoreCase(raw)
+                || "yes".equalsIgnoreCase(raw) || "on".equalsIgnoreCase(raw);
     }
 
     @Transactional
