@@ -31,9 +31,12 @@ import java.util.Map;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final ApiCacheControlHeaderWriter apiCacheControlHeaderWriter;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
+                          ApiCacheControlHeaderWriter apiCacheControlHeaderWriter) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.apiCacheControlHeaderWriter = apiCacheControlHeaderWriter;
     }
 
     @Bean
@@ -52,6 +55,13 @@ public class SecurityConfig {
                 //    apenas para a UI do Swagger (ambiente de dev), que injeta assets inline.
                 //  - Referrer-Policy estrita.
                 .headers(headers -> headers
+                        // Cache-Control: o writer nativo aplicaria no-store em TODA resposta,
+                        // inclusive nos GETs públicos — a CDN então não alivia nada em pico de
+                        // catálogo. Desligamos e assumimos a política em ApiCacheControlHeaderWriter,
+                        // que roda no mesmo ponto (commit da resposta) e mantém no-store como default
+                        // para tudo que não for GET público de sucesso.
+                        .cacheControl(cache -> cache.disable())
+                        .addHeaderWriter(apiCacheControlHeaderWriter)
                         .contentTypeOptions(Customizer.withDefaults())
                         .frameOptions(frame -> frame.deny())
                         .contentSecurityPolicy(csp -> csp.policyDirectives(

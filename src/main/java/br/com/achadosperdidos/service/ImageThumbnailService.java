@@ -30,6 +30,35 @@ public class ImageThumbnailService {
     public static final int MIN_MAX_EDGE = 64;
     public static final int MAX_MAX_EDGE = 800;
 
+    /**
+     * Tamanhos aceitos para o parâmetro {@code max}. É uma escada fechada de propósito:
+     * a CDN mantém o {@code max} na chave de cache, então valores arbitrários
+     * fragmentariam o cache da borda (e multiplicariam variantes no storage) sem ganho.
+     */
+    public static final int[] TAMANHOS = {64, 160, 320, DEFAULT_MAX_EDGE, 480, 640, MAX_MAX_EDGE};
+
+    /**
+     * Normaliza o {@code max} recebido: nulo vira o padrão, valores fora da faixa são
+     * limitados a [{@value #MIN_MAX_EDGE}, {@value #MAX_MAX_EDGE}] e o resultado sobe para
+     * o degrau seguinte de {@link #TAMANHOS}.
+     *
+     * <p>Ajustamos em vez de devolver 400 Bad Request para não quebrar cliente já
+     * publicado (o portal em produção chega a pedir {@code max=1400}); o efeito visível é
+     * receber o maior tamanho disponível, e não uma imagem quebrada.</p>
+     */
+    public static int normalizarMaxEdge(Integer maxEdge) {
+        if (maxEdge == null) {
+            return DEFAULT_MAX_EDGE;
+        }
+        int alvo = Math.clamp(maxEdge, MIN_MAX_EDGE, MAX_MAX_EDGE);
+        for (int tamanho : TAMANHOS) {
+            if (alvo <= tamanho) {
+                return tamanho;
+            }
+        }
+        return MAX_MAX_EDGE;
+    }
+
     public ArquivoService.ArquivoConteudo gerar(ArquivoService.ArquivoConteudo original, int maxEdge) {
         int edge = Math.clamp(maxEdge, MIN_MAX_EDGE, MAX_MAX_EDGE);
         Resource resource = original.resource();

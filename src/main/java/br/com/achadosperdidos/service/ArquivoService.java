@@ -187,7 +187,9 @@ public class ArquivoService {
         } catch (RuntimeException ex) {
             try {
                 storage.delete(relPath);
-                storage.delete(thumbKey(relPath));
+                for (int edge : ImageThumbnailService.TAMANHOS) {
+                    storage.delete(thumbKey(relPath, edge));
+                }
             } catch (RuntimeException ignored) {
                 // melhor esforço — evita deixar órfão quando possível
             }
@@ -389,9 +391,9 @@ public class ArquivoService {
     }
 
     private ArquivoConteudo carregarThumbnailDe(Arquivo a, Integer maxEdge) {
-        int edge = maxEdge != null ? maxEdge : ImageThumbnailService.DEFAULT_MAX_EDGE;
+        int edge = ImageThumbnailService.normalizarMaxEdge(maxEdge);
         ArquivoStorage storage = storageRouter.paraLeitura(a.getTpStorage());
-        String keyThumb = thumbKey(a.getNmPath());
+        String keyThumb = thumbKey(a.getNmPath(), edge);
         if (storage.exists(keyThumb)) {
             try {
                 Resource resource = storage.open(keyThumb);
@@ -445,15 +447,31 @@ public class ArquivoService {
         return mime.startsWith("image/") && !mime.contains("pdf");
     }
 
-    /** Chave física da miniatura: {@code ITEM/1/abc.jpg} → {@code ITEM/1/abc.thumb.jpg}. */
+    /** Chave física da miniatura no tamanho padrão: {@code ITEM/1/abc.jpg} → {@code ITEM/1/abc.thumb.jpg}. */
     static String thumbKey(String nmPath) {
+        return thumbKey(nmPath, ImageThumbnailService.DEFAULT_MAX_EDGE);
+    }
+
+    /**
+     * Chave física da miniatura por tamanho: {@code ITEM/1/abc.jpg} →
+     * {@code ITEM/1/abc.thumb.jpg} (padrão) ou {@code ITEM/1/abc.thumb-800.jpg}.
+     *
+     * <p>O tamanho padrão mantém o sufixo legado {@code .thumb.jpg} de propósito: as
+     * miniaturas já geradas em produção continuam sendo aproveitadas, sem reprocessar
+     * o acervo.</p>
+     */
+    static String thumbKey(String nmPath, int maxEdge) {
         String path = LocalArquivoStorage.validar(nmPath);
+        int edge = ImageThumbnailService.normalizarMaxEdge(maxEdge);
+        String sufixo = edge == ImageThumbnailService.DEFAULT_MAX_EDGE
+                ? ".thumb.jpg"
+                : ".thumb-" + edge + ".jpg";
         int ponto = path.lastIndexOf('.');
         int barra = path.lastIndexOf('/');
         if (ponto > barra) {
-            return path.substring(0, ponto) + ".thumb.jpg";
+            return path.substring(0, ponto) + sufixo;
         }
-        return path + ".thumb.jpg";
+        return path + sufixo;
     }
 
     private static String nomeThumb(String nmArquivo) {
@@ -526,7 +544,9 @@ public class ArquivoService {
         try {
             ArquivoStorage storage = storageRouter.paraLeitura(a.getTpStorage());
             storage.delete(a.getNmPath());
-            storage.delete(thumbKey(a.getNmPath()));
+            for (int edge : ImageThumbnailService.TAMANHOS) {
+                storage.delete(thumbKey(a.getNmPath(), edge));
+            }
         } catch (RuntimeException ignored) {
             // metadado já inválido; órfão físico não bloqueia a exclusão no painel
         }

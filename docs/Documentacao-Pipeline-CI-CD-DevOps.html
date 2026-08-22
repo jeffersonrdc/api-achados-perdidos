@@ -215,6 +215,9 @@ MySQL 8 (na VPS, porta 3306)</pre>
     <tr><td>Swagger</td><td><code>SPRINGDOC_ENABLED</code></td><td><code>false</code> em produção</td></tr>
     <tr><td>Rate limit</td><td><code>LOGIN_RATE_LIMIT_*</code>, <code>PUBLIC_RATE_LIMIT_*</code></td><td>Anti força-bruta (login) e anti-abuso (portal público)</td></tr>
     <tr><td>CORS</td><td><code>CORS_ALLOWED_ORIGINS</code>, <code>CORS_ALLOWED_ORIGIN_PATTERNS</code>, <code>CORS_ALLOW_CREDENTIALS</code></td><td>Em prod: domínios REAIS e esvaziar patterns de localhost</td></tr>
+    <tr><td>CDN (CloudFront)</td><td><code>PUBLIC_JSON_CACHE_ENABLED</code></td><td>Cache positivo nos GETs publicos. <code>true</code> onde ha CDN; <code>false</code> em ambiente SEM CDN (ex.: DEV) devolve tudo a <code>no-store</code>. Tambem serve de alavanca de emergencia sem deploy</td></tr>
+    <tr><td>CDN (CloudFront)</td><td><code>CLIENT_IP_TRUSTED_HEADER</code></td><td>Header com o IP real do visitante (prod AWS: <code>CloudFront-Viewer-Address</code>). Vazio em ambiente sem CDN. Sem isso o rate limit por IP conta o IP do <i>edge</i>, e todos os usuarios dividem o mesmo balde</td></tr>
+    <tr><td>CDN (CloudFront)</td><td><code>ARQUIVO_PUBLICO_MAX_AGE</code></td><td>TTL (s) das fotos publicas do portal na borda. Padrao <code>86400</code>; reduza enquanto nao houver invalidacao automatica no CloudFront</td></tr>
     <tr><td>Arquivos</td><td><code>APP_ARQUIVOS_DIR</code>, <code>MULTIPART_MAX_REQUEST_SIZE</code></td><td>Dir montado como volume <code>./arquivos</code></td></tr>
     <tr><td>S3 (opcional)</td><td><code>APP_S3_*</code>, <code>AWS_ACCESS_KEY_ID</code>, <code>AWS_SECRET_ACCESS_KEY</code></td><td>Credenciais via env ou IAM role; nunca no banco</td></tr>
     <tr><td>Runtime</td><td><code>HOST_PORT</code></td><td>Porta publicada pelo container (dev 8080 · prod 8203)</td></tr>

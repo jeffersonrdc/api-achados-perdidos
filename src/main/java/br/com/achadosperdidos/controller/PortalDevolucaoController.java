@@ -6,7 +6,7 @@ import br.com.achadosperdidos.controller.dto.PortalDevolucaoPickupConfirmRequest
 import br.com.achadosperdidos.controller.dto.PortalDevolucaoShippingAddressRequest;
 import br.com.achadosperdidos.security.PublicRateLimiter;
 import br.com.achadosperdidos.service.DevolucaoFluxoService;
-import br.com.achadosperdidos.util.IpAddressUtil;
+import br.com.achadosperdidos.util.ClientIpResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,11 +26,14 @@ public class PortalDevolucaoController {
 
     private final DevolucaoFluxoService devolucaoFluxoService;
     private final PublicRateLimiter publicRateLimiter;
+    private final ClientIpResolver clientIpResolver;
 
     public PortalDevolucaoController(DevolucaoFluxoService devolucaoFluxoService,
-                                     PublicRateLimiter publicRateLimiter) {
+                                     PublicRateLimiter publicRateLimiter,
+                                     ClientIpResolver clientIpResolver) {
         this.devolucaoFluxoService = devolucaoFluxoService;
         this.publicRateLimiter = publicRateLimiter;
+        this.clientIpResolver = clientIpResolver;
     }
 
     @GetMapping("/{token}")
@@ -90,7 +93,7 @@ public class PortalDevolucaoController {
         return devolucaoFluxoService.tracking(token);
     }
 
-    private static String ipDe(HttpServletRequest http) {
-        return IpAddressUtil.normalize(http.getRemoteAddr());
+    private String ipDe(HttpServletRequest http) {
+        return clientIpResolver.resolve(http);
     }
 }

@@ -1,10 +1,10 @@
 package br.com.achadosperdidos.security;
 
+import br.com.achadosperdidos.config.PublicRateLimitProperties;
 import br.com.achadosperdidos.exception.TooManyRequestsException;
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.ConsumptionProbe;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -21,28 +21,25 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class PublicRateLimiter {
 
-    private final boolean enabled;
-    private final int perMinute;
+    private final PublicRateLimitProperties props;
 
     private final ConcurrentHashMap<String, Bucket> buckets = new ConcurrentHashMap<>();
 
-    public PublicRateLimiter(
-            @Value("${app.security.public-rate-limit.enabled:true}") boolean enabled,
-            @Value("${app.security.public-rate-limit.per-minute:12}") int perMinute) {
-        this.enabled = enabled;
-        this.perMinute = Math.max(1, perMinute);
+    public PublicRateLimiter(PublicRateLimitProperties props) {
+        this.props = props;
     }
 
     /**
      * Consome uma requisição para o par (ação, IP). Lança 429 se o teto por minuto for excedido.
      *
      * @param acao rótulo lógico do endpoint (ex.: {@code "portal-claim"}), para isolar limites.
+     *             Cada ação pode ter teto próprio via {@code app.security.public-rate-limit.acoes}.
      * @param ip   IP de origem já normalizado; nulo/vazio é ignorado.
      */
     public void check(String acao, String ip) {
-        if (!enabled || ip == null || ip.isBlank()) return;
+        if (!props.isEnabled() || ip == null || ip.isBlank()) return;
         String chave = acao + "|" + ip;
-        Bucket bucket = buckets.computeIfAbsent(chave, k -> newBucket());
+        Bucket bucket = buckets.computeIfAbsent(chave, k -> newBucket(props.limiteDa(acao)));
         ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
         if (!probe.isConsumed()) {
             long segundos = Math.max(1, Duration.ofNanos(probe.getNanosToWaitForRefill()).toSeconds());
@@ -51,10 +48,10 @@ public class PublicRateLimiter {
         }
     }
 
-    private Bucket newBucket() {
+    private static Bucket newBucket(int porMinuto) {
         Bandwidth limite = Bandwidth.builder()
-                .capacity(perMinute)
-                .refillGreedy(perMinute, Duration.ofMinutes(1))
+                .capacity(porMinuto)
+                .refillGreedy(porMinuto, Duration.ofMinutes(1))
                 .build();
         return Bucket.builder().addLimit(limite).build();
     }

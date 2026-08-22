@@ -79,7 +79,8 @@ public class ArquivoController {
         ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
                 .contentType(mime)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + nomeSeguro + "\"")
-                .header("X-Content-Type-Options", "nosniff");
+                .header("X-Content-Type-Options", "nosniff")
+                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=86400");
         if (conteudo.qtBytes() != null && conteudo.qtBytes() >= 0) {
             builder.contentLength(conteudo.qtBytes());
         }
@@ -89,10 +90,11 @@ public class ArquivoController {
     @GetMapping("/{id}/thumbnail")
     @PreAuthorize("@authz.pode('arquivo.listar')")
     @Operation(summary = "Miniatura JPEG do arquivo (listagens)",
-            description = "Redimensiona on-the-fly (padrão max 400px no maior lado). Query `max` opcional (64–800).")
+            description = "Redimensiona on-the-fly (padrão max 400px no maior lado). Query `max` opcional: "
+                    + "ajustada para o degrau seguinte de 64/160/320/400/480/640/800 e limitada a essa faixa.")
     public ResponseEntity<Resource> thumbnail(
             @Parameter(description = "ID assinado do arquivo") @PathVariable String id,
-            @Parameter(description = "Maior lado em pixels (padrão 400, máx. 800)")
+            @Parameter(description = "Maior lado em pixels: 64, 160, 320, 400 (padrão), 480, 640 ou 800")
             @RequestParam(required = false) Integer max) {
         var conteudo = arquivoService.carregarThumbnail(id, max);
         MediaType mime = conteudo.tpMime() != null

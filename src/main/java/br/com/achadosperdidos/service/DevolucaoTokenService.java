@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.Optional;
 
 @Service
 public class DevolucaoTokenService {
@@ -42,12 +43,27 @@ public class DevolucaoTokenService {
         tokenRepository.invalidarAtivos(devolucao.getId(), tpAcao);
     }
 
+    /**
+     * Busca sem exceção — para quem trata "token inexistente" como resultado normal
+     * (ex.: a tela pública, que responde "Link inválido." em vez de erro).
+     *
+     * <p>Existe porque capturar a {@link RecursoNaoEncontradoException} lançada por
+     * {@link #resolver(String)} não funciona entre beans transacionais: o proxy marca a
+     * transação compartilhada como <i>rollback-only</i> ao ver a exceção, e o commit do
+     * chamador estoura {@code UnexpectedRollbackException} (HTTP 500) mesmo com o
+     * {@code catch} no lugar.</p>
+     */
+    @Transactional(readOnly = true)
+    public Optional<DevolucaoAcaoToken> buscar(String cdToken) {
+        if (cdToken == null || cdToken.isBlank()) {
+            return Optional.empty();
+        }
+        return tokenRepository.findByCdTokenAndFgExcluidoFalse(cdToken.trim());
+    }
+
     @Transactional(readOnly = true)
     public DevolucaoAcaoToken resolver(String cdToken) {
-        if (cdToken == null || cdToken.isBlank()) {
-            throw new RecursoNaoEncontradoException("Link de devolução inválido.");
-        }
-        return tokenRepository.findByCdTokenAndFgExcluidoFalse(cdToken.trim())
+        return buscar(cdToken)
                 .orElseThrow(() -> new RecursoNaoEncontradoException("Link de devolução inválido."));
     }
 

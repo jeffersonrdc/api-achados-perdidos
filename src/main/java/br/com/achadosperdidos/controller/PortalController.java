@@ -5,7 +5,7 @@ import br.com.achadosperdidos.pagination.ApiPage;
 import br.com.achadosperdidos.security.PublicRateLimiter;
 import br.com.achadosperdidos.service.ClaimMensagemService;
 import br.com.achadosperdidos.service.PortalService;
-import br.com.achadosperdidos.util.IpAddressUtil;
+import br.com.achadosperdidos.util.ClientIpResolver;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -21,6 +21,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -40,18 +41,36 @@ public class PortalController {
     private final PortalService portalService;
     private final ClaimMensagemService claimMensagemService;
     private final PublicRateLimiter publicRateLimiter;
+    private final ClientIpResolver clientIpResolver;
+
+    /**
+     * TTL das fotos públicas na CDN. Configurável porque o mesmo {@code idArquivo} pode
+     * deixar de ser público sem que os bytes mudem (exclusão, moderação, item reclamado):
+     * enquanto não houver invalidação no CloudFront, baixar este valor é o controle
+     * disponível — sem exigir deploy de código.
+     */
+    private final long arquivoPublicoMaxAge;
 
     public PortalController(PortalService portalService, ClaimMensagemService claimMensagemService,
-                            PublicRateLimiter publicRateLimiter) {
+                            PublicRateLimiter publicRateLimiter, ClientIpResolver clientIpResolver,
+                            @Value("${app.cache.arquivo-publico-max-age-seconds:86400}") long arquivoPublicoMaxAge) {
         this.portalService = portalService;
         this.claimMensagemService = claimMensagemService;
         this.publicRateLimiter = publicRateLimiter;
+        this.clientIpResolver = clientIpResolver;
+        this.arquivoPublicoMaxAge = arquivoPublicoMaxAge;
     }
 
-    private static String ipDe(HttpServletRequest http) {
-        // getRemoteAddr() já reflete o IP real do cliente via Tomcat/RemoteIpValve
-        // (server.forward-headers-strategy=NATIVE), sem confiar no XFF cru (anti-spoofing).
-        return IpAddressUtil.normalize(http.getRemoteAddr());
+    private String cacheFotoPublica() {
+        return "public, max-age=" + arquivoPublicoMaxAge;
+    }
+
+    /**
+     * IP do cliente para rate limit. Com CDN na frente, {@code getRemoteAddr()} devolve o
+     * IP do edge — o {@link ClientIpResolver} cobre esse caso (ver a classe).
+     */
+    private String ipDe(HttpServletRequest http) {
+        return clientIpResolver.resolve(http);
     }
 
     @GetMapping("/eventos")
@@ -274,7 +293,7 @@ public class PortalController {
                 .contentType(mime)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
                 .header("X-Content-Type-Options", "nosniff")
-                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=300");
+                .header(HttpHeaders.CACHE_CONTROL, cacheFotoPublica());
         if (conteudo.qtBytes() != null && conteudo.qtBytes() >= 0) {
             builder.contentLength(conteudo.qtBytes());
         }
@@ -286,7 +305,10 @@ public class PortalController {
     @Operation(summary = "Miniatura da foto pública do catálogo",
             description = "Endpoint público com rate limit por IP. "
                     + "Retorna JPEG redimensionado (padrão max 400px no maior lado) para cards/listagens. "
-                    + "Query `max` opcional (64–800).")
+                    + "Query `max` opcional: ajustada para o degrau seguinte de "
+                    + "64/160/320/400/480/640/800 e limitada a essa faixa (valores fora dela não "
+                    + "geram erro, são ajustados). A escada é fechada para não fragmentar o cache "
+                    + "da CDN, que mantém `max` na chave.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Stream da miniatura JPEG",
                     content = @Content(mediaType = "image/jpeg",
@@ -296,7 +318,7 @@ public class PortalController {
     })
     public ResponseEntity<Resource> baixarThumbnailPublica(
             @Parameter(description = "ID assinado do arquivo", required = true) @PathVariable String idArquivo,
-            @Parameter(description = "Maior lado em pixels (padrão 400, máx. 800)")
+            @Parameter(description = "Maior lado em pixels: 64, 160, 320, 400 (padrão), 480, 640 ou 800")
             @RequestParam(required = false) Integer max,
             HttpServletRequest http) {
         publicRateLimiter.check("portal-foto", ipDe(http));
@@ -308,7 +330,7 @@ public class PortalController {
                 .contentType(mime)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
                 .header("X-Content-Type-Options", "nosniff")
-                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400");
+                .header(HttpHeaders.CACHE_CONTROL, cacheFotoPublica());
         if (conteudo.qtBytes() != null && conteudo.qtBytes() >= 0) {
             builder.contentLength(conteudo.qtBytes());
         }

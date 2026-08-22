@@ -699,10 +699,12 @@ public class DevolucaoFluxoService {
 
     @Transactional(readOnly = true)
     public PortalDevolucaoContextResponse contexto(String cdToken) {
-        DevolucaoAcaoToken token;
-        try {
-            token = tokenService.resolver(cdToken);
-        } catch (RecursoNaoEncontradoException ex) {
+        // Token inexistente é resultado esperado aqui (a tela mostra "Link inválido."), por isso
+        // usamos a busca sem exceção. Um try/catch em volta de tokenService.resolver() NÃO
+        // resolveria: o proxy transacional marca a transação como rollback-only ao ver a exceção
+        // e o commit desta transação estouraria UnexpectedRollbackException (HTTP 500).
+        DevolucaoAcaoToken token = tokenService.buscar(cdToken).orElse(null);
+        if (token == null) {
             return new PortalDevolucaoContextResponse(
                     null, "", "", "", "invalid", null, null, true, false,
                     "Link inválido.", List.of(), null, null);
